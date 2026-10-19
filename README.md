@@ -30,15 +30,14 @@
 ## 编译运行
 
 ```bash
-./scripts/build_app.sh
-open build/FocusGuard.app
+./scripts/install.sh        # 编译、装到“应用程序”并启动；首次安装自动设为开机启动
+./scripts/build_safari.sh   # 可选：编译并安装 Safari 扩展
 ```
 
 菜单栏会出现 🌱（正在刷时变成 👀，后面的数字是今天累计分钟数）。
 
 第一次在浏览器里检测时，系统会问“是否允许 FocusGuard 控制 Safari/Chrome”，请点**允许**，否则读不到网址。
-构建脚本会优先用本机的 Apple Development 证书签名，这样重新编译后不用再次授权。
-想开机自启：把 `FocusGuard.app` 拖进“应用程序”文件夹，再在菜单里勾选“开机自动启动”。
+构建脚本会优先用本机的 Apple Development 证书签名，这样重新编译后不用再次授权。开机启动可以在菜单里随时关掉。
 
 ## 统计
 
@@ -50,7 +49,7 @@ open build/FocusGuard.app
 - 键鼠 5 分钟没动不计时。保留最近 30 天，数据存在 `~/Library/Application Support/FocusGuard/stats.json`，只在本机
 - 规则改了，历史数据会按新规则重新归类：比如把知乎加入没营养网站后，以前在知乎上的时间也会算进去
 
-## 内容记录（Chrome 扩展）
+## 内容记录（Chrome / Safari 扩展）
 
 装上 Chrome 扩展后，会记下看过的每个视频 / 网页：标题、作者、标签、简介、停留时长、视频看了百分之多少。这是后续用大模型分析“为什么刷、刷了什么”的基础（见 [路线图](docs/roadmap.md)）。
 
@@ -62,7 +61,9 @@ open build/FocusGuard.app
 
 **安装扩展（只需一次）：** 菜单 →“设置… → 内容记录”，点“打开扩展文件夹”，然后在 Chrome 的 `chrome://extensions` 打开“开发者模式”，点“加载已解压的扩展程序”，选中 `~/Library/Application Support/FocusGuard/ChromeExtension`。App 更新后，在扩展页点一下刷新按钮。
 
-已实测：B 站视频页（标题、UP 主、标签、时长）。抖音、YouTube 用通用规则提取，需要在登录状态下实际验证。
+**Safari：** 运行 `./scripts/build_safari.sh`，然后在 Safari →设置→扩展 里勾选“FocusGuard Safari Extension”并允许访问网站。
+
+已实测：B 站、YouTube 视频页（标题、作者、标签、时长）。抖音用通用规则提取，需要在登录状态下实际验证。
 
 ## AI 判断有没有营养
 
@@ -76,17 +77,37 @@ open build/FocusGuard.app
 - API Key 存在系统钥匙串里；每条内容只发送网站名、标题、作者、标签、简介和视频时长，不发完整网址和观看时间；同一条内容只判断一次
 - 判断结果显示在统计窗口的“看过的内容”里；菜单和时长统计里，名单内被判有营养的时长单独记为“xx · 有营养”
 
-前提：需要开启内容记录并安装 Chrome 扩展。
+前提：需要开启内容记录并安装浏览器扩展。
+
+## 每日小结与每周复盘
+
+开启 AI 判断后，用“写报告用的模型”：
+
+- **每日小结**：每天到点（默认 22:00）自动写当天的：今天概况、往脑子里装了什么、什么时候最容易刷、明天试试；漏写的前一天会补上
+- **每周复盘**：每周一自动写上一周的：模式、背后的原因、需要加强什么、有营养的替代、下周的一个承诺
+- 在统计窗口的“每日小结”页查看，也可以随时手动写 / 重写
+- 同时写进 Obsidian：自动找到当前的库，存到 `专注守护/每日小结/`、`专注守护/每周复盘/`；可在“AI 判断”设置里改文件夹或关闭
+
+## 劝导怎么越来越管用
+
+- **AI 写劝导**：弹窗文案由大模型结合你刚才看的具体内容、时间、你说过的原因来写；4 秒拿不到就用固定文案
+- **记住效果**：每次劝导你是“关掉它”还是“再刷”都会记下；下次写劝导时告诉大模型哪种说法对你有效
+- **逐级加强**：第二次提醒起“再刷”要等 10 秒；第三次起或额度用完后还要写一句理由（理由也会进入小结和复盘）
+- **打开前先停一下**（可选）：从正常内容切到没营养的内容时，先深呼吸几秒再决定
+- **每日额度**：一天最多刷多少分钟，用完再刷 1 分钟就提醒，也可以设为用完直接关网页
+- **工作时段**：可选星期和时间，期间连续刷几分钟就提醒
 
 ## 修改规则
 
 **最快的方法：** 在浏览器里打开想管的网站，点菜单栏 🌱 →“把 xxx.com 加入…”，再选“没营养网站”或“强制关闭网站”。
 
-**设置页：** 菜单 →“设置…”（⌘,），有四个标签页：
+**设置页：** 菜单 →“设置…”（⌘,）：
 
 - **网站 / App**：没营养的网站和 App 列表。顶部会显示浏览器当前网页，点“添加这个网站”就能加进去；也可以直接粘贴网址（会自动只保留域名），或手动输入 `youtube.com/shorts` 这样带路径的规则。选中后按删除键或点“删除所选”可以移除
 - **强制关闭**：开关、时限、冷却时间，以及强制关闭的网站列表
-- **提醒**：白天/夜间提醒时长、夜间时段等
+- **提醒**：白天/夜间提醒时长、夜间时段、每日额度、工作时段、逐级加强
+- **内容记录**：记录范围、扩展安装
+- **AI 判断**：开关、你的标准、服务商与模型、API Key、AI 劝导、小结时间、Obsidian
 
 改动立即生效。所有设置保存在 `~/Library/Application Support/FocusGuard/config.json`，也可以直接编辑这个文件。
 
@@ -99,6 +120,10 @@ FOCUSGUARD_RENDER_NUDGE=/tmp build/FocusGuard.app/Contents/MacOS/FocusGuard  # �
 FOCUSGUARD_RENDER_SETTINGS=/tmp build/FocusGuard.app/Contents/MacOS/FocusGuard  # 把设置页渲染成 PNG
 FOCUSGUARD_RENDER_STATS=/tmp build/FocusGuard.app/Contents/MacOS/FocusGuard     # 用示例数据把统计页渲染成 PNG
 FOCUSGUARD_CLOSE_JUNK=com.google.Chrome build/FocusGuard.app/Contents/MacOS/FocusGuard  # 关掉当前标签页（若在没营养的网站上）
+FOCUSGUARD_TEST_LABEL=1 build/FocusGuard.app/Contents/MacOS/FocusGuard    # 用当前配置判断两条示例（会调用大模型）
+FOCUSGUARD_TEST_NUDGE=1 build/FocusGuard.app/Contents/MacOS/FocusGuard    # 按最近记录写一条劝导（会调用大模型）
+FOCUSGUARD_WRITE_DIGEST=1 build/FocusGuard.app/Contents/MacOS/FocusGuard  # 立刻写今天的小结（会调用大模型）
+FOCUSGUARD_WRITE_WEEKLY=1 build/FocusGuard.app/Contents/MacOS/FocusGuard  # 立刻写本周复盘（会调用大模型并写入 Obsidian）
 ```
 
 代码结构：`Sources/FocusGuardCore` 是纯逻辑（分类、计时、文案），`Sources/FocusGuard` 是菜单栏 App（系统监测、弹窗）。
@@ -106,4 +131,6 @@ FOCUSGUARD_CLOSE_JUNK=com.google.Chrome build/FocusGuard.app/Contents/MacOS/Focu
 ## 已知限制
 
 - Firefox 不支持读取网址，只能按 App 判断
-- 只看“在哪个网站/App”，不看具体内容。后续可以加 AI 判断内容是否有营养
+- 抖音网页的提取规则还没在登录状态下实测
+- AI 判断、小结只覆盖装了扩展的浏览器；抖音等桌面 App 只按名字判断
+- 手机还没有，见 [路线图](docs/roadmap.md)
