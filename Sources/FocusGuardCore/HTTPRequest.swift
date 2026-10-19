@@ -45,6 +45,6 @@ public struct HTTPRequest: Equatable {
         guard host == "127.0.0.1" || host == "localhost" else { return false }
         guard headers["x-focusguard"] == "1" else { return false }
         guard let origin = headers["origin"] else { return true }
-        return origin.hasPrefix("chrome-extension://")
+        return origin.hasPrefix("chrome-extension://") || origin.hasPrefix("safari-web-extension://")
     }
 }

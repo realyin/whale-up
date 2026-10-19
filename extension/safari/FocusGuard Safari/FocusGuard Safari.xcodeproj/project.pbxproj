@@ -1,0 +1,613 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		4886CFF330868E540063C312 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4886CFF230868E540063C312 /* AppDelegate.swift */; };
+		4886CFF730868E540063C312 /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = 4886CFF530868E540063C312 /* Main.html */; };
+		4886CFF930868E540063C312 /* Icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 4886CFF830868E540063C312 /* Icon.png */; };
+		4886CFFB30868E540063C312 /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = 4886CFFA30868E540063C312 /* Style.css */; };
+		4886CFFD30868E540063C312 /* Script.js in Resources */ = {isa = PBXBuildFile; fileRef = 4886CFFC30868E540063C312 /* Script.js */; };
+		4886CFFF30868E540063C312 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4886CFFE30868E540063C312 /* ViewController.swift */; };
+		4886D00230868E540063C312 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4886D00030868E540063C312 /* Main.storyboard */; };
+		4886D00430868E540063C312 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4886D00330868E540063C312 /* Assets.xcassets */; };
+		4886D00B30868E550063C312 /* FocusGuard Safari Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4886D00A30868E550063C312 /* FocusGuard Safari Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		4886D01030868E550063C312 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4886D00F30868E550063C312 /* SafariWebExtensionHandler.swift */; };
+		4886D02130868E550063C312 /* popup.js in Resources */ = {isa = PBXBuildFile; fileRef = 4886D01C30868E550063C312 /* popup.js */; };
+		4886D02230868E550063C312 /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = 4886D01D30868E550063C312 /* background.js */; };
+		4886D02330868E550063C312 /* popup.html in Resources */ = {isa = PBXBuildFile; fileRef = 4886D01E30868E550063C312 /* popup.html */; };
+		4886D02430868E550063C312 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 4886D01F30868E550063C312 /* manifest.json */; };
+		4886D02530868E550063C312 /* content.js in Resources */ = {isa = PBXBuildFile; fileRef = 4886D02030868E550063C312 /* content.js */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		4886D00C30868E550063C312 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4886CFE730868E540063C312 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4886D00930868E550063C312;
+			remoteInfo = "FocusGuard Safari Extension";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		4886D01730868E550063C312 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				4886D00B30868E550063C312 /* FocusGuard Safari Extension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		4886CFEF30868E540063C312 /* FocusGuard Safari.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "FocusGuard Safari.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		4886CFF230868E540063C312 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		4886CFF630868E540063C312 /* Base */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = Base; path = Base.lproj/Main.html; sourceTree = "<group>"; };
+		4886CFF830868E540063C312 /* Icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon.png; sourceTree = "<group>"; };
+		4886CFFA30868E540063C312 /* Style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = Style.css; sourceTree = "<group>"; };
+		4886CFFC30868E540063C312 /* Script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Script.js; sourceTree = "<group>"; };
+		4886CFFE30868E540063C312 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		4886D00130868E540063C312 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		4886D00330868E540063C312 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		4886D00530868E540063C312 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		4886D00A30868E550063C312 /* FocusGuard Safari Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "FocusGuard Safari Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		4886D00F30868E550063C312 /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
+		4886D01130868E550063C312 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		4886D01C30868E550063C312 /* popup.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = popup.js; path = ../../../chrome/popup.js; sourceTree = "<group>"; };
+		4886D01D30868E550063C312 /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = background.js; path = ../../../chrome/background.js; sourceTree = "<group>"; };
+		4886D01E30868E550063C312 /* popup.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = popup.html; path = ../../../chrome/popup.html; sourceTree = "<group>"; };
+		4886D01F30868E550063C312 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = manifest.json; path = ../../../chrome/manifest.json; sourceTree = "<group>"; };
+		4886D02030868E550063C312 /* content.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = content.js; path = ../../../chrome/content.js; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		4886CFEC30868E540063C312 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4886D00730868E550063C312 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		4886CFE630868E540063C312 = {
+			isa = PBXGroup;
+			children = (
+				4886CFF130868E540063C312 /* FocusGuard Safari */,
+				4886D00E30868E550063C312 /* FocusGuard Safari Extension */,
+				4886CFF030868E540063C312 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		4886CFF030868E540063C312 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				4886CFEF30868E540063C312 /* FocusGuard Safari.app */,
+				4886D00A30868E550063C312 /* FocusGuard Safari Extension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		4886CFF130868E540063C312 /* FocusGuard Safari */ = {
+			isa = PBXGroup;
+			children = (
+				4886CFF230868E540063C312 /* AppDelegate.swift */,
+				4886CFFE30868E540063C312 /* ViewController.swift */,
+				4886D00030868E540063C312 /* Main.storyboard */,
+				4886D00330868E540063C312 /* Assets.xcassets */,
+				4886D00530868E540063C312 /* Info.plist */,
+				4886CFF430868E540063C312 /* Resources */,
+			);
+			path = "FocusGuard Safari";
+			sourceTree = "<group>";
+		};
+		4886CFF430868E540063C312 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				4886CFF530868E540063C312 /* Main.html */,
+				4886CFF830868E540063C312 /* Icon.png */,
+				4886CFFA30868E540063C312 /* Style.css */,
+				4886CFFC30868E540063C312 /* Script.js */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		4886D00E30868E550063C312 /* FocusGuard Safari Extension */ = {
+			isa = PBXGroup;
+			children = (
+				4886D01B30868E550063C312 /* Resources */,
+				4886D00F30868E550063C312 /* SafariWebExtensionHandler.swift */,
+				4886D01130868E550063C312 /* Info.plist */,
+			);
+			path = "FocusGuard Safari Extension";
+			sourceTree = "<group>";
+		};
+		4886D01B30868E550063C312 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				4886D01C30868E550063C312 /* popup.js */,
+				4886D01D30868E550063C312 /* background.js */,
+				4886D01E30868E550063C312 /* popup.html */,
+				4886D01F30868E550063C312 /* manifest.json */,
+				4886D02030868E550063C312 /* content.js */,
+			);
+			name = Resources;
+			path = "FocusGuard Safari Extension";
+			sourceTree = SOURCE_ROOT;
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		4886CFEE30868E540063C312 /* FocusGuard Safari */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4886D01830868E550063C312 /* Build configuration list for PBXNativeTarget "FocusGuard Safari" */;
+			buildPhases = (
+				4886CFEB30868E540063C312 /* Sources */,
+				4886CFEC30868E540063C312 /* Frameworks */,
+				4886CFED30868E540063C312 /* Resources */,
+				4886D01730868E550063C312 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				4886D00D30868E550063C312 /* PBXTargetDependency */,
+			);
+			name = "FocusGuard Safari";
+			packageProductDependencies = (
+			);
+			productName = "FocusGuard Safari";
+			productReference = 4886CFEF30868E540063C312 /* FocusGuard Safari.app */;
+			productType = "com.apple.product-type.application";
+		};
+		4886D00930868E550063C312 /* FocusGuard Safari Extension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4886D01430868E550063C312 /* Build configuration list for PBXNativeTarget "FocusGuard Safari Extension" */;
+			buildPhases = (
+				4886D00630868E550063C312 /* Sources */,
+				4886D00730868E550063C312 /* Frameworks */,
+				4886D00830868E550063C312 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "FocusGuard Safari Extension";
+			packageProductDependencies = (
+			);
+			productName = "FocusGuard Safari Extension";
+			productReference = 4886D00A30868E550063C312 /* FocusGuard Safari Extension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		4886CFE730868E540063C312 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					4886CFEE30868E540063C312 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					4886D00930868E550063C312 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+				};
+			};
+			buildConfigurationList = 4886CFEA30868E540063C312 /* Build configuration list for PBXProject "FocusGuard Safari" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 4886CFE630868E540063C312;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 4886CFF030868E540063C312 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				4886CFEE30868E540063C312 /* FocusGuard Safari */,
+				4886D00930868E550063C312 /* FocusGuard Safari Extension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		4886CFED30868E540063C312 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4886CFF930868E540063C312 /* Icon.png in Resources */,
+				4886D00230868E540063C312 /* Main.storyboard in Resources */,
+				4886CFFD30868E540063C312 /* Script.js in Resources */,
+				4886CFF730868E540063C312 /* Main.html in Resources */,
+				4886D00430868E540063C312 /* Assets.xcassets in Resources */,
+				4886CFFB30868E540063C312 /* Style.css in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4886D00830868E550063C312 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4886D02430868E550063C312 /* manifest.json in Resources */,
+				4886D02230868E550063C312 /* background.js in Resources */,
+				4886D02330868E550063C312 /* popup.html in Resources */,
+				4886D02130868E550063C312 /* popup.js in Resources */,
+				4886D02530868E550063C312 /* content.js in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		4886CFEB30868E540063C312 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4886CFFF30868E540063C312 /* ViewController.swift in Sources */,
+				4886CFF330868E540063C312 /* AppDelegate.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4886D00630868E550063C312 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4886D01030868E550063C312 /* SafariWebExtensionHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		4886D00D30868E550063C312 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4886D00930868E550063C312 /* FocusGuard Safari Extension */;
+			targetProxy = 4886D00C30868E550063C312 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		4886CFF530868E540063C312 /* Main.html */ = {
+			isa = PBXVariantGroup;
+			children = (
+				4886CFF630868E540063C312 /* Base */,
+			);
+			name = Main.html;
+			sourceTree = "<group>";
+		};
+		4886D00030868E540063C312 /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				4886D00130868E540063C312 /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		4886D01230868E550063C312 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		4886D01330868E550063C312 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		4886D01530868E550063C312 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "FocusGuard Safari Extension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "FocusGuard Safari Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.yinguoliang.focusguard.safari.Extension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		4886D01630868E550063C312 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "FocusGuard Safari Extension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "FocusGuard Safari Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.yinguoliang.focusguard.safari.Extension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		4886D01930868E550063C312 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "FocusGuard Safari/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "FocusGuard Safari";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.yinguoliang.focusguard.safari;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		4886D01A30868E550063C312 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "FocusGuard Safari/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "FocusGuard Safari";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.yinguoliang.focusguard.safari;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		4886CFEA30868E540063C312 /* Build configuration list for PBXProject "FocusGuard Safari" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4886D01230868E550063C312 /* Debug */,
+				4886D01330868E550063C312 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4886D01430868E550063C312 /* Build configuration list for PBXNativeTarget "FocusGuard Safari Extension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4886D01530868E550063C312 /* Debug */,
+				4886D01630868E550063C312 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4886D01830868E550063C312 /* Build configuration list for PBXNativeTarget "FocusGuard Safari" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4886D01930868E550063C312 /* Debug */,
+				4886D01A30868E550063C312 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 4886CFE730868E540063C312 /* Project object */;
+}

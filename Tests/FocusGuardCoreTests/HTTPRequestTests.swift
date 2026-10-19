@@ -42,6 +42,8 @@ final class HTTPRequestTests: XCTestCase {
         XCTAssertFalse(r.isFromExtension)
         r.headers = ["host": "127.0.0.1:47621", "x-focusguard": "1"]  // 本机程序（如 curl）
         XCTAssertTrue(r.isFromExtension)
+        r.headers = ["host": "127.0.0.1:47621", "x-focusguard": "1", "origin": "safari-web-extension://ABC-123"]
+        XCTAssertTrue(r.isFromExtension, "Safari 扩展")
         r.headers = ["host": "evil.example:47621", "x-focusguard": "1"]  // DNS 重绑定
         XCTAssertFalse(r.isFromExtension)
     }

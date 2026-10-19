@@ -8,6 +8,7 @@
   const MIN_ACTIVE_SECONDS = 3; // 停留太短的不记
   const GENERIC_TAGS = new Set(["哔哩哔哩", "bilibili", "B站", "弹幕", "抖音", "douyin", "YouTube"]);
 
+  const IS_SAFARI = /Safari/.test(navigator.userAgent) && !/Chrome|Chromium/.test(navigator.userAgent);
   let item = null;
   let lastSentActive = -1;
   let lastSendAt = 0;
@@ -155,7 +156,7 @@
       url: item.url,
       ...extract(video),
       kind: video ? "video" : "page",
-      browser: "chrome",
+      browser: IS_SAFARI ? "safari" : "chrome",
       startedAt: item.startedAt,
       endedAt: item.endedAt,
       activeSeconds: round(item.activeSeconds),
