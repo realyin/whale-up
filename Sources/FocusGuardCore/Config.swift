@@ -92,8 +92,10 @@ public struct Config: Codable, Equatable {
 
     /// 内容记录范围
     public var contentScope: ContentScope = .junk
-    /// 大模型（第 2 阶段起使用）
+    /// 大模型
     public var llm = LLMConfig()
+    /// 每天几点自动写当天的小结（需要开启 AI 判断）
+    public var digestHour = 22
 
     public init() {}
 
@@ -116,6 +118,7 @@ public struct Config: Codable, Equatable {
         forceCloseSites = try c.decodeIfPresent([String].self, forKey: .forceCloseSites) ?? d.forceCloseSites
         contentScope = try c.decodeIfPresent(ContentScope.self, forKey: .contentScope) ?? d.contentScope
         llm = try c.decodeIfPresent(LLMConfig.self, forKey: .llm) ?? d.llm
+        digestHour = try c.decodeIfPresent(Int.self, forKey: .digestHour) ?? d.digestHour
     }
 
     /// 这个网页的内容要不要记录下来

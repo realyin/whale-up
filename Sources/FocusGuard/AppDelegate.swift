@@ -30,6 +30,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var currentReason: String?
     /// 大模型对当前网页的判断（开启 AI 判断且已判断过时才有）
     private var currentLabel: ContentLabel?
+    private lazy var digestWriter: DigestWriter? = contentStore.map { store in
+        let w = DigestWriter(store: store)
+        w.onWritten = { [weak self] digest, automatic in
+            self?.statsWindow?.model.contentVersion += 1
+            if automatic { self?.toast.show("📝 \(digest.day == DayKey.string(Date()) ? "今天" : digest.day) 的小结写好了，点 🌱 →“每日小结”查看") }
+        }
+        return w
+    }
     private lazy var labeler: Labeler? = contentStore.map { store in
         let l = Labeler(store: store)
         l.onChange = { [weak self] in
@@ -136,6 +144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // 强制关闭不受“暂停”影响，否则一暂停就绕过去了
         enforce(idle: idle, now: now, elapsed: elapsed)
+        digestWriter?.autoRun(config: config, now: now)
 
         if pausedUntil == nil {
             let nudge = tracker.record(isJunk: currentReason != nil, isIdle: idle, now: now, elapsed: elapsed,
@@ -300,6 +309,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             info("    \(item.name)  \(formatDuration(item.seconds))")
         }
         _ = action("查看统计…", #selector(openStats))
+        if config.llm.enabled { _ = action("每日小结…", #selector(openDigest)) }
         if let until = pausedUntil {
             info("已暂停，\(until.formatted(date: .omitted, time: .shortened)) 恢复")
         } else if let reason = currentReason {
@@ -385,11 +395,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         todayMinutes: Int(tracker.todaySeconds / 60) + 30, isNight: night, count: 1))
     }
 
+    @objc private func openDigest() {
+        openStats()
+        statsWindow?.model.mode = .digest
+    }
+
     @objc private func openStats() {
         saveStats()
         if statsWindow == nil {
             let model = StatsModel(stats: stats, config: config)
             model.contentStore = contentStore
+            model.digestWriter = digestWriter
             statsWindow = StatsWindow(model: model)
         }
         statsWindow?.model.stats = stats

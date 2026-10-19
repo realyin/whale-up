@@ -11,15 +11,18 @@ public struct ContentLabel: Codable, Equatable {
     public var reason: String
     public var model: String
     public var labeledAt: Double
+    /// 吸引人的钩子：猎奇、愤怒、焦虑、爽感…（“无”或 nil 表示没有明显钩子）
+    public var hook: String?
 
     public init(isJunk: Bool, nutrition: Int, category: String, reason: String, model: String,
-                labeledAt: Double = Date().timeIntervalSince1970) {
+                labeledAt: Double = Date().timeIntervalSince1970, hook: String? = nil) {
         self.isJunk = isJunk
         self.nutrition = min(5, max(1, nutrition))
         self.category = category
         self.reason = reason
         self.model = model
         self.labeledAt = labeledAt
+        self.hook = hook
     }
 }
 
@@ -56,6 +59,8 @@ public enum LabelPrompt {
         return (system, lines.joined(separator: "\n"))
     }
 
+    static let example = #"{"isJunk": true, "nutrition": 2, "category": "娱乐", "reason": "搞笑段子，看完没有收获"}"#
+
     static let schema: [String: Any] = [
         "type": "object",
         "properties": [
@@ -89,13 +94,48 @@ public enum LLMError: Error, CustomStringConvertible {
     }
 }
 
+/// 一次对话请求的内容，与服务商无关
+public struct ChatSpec {
+    public var system: String
+    public var user: String
+    public var model: String
+    public var maxTokens: Int
+    /// Anthropic 的思考强度（low / medium / high），其他服务商忽略
+    public var effort: String?
+    /// 要求按这个 JSON Schema 输出；nil 表示自由文本
+    public var jsonSchema: [String: Any]?
+    /// 只支持 json_object 模式的服务商（DeepSeek）需要在提示词里给出示例
+    public var jsonExample: String?
+
+    public init(system: String, user: String, model: String, maxTokens: Int, effort: String? = nil,
+                jsonSchema: [String: Any]? = nil, jsonExample: String? = nil) {
+        self.system = system
+        self.user = user
+        self.model = model
+        self.maxTokens = maxTokens
+        self.effort = effort
+        self.jsonSchema = jsonSchema
+        self.jsonExample = jsonExample
+    }
+}
+
 public enum LLMRequest {
+    /// 这些模型的安全分类器可能拒绝请求，开启服务端自动改用备用模型
+    static let fallbackModels: Set<String> = ["claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"]
+
     public static func labeling(_ v: ContentView, llm: LLMConfig, apiKey: String?) throws -> URLRequest {
         let prompt = LabelPrompt.make(for: v, llm: llm)
+        // 分类任务简单，低思考强度即可
+        return try chat(ChatSpec(system: prompt.system, user: prompt.user, model: llm.taggingModel, maxTokens: 2048,
+                                 effort: "low", jsonSchema: LabelPrompt.schema, jsonExample: LabelPrompt.example),
+                        llm: llm, apiKey: apiKey)
+    }
+
+    public static func chat(_ spec: ChatSpec, llm: LLMConfig, apiKey: String?, timeout: TimeInterval = 30) throws -> URLRequest {
         let key = apiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if llm.provider != .ollama && key.isEmpty { throw LLMError.missingAPIKey }
 
-        let body: [String: Any]
+        var body: [String: Any]
         var req: URLRequest
         switch llm.provider {
         case .anthropic:
@@ -103,42 +143,45 @@ public enum LLMRequest {
             req.setValue(key, forHTTPHeaderField: "x-api-key")
             req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
             body = [
-                "model": llm.taggingModel,
-                "max_tokens": 2048,
-                "system": prompt.system,
-                "messages": [["role": "user", "content": prompt.user]],
-                // 分类任务简单，低思考强度即可；格式由 JSON Schema 约束
-                "output_config": ["effort": "low", "format": ["type": "json_schema", "schema": LabelPrompt.schema]],
+                "model": spec.model,
+                "max_tokens": spec.maxTokens,
+                "system": spec.system,
+                "messages": [["role": "user", "content": spec.user]],
             ]
+            var output: [String: Any] = [:]
+            if let effort = spec.effort { output["effort"] = effort }
+            if let schema = spec.jsonSchema { output["format"] = ["type": "json_schema", "schema": schema] }
+            if !output.isEmpty { body["output_config"] = output }
+            if fallbackModels.contains(spec.model) && llm.baseURL.trimmingCharacters(in: .whitespaces).isEmpty {
+                req.setValue("server-side-fallback-2026-07-01", forHTTPHeaderField: "anthropic-beta")
+                body["fallbacks"] = "default"
+            }
         case .deepseek:
             req = URLRequest(url: try endpoint(llm.baseURL, default: "https://api.deepseek.com", path: "chat/completions"))
             req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-            // DeepSeek 只支持 json_object：提示词里必须出现 json 字样并给出示例
-            let system = prompt.system + """
-
-
-                请只输出一个 JSON 对象，格式示例：
-                {"isJunk": true, "nutrition": 2, "category": "娱乐", "reason": "搞笑段子，看完没有收获"}
-                """
-            body = [
-                "model": llm.taggingModel,
-                "max_tokens": 1024,
-                "messages": [["role": "system", "content": system], ["role": "user", "content": prompt.user]],
-                "response_format": ["type": "json_object"],
-            ]
+            var system = spec.system
+            body = ["model": spec.model, "max_tokens": min(spec.maxTokens, 8000)]
+            if spec.jsonSchema != nil {
+                // DeepSeek 只支持 json_object：提示词里必须出现 json 字样并给出示例
+                system += "\n\n请只输出一个 JSON 对象，格式示例：\n" + (spec.jsonExample ?? "{}")
+                body["response_format"] = ["type": "json_object"]
+            }
+            body["messages"] = [["role": "system", "content": system], ["role": "user", "content": spec.user]]
         case .openai, .ollama:
             let base = llm.provider == .ollama ? "http://127.0.0.1:11434/v1" : "https://api.openai.com/v1"
             req = URLRequest(url: try endpoint(llm.baseURL, default: base, path: "chat/completions"))
             if !key.isEmpty { req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
             body = [
-                "model": llm.taggingModel,
-                "messages": [["role": "system", "content": prompt.system], ["role": "user", "content": prompt.user]],
-                "response_format": ["type": "json_schema",
-                                    "json_schema": ["name": "content_label", "strict": true, "schema": LabelPrompt.schema]],
+                "model": spec.model,
+                "messages": [["role": "system", "content": spec.system], ["role": "user", "content": spec.user]],
             ]
+            if let schema = spec.jsonSchema {
+                body["response_format"] = ["type": "json_schema",
+                                           "json_schema": ["name": "result", "strict": true, "schema": schema]]
+            }
         }
         req.httpMethod = "POST"
-        req.timeoutInterval = 30
+        req.timeoutInterval = timeout
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         return req
@@ -156,7 +199,8 @@ public enum LLMRequest {
 }
 
 public enum LLMResponse {
-    public static func parseLabel(_ data: Data, provider: LLMProvider, model: String) throws -> ContentLabel {
+    /// 取出模型回复的文字；接口错误、拒绝、截断都抛错
+    public static func text(_ data: Data, provider: LLMProvider) throws -> String {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw LLMError.badOutput(String(data: data.prefix(200), encoding: .utf8) ?? "")
         }
@@ -164,7 +208,6 @@ public enum LLMResponse {
             let message = (error as? [String: Any])?["message"] as? String ?? "\(error)"
             throw LLMError.api(message)
         }
-
         let text: String
         switch provider {
         case .anthropic:
@@ -177,19 +220,33 @@ public enum LLMResponse {
             text = blocks.filter { $0["type"] as? String == "text" }.compactMap { $0["text"] as? String }.joined()
         case .openai, .ollama, .deepseek:
             let choice = (json["choices"] as? [[String: Any]])?.first
+            if choice?["finish_reason"] as? String == "length" { throw LLMError.truncated }
             text = (choice?["message"] as? [String: Any])?["content"] as? String ?? ""
         }
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw LLMError.badOutput("空回复") }
+        return text
+    }
 
+    /// 把模型输出解析成 JSON 对象（容忍包在 ``` 代码块里）
+    public static func jsonObject<T: Decodable>(_ type: T.Type, from text: String) throws -> T {
+        var t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let start = t.firstIndex(of: "{"), let end = t.lastIndex(of: "}") { t = String(t[start...end]) }
+        guard let value = try? JSONDecoder().decode(T.self, from: Data(t.utf8)) else {
+            throw LLMError.badOutput(String(text.prefix(200)))
+        }
+        return value
+    }
+
+    public static func parseLabel(_ data: Data, provider: LLMProvider, model: String) throws -> ContentLabel {
         struct Raw: Decodable {
             var isJunk: Bool
             var nutrition: Int
             var category: String
             var reason: String
+            var hook: String?
         }
-        guard let raw = try? JSONDecoder().decode(Raw.self, from: Data(text.utf8)) else {
-            throw LLMError.badOutput(String(text.prefix(200)))
-        }
+        let raw = try jsonObject(Raw.self, from: try text(data, provider: provider))
         return ContentLabel(isJunk: raw.isJunk, nutrition: raw.nutrition, category: raw.category,
-                            reason: raw.reason, model: model)
+                            reason: raw.reason, model: model, hook: raw.hook)
     }
 }

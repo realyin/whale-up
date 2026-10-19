@@ -8,6 +8,8 @@ final class StatsModel: ObservableObject {
     @Published var stats: UsageStats
     @Published var config: Config
     var contentStore: ContentStore?
+    var digestWriter: DigestWriter?
+    @Published var mode: StatsMode = .time
     /// 有新的观看记录时 +1，让内容列表刷新
     @Published var contentVersion = 0
 
@@ -15,6 +17,10 @@ final class StatsModel: ObservableObject {
         self.stats = stats
         self.config = config
     }
+}
+
+enum StatsMode: String, CaseIterable {
+    case time = "时长统计", content = "看过的内容", digest = "每日小结"
 }
 
 @MainActor
@@ -65,7 +71,6 @@ struct StatsView: View {
     @State var junkOnly = true
     @State private var selectedDay = Calendar.current.startOfDay(for: Date())
     @State private var hoveredDay: Date?
-    @State private var showContent = false
 
     private let calendar = Calendar.current
     private var today: Date { calendar.startOfDay(for: Date()) }
@@ -75,14 +80,16 @@ struct StatsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Picker("", selection: $showContent) {
-                Text("时长统计").tag(false)
-                Text("看过的内容").tag(true)
+            Picker("", selection: $model.mode) {
+                ForEach(StatsMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented).labelsHidden()
-            if showContent {
+            if model.mode == .content {
                 dayNavigator
                 ContentList(model: model, day: selectedDay)
+            } else if model.mode == .digest {
+                dayNavigator
+                DigestPage(model: model, day: selectedDay)
             } else {
                 weekChart
                 Divider()
@@ -322,5 +329,83 @@ private struct ContentRow: View {
             }
         }
         .padding(.vertical, 2)
+    }
+}
+
+/// 每日小结页：显示大模型写的小结，可以手动生成或重写
+private struct DigestPage: View {
+    @ObservedObject var model: StatsModel
+    let day: Date
+    @State private var writing = false
+    @State private var error: String?
+
+    var body: some View {
+        let _ = model.contentVersion
+        let digest = model.digestWriter?.digest(for: day)
+        VStack(alignment: .leading, spacing: 12) {
+            if !model.config.llm.enabled || model.digestWriter == nil {
+                Spacer()
+                Text("需要先在“设置… → AI 判断”里开启大模型").foregroundStyle(.secondary).frame(maxWidth: .infinity)
+                Spacer()
+            } else {
+                HStack {
+                    if let digest {
+                        Text("由 \(digest.model) 写于 \(Date(timeIntervalSince1970: digest.createdAt).formatted(date: .omitted, time: .shortened))")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        Text("每天 \(model.config.digestHour):00 自动写当天的小结").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button(writing ? "正在写…" : (digest == nil ? "现在就写" : "重新写")) { write() }
+                        .disabled(writing)
+                }
+                if let error { Text("⚠️ \(error)").font(.callout).foregroundStyle(.orange) }
+                if let digest {
+                    ScrollView { MarkdownBlock(text: digest.text).frame(maxWidth: .infinity, alignment: .leading) }
+                } else {
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    private func write() {
+        guard let writer = model.digestWriter else { return }
+        writing = true
+        error = nil
+        let config = model.config
+        Task {
+            do { try await writer.write(day: day, config: config) } catch { self.error = "\(error)" }
+            writing = false
+        }
+    }
+}
+
+/// 简单的 Markdown 显示：## 标题、- 列表、行内粗体
+struct MarkdownBlock: View {
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(text.components(separatedBy: "\n").enumerated()), id: \.offset) { _, raw in
+                let line = raw.trimmingCharacters(in: .whitespaces)
+                if line.hasPrefix("#") {
+                    Text(inline(line.drop(while: { $0 == "#" }).trimmingCharacters(in: .whitespaces)))
+                        .font(.headline).padding(.top, 6)
+                } else if line.hasPrefix("- ") || line.hasPrefix("* ") {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("•")
+                        Text(inline(String(line.dropFirst(2))))
+                    }
+                } else if !line.isEmpty {
+                    Text(inline(line))
+                }
+            }
+        }
+        .textSelection(.enabled)
+    }
+
+    private func inline(_ s: String) -> AttributedString {
+        (try? AttributedString(markdown: s)) ?? AttributedString(s)
     }
 }

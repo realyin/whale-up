@@ -37,6 +37,15 @@ MainActor.assumeIsolated {
         StatsWindow.renderPNG(model: model, junkOnly: false, to: URL(fileURLWithPath: dir).appendingPathComponent("stats-all.png"))
         exit(0)
     }
+    if ProcessInfo.processInfo.environment["FOCUSGUARD_WRITE_DIGEST"] != nil, let store = try? ContentStore() {
+        // 开发用：立刻写今天的小结并打印
+        let writer = DigestWriter(store: store)
+        Task {
+            do { print(try await writer.write(day: Date(), config: Config.load().0).text) } catch { print("失败：\(error)") }
+            exit(0)
+        }
+        RunLoop.main.run()
+    }
     if let id = ProcessInfo.processInfo.environment["FOCUSGUARD_CLOSE_JUNK"] {
         print("closed:", ActivityMonitor().closeJunk(bundleID: id, nudgedURL: nil, rules: Config.load().0.junkSites))
         exit(0)

@@ -132,6 +132,9 @@ public final class ContentStore {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 at REAL NOT NULL, reason TEXT NOT NULL, site TEXT NOT NULL, session_minutes INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS digests (
+                day TEXT PRIMARY KEY, text TEXT NOT NULL, model TEXT NOT NULL, created_at REAL NOT NULL
+            );
             """)
         // 升级旧数据库：补上后来加的列
         let columns = try query("PRAGMA table_info(views)", []) { Self.text($0, 1) ?? "" }
@@ -245,6 +248,20 @@ public final class ContentStore {
                         reason: ReasonKind(rawValue: Self.text(s, 1)!) ?? .bored,
                         site: Self.text(s, 2)!, sessionMinutes: Int(sqlite3_column_int(s, 3)))
         }
+    }
+
+    // MARK: - 每日小结
+
+    public func saveDigest(_ d: Digest) throws {
+        try run("INSERT OR REPLACE INTO digests (day, text, model, created_at) VALUES (?, ?, ?, ?)",
+                [d.day, d.text, d.model, d.createdAt])
+    }
+
+    public func digest(day: String) throws -> Digest? {
+        try query("SELECT day, text, model, created_at FROM digests WHERE day = ?", [day]) { s in
+            Digest(day: Self.text(s, 0)!, text: Self.text(s, 1)!, model: Self.text(s, 2)!,
+                   createdAt: sqlite3_column_double(s, 3))
+        }.first
     }
 
     public func prune(before date: Date) throws {

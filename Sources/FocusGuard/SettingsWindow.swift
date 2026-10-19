@@ -392,6 +392,10 @@ struct AISettings: View {
                 if model.config.contentScope == .off {
                     Text("⚠️ 需要先在“内容记录”里开启记录，并安装 Chrome 扩展").foregroundStyle(.orange)
                 }
+                Picker("每天几点自动写小结", selection: $model.config.digestHour) {
+                    ForEach(17..<24, id: \.self) { Text("\($0):00").tag($0) }
+                }
+                .disabled(!model.config.llm.enabled)
                 if let status = model.labelerStatus {
                     Text(status).font(.callout).foregroundStyle(status.hasPrefix("⚠️") ? .orange : .secondary)
                 }
