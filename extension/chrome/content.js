@@ -2,6 +2,7 @@
 // 是否保存由 App 按“内容记录范围”决定，范围外的记录 App 直接丢弃。
 (() => {
   const SEND_EVERY_MS = 15000;
+  const FIRST_SEND_SECONDS = 5; // 新内容尽快上报一次，好让 App 尽早判断有没有营养
   // 后台标签页的定时器会被 Chrome 限流（最慢约一分钟一次），所以按真实经过的时间计，而不是按次数
   const MAX_TICK_SECONDS = 90;
   const MIN_ACTIVE_SECONDS = 3; // 停留太短的不记
@@ -208,7 +209,7 @@
     }
     item.endedAt = now / 1000;
 
-    if (now - lastSendAt >= SEND_EVERY_MS) send();
+    if (lastSentActive < 0 ? item.activeSeconds >= FIRST_SEND_SECONDS : now - lastSendAt >= SEND_EVERY_MS) send();
   }
 
   setInterval(tick, 1000);
