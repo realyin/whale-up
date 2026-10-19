@@ -34,7 +34,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let w = DigestWriter(store: store)
         w.onWritten = { [weak self] digest, automatic in
             self?.statsWindow?.model.contentVersion += 1
-            if automatic { self?.toast.show("📝 \(digest.day == DayKey.string(Date()) ? "今天" : digest.day) 的小结写好了，点 🌱 →“每日小结”查看") }
+            if automatic {
+                let what = digest.day.contains("W") ? "\(digest.day) 的每周复盘"
+                    : "\(digest.day == DayKey.string(Date()) ? "今天" : digest.day) 的小结"
+                self?.toast.show("📝 \(what)写好了，点 🌱 →“每日小结”查看")
+            }
         }
         return w
     }

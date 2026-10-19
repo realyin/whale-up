@@ -333,16 +333,18 @@ private struct ContentRow: View {
     }
 }
 
-/// 每日小结页：显示大模型写的小结，可以手动生成或重写
+/// 每日小结 / 每周复盘：显示大模型写的内容，可以手动写或重写
 private struct DigestPage: View {
     @ObservedObject var model: StatsModel
     let day: Date
+    @State private var weekly = false
     @State private var writing = false
     @State private var error: String?
 
     var body: some View {
         let _ = model.contentVersion
-        let digest = model.digestWriter?.digest(for: day)
+        let week = Week(containing: day)
+        let digest = weekly ? model.digestWriter?.weekly(for: week) : model.digestWriter?.digest(for: day)
         VStack(alignment: .leading, spacing: 12) {
             if !model.config.llm.enabled || model.digestWriter == nil {
                 Spacer()
@@ -350,16 +352,25 @@ private struct DigestPage: View {
                 Spacer()
             } else {
                 HStack {
-                    if let digest {
-                        Text("由 \(digest.model) 写于 \(Date(timeIntervalSince1970: digest.createdAt).formatted(date: .omitted, time: .shortened))")
-                            .font(.caption).foregroundStyle(.secondary)
-                    } else {
-                        Text("每天 \(model.config.digestHour):00 自动写当天的小结").font(.caption).foregroundStyle(.secondary)
+                    Picker("", selection: $weekly) {
+                        Text("当天小结").tag(false)
+                        Text("这一周的复盘（\(week.key)）").tag(true)
                     }
+                    .pickerStyle(.segmented).labelsHidden().frame(width: 300)
                     Spacer()
-                    Button(writing ? "正在写…" : (digest == nil ? "现在就写" : "重新写")) { write() }
+                    Button(writing ? "正在写…" : (digest == nil ? "现在就写" : "重新写")) { write(week: week) }
                         .disabled(writing)
                 }
+                Group {
+                    if let digest {
+                        Text("由 \(digest.model) 写于 \(Date(timeIntervalSince1970: digest.createdAt).formatted(date: .abbreviated, time: .shortened))")
+                    } else if weekly {
+                        Text("每周一自动写上一周的复盘")
+                    } else {
+                        Text("每天 \(model.config.digestHour):00 自动写当天的小结")
+                    }
+                }
+                .font(.caption).foregroundStyle(.secondary)
                 if let error { Text("⚠️ \(error)").font(.callout).foregroundStyle(.orange) }
                 if let digest {
                     ScrollView { MarkdownBlock(text: digest.text).frame(maxWidth: .infinity, alignment: .leading) }
@@ -370,13 +381,19 @@ private struct DigestPage: View {
         }
     }
 
-    private func write() {
+    private func write(week: Week) {
         guard let writer = model.digestWriter else { return }
         writing = true
         error = nil
         let config = model.config
+        let weekly = self.weekly
         Task {
-            do { try await writer.write(day: day, config: config) } catch { self.error = "\(error)" }
+            do {
+                if weekly { try await writer.writeWeekly(week: week, config: config) }
+                else { try await writer.write(day: day, config: config) }
+            } catch {
+                self.error = "\(error)"
+            }
             writing = false
         }
     }

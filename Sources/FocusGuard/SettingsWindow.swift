@@ -442,6 +442,26 @@ struct AISettings: View {
                 }
             }
 
+            Section("写进 Obsidian") {
+                Toggle("每日小结和每周复盘同时存一份到 Obsidian", isOn: $model.config.writeToObsidian)
+                if model.config.writeToObsidian {
+                    if let root = DigestWriter.obsidianRoot(model.config) {
+                        Text(root.path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                    } else {
+                        Text("⚠️ 没找到 Obsidian 的库，请手动选择文件夹").font(.caption).foregroundStyle(.orange)
+                    }
+                    HStack {
+                        Button("选择文件夹…") { chooseFolder() }
+                        if !model.config.obsidianFolder.isEmpty {
+                            Button("恢复自动") { model.config.obsidianFolder = "" }
+                        }
+                        if let root = DigestWriter.obsidianRoot(model.config), FileManager.default.fileExists(atPath: root.path) {
+                            Button("在 Finder 中显示") { NSWorkspace.shared.activateFileViewerSelecting([root]) }
+                        }
+                    }
+                }
+            }
+
             Section("会发送什么") {
                 Text("每条内容只发送：网站名、标题、作者、标签、简介、视频时长。不发送完整网址，不发送你什么时候看的。同一条内容只判断一次。")
                     .font(.caption).foregroundStyle(.secondary)
@@ -449,6 +469,15 @@ struct AISettings: View {
         }
         .formStyle(.grouped)
         .onAppear(perform: loadKey)
+    }
+
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = "选择"
+        if panel.runModal() == .OK, let url = panel.url { model.config.obsidianFolder = url.path }
     }
 
     private var defaultBaseURL: String {

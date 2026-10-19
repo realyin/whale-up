@@ -75,6 +75,19 @@ MainActor.assumeIsolated {
         }
         RunLoop.main.run()
     }
+    if ProcessInfo.processInfo.environment["FOCUSGUARD_WRITE_WEEKLY"] != nil, let store = try? ContentStore() {
+        // 开发用：立刻写本周复盘并打印
+        let writer = DigestWriter(store: store)
+        Task {
+            do {
+                let config = Config.load().0
+                print(try await writer.writeWeekly(week: Week(containing: Date()), config: config).text)
+                print("Obsidian：", DigestWriter.obsidianRoot(config)?.path ?? "未写入", writer.obsidianError ?? "")
+            } catch { print("失败：\(error)") }
+            exit(0)
+        }
+        RunLoop.main.run()
+    }
     if let id = ProcessInfo.processInfo.environment["FOCUSGUARD_CLOSE_JUNK"] {
         print("closed:", ActivityMonitor().closeJunk(bundleID: id, nudgedURL: nil, rules: Config.load().0.junkSites))
         exit(0)

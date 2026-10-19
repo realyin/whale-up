@@ -99,6 +99,10 @@ public struct Config: Codable, Equatable {
     public var llm = LLMConfig()
     /// 每天几点自动写当天的小结（需要开启 AI 判断）
     public var digestHour = 22
+    /// 小结和每周复盘同时写进 Obsidian
+    public var writeToObsidian = true
+    /// 写到哪个文件夹；留空 = 自动找到 Obsidian 当前的库，在里面建“专注守护”文件夹
+    public var obsidianFolder = ""
 
     public init() {}
 
@@ -122,6 +126,8 @@ public struct Config: Codable, Equatable {
         contentScope = try c.decodeIfPresent(ContentScope.self, forKey: .contentScope) ?? d.contentScope
         llm = try c.decodeIfPresent(LLMConfig.self, forKey: .llm) ?? d.llm
         digestHour = try c.decodeIfPresent(Int.self, forKey: .digestHour) ?? d.digestHour
+        writeToObsidian = try c.decodeIfPresent(Bool.self, forKey: .writeToObsidian) ?? d.writeToObsidian
+        obsidianFolder = try c.decodeIfPresent(String.self, forKey: .obsidianFolder) ?? d.obsidianFolder
     }
 
     /// 这个网页的内容要不要记录下来
