@@ -310,6 +310,10 @@ private struct ContentRow: View {
                 if let d = view.mediaDuration, d > 0, view.kind == "video" {
                     Text("看了 \(min(100, Int(view.watchedSeconds / d * 100)))%").font(.caption).foregroundStyle(.secondary)
                 }
+                if view.backgroundSeconds >= 1 {
+                    Text("后台播放 \(view.backgroundSeconds < 60 ? "\(Int(view.backgroundSeconds)) 秒" : formatDuration(view.backgroundSeconds))")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
         }
         .padding(.vertical, 2)

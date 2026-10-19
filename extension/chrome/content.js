@@ -1,33 +1,70 @@
 // 专注守护：记录正在看的视频 / 网页，经后台转发给本机 App（只发到 127.0.0.1）。
 // 是否保存由 App 按“内容记录范围”决定，范围外的记录 App 直接丢弃。
 (() => {
-  const SEND_EVERY_SECONDS = 15;
+  const SEND_EVERY_MS = 15000;
+  // 后台标签页的定时器会被 Chrome 限流（最慢约一分钟一次），所以按真实经过的时间计，而不是按次数
+  const MAX_TICK_SECONDS = 90;
   const MIN_ACTIVE_SECONDS = 3; // 停留太短的不记
   const GENERIC_TAGS = new Set(["哔哩哔哩", "bilibili", "B站", "弹幕", "抖音", "douyin", "YouTube"]);
 
   let item = null;
   let lastSentActive = -1;
+  let lastSendAt = 0;
+  let lastTickAt = Date.now();
 
   const meta = (name) =>
     document.querySelector(`meta[name="${name}"],meta[property="${name}"]`)?.content?.trim() || "";
   const text = (selector) => document.querySelector(selector)?.innerText?.trim() || "";
   const clip = (s, n) => (s || "").replace(/\s+/g, " ").trim().slice(0, n);
 
-  /** 画面里露出面积最大的视频；playingOnly 时只看正在播放的 */
-  function mainVideo(playingOnly) {
-    let best = null;
-    let bestArea = 40000; // 太小的（预览图、广告）不算
+  function onScreenArea(v) {
     // 某些情况下（窗口隐藏时）拿不到视口尺寸，就不按可见范围裁剪
     const vw = innerWidth || Infinity;
     const vh = innerHeight || Infinity;
+    const r = v.getBoundingClientRect();
+    const w = Math.min(r.right, vw) - Math.max(r.left, 0);
+    const h = Math.min(r.bottom, vh) - Math.max(r.top, 0);
+    return w > 0 && h > 0 ? w * h : 0;
+  }
+
+  const elementArea = (v) => {
+    const r = v.getBoundingClientRect();
+    return r.width * r.height;
+  };
+  const MIN_VIDEO_AREA = 40000; // 太小的（预览图、广告）不算
+
+  /**
+   * 正在播放的主视频。标签页在后台、窗口最小化或被挡住也算，滚动到评论区也算；
+   * 但看不见时只算有声音的——静音自动播放的预览没人在看也没人在听。
+   */
+  function playingVideo() {
+    const pageVisible = document.visibilityState === "visible";
+    let best = null;
+    let bestScore = 0;
     for (const v of document.querySelectorAll("video")) {
-      if (playingOnly && v.paused) continue;
-      const r = v.getBoundingClientRect();
-      const w = Math.min(r.right, vw) - Math.max(r.left, 0);
-      const h = Math.min(r.bottom, vh) - Math.max(r.top, 0);
-      if (w > 0 && h > 0 && w * h > bestArea) {
+      if (v.paused || v.ended || v.readyState < 3) continue;
+      const size = elementArea(v);
+      if (size < MIN_VIDEO_AREA) continue;
+      const shown = pageVisible && onScreenArea(v) > 0;
+      if (v.muted && !shown) continue;
+      const score = (shown ? 1e9 : 0) + size; // 屏幕上看得到的优先
+      if (score > bestScore) {
         best = v;
-        bestArea = w * h;
+        bestScore = score;
+      }
+    }
+    return best;
+  }
+
+  /** 页面上最大的视频（不管在不在播），用来判断这是不是视频页、取视频时长 */
+  function largestVideo() {
+    let best = null;
+    let bestArea = MIN_VIDEO_AREA;
+    for (const v of document.querySelectorAll("video")) {
+      const a = elementArea(v);
+      if (a > bestArea) {
+        best = v;
+        bestArea = a;
       }
     }
     return best;
@@ -98,14 +135,19 @@
       endedAt: Date.now() / 1000,
       activeSeconds: 0,
       watchedSeconds: 0,
+      backgroundSeconds: 0,
       video,
+      lastVideo: null,
+      lastTime: null,
     };
   }
 
   function send() {
     if (!item || item.activeSeconds < MIN_ACTIVE_SECONDS || item.activeSeconds === lastSentActive) return;
     lastSentActive = item.activeSeconds;
-    const video = item.video?.isConnected ? item.video : mainVideo(false);
+    lastSendAt = Date.now();
+    const video = item.video?.isConnected ? item.video : largestVideo();
+    const round = (x) => Math.round(x * 10) / 10;
     const duration = video?.duration;
     const payload = {
       viewId: item.viewId,
@@ -115,8 +157,9 @@
       browser: "chrome",
       startedAt: item.startedAt,
       endedAt: item.endedAt,
-      activeSeconds: item.activeSeconds,
-      watchedSeconds: item.watchedSeconds,
+      activeSeconds: round(item.activeSeconds),
+      watchedSeconds: round(item.watchedSeconds),
+      backgroundSeconds: round(item.backgroundSeconds),
       mediaDuration: Number.isFinite(duration) ? duration : null,
     };
     try {
@@ -127,21 +170,45 @@
   }
 
   function tick() {
-    const playing = mainVideo(true);
+    const now = Date.now();
+    const dt = Math.min((now - lastTickAt) / 1000, MAX_TICK_SECONDS);
+    lastTickAt = now;
+
+    const playing = playingVideo();
     const key = identity(playing);
     if (!item || item.key !== key) {
       send();
-      item = newItem(key, playing || mainVideo(false));
+      item = newItem(key, playing || largestVideo());
       lastSentActive = -1;
+      lastSendAt = now;
     }
-    if (playing) item.video = playing;
+
+    // 视频按播放进度计时：后台被限流时也准确；拖动进度条不会多算
+    let watched = 0;
+    if (playing) {
+      item.video = playing;
+      const t = playing.currentTime;
+      if (item.lastVideo === playing && item.lastTime !== null) {
+        watched = Math.max(0, Math.min(dt, (t - item.lastTime) / (playing.playbackRate || 1)));
+      }
+      item.lastVideo = playing;
+      item.lastTime = t;
+    } else {
+      item.lastVideo = null;
+      item.lastTime = null;
+    }
 
     const visible = document.visibilityState === "visible";
-    if (visible && (document.hasFocus() || playing)) item.activeSeconds += 1;
-    if (visible && playing) item.watchedSeconds += 1;
-    item.endedAt = Date.now() / 1000;
+    if (watched > 0) {
+      item.watchedSeconds += watched;
+      item.activeSeconds += watched;
+      if (!visible) item.backgroundSeconds += watched;
+    } else if (visible && document.hasFocus()) {
+      item.activeSeconds += dt; // 在看文章、图文
+    }
+    item.endedAt = now / 1000;
 
-    if (item.activeSeconds > 0 && item.activeSeconds % SEND_EVERY_SECONDS === 0) send();
+    if (now - lastSendAt >= SEND_EVERY_MS) send();
   }
 
   setInterval(tick, 1000);

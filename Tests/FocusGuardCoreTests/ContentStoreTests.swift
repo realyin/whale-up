@@ -1,3 +1,4 @@
+import SQLite3
 import XCTest
 @testable import FocusGuardCore
 
@@ -70,6 +71,42 @@ final class ContentStoreTests: XCTestCase {
         try store.upsert(view("a", at: 1000))
         store = try ContentStore(path: path)
         XCTAssertEqual(try store.views(from: .distantPast, to: .distantFuture).count, 1)
+    }
+
+    func testBackgroundSecondsStoredAndDefaultsToZero() throws {
+        var v = view("bg", at: 1000, active: 100, watched: 90)
+        v.backgroundSeconds = 60
+        try store.upsert(v)
+        try store.upsert(view("fg", at: 2000))
+        let rows = try store.views(from: .distantPast, to: .distantFuture)
+        XCTAssertEqual(rows.first { $0.viewId == "bg" }?.backgroundSeconds, 60)
+        XCTAssertEqual(rows.first { $0.viewId == "fg" }?.backgroundSeconds, 0)
+        let json = #"{"viewId":"x","url":"https://a.com","startedAt":1,"activeSeconds":1}"#
+        XCTAssertEqual(try JSONDecoder().decode(ContentView.self, from: Data(json.utf8)).backgroundSeconds, 0)
+    }
+
+    func testOldDatabaseIsMigrated() throws {
+        store = nil
+        try FileManager.default.removeItem(atPath: path)
+        // 第一版的表结构，没有 background_seconds 列
+        var db: OpaquePointer?
+        sqlite3_open(path, &db)
+        sqlite3_exec(db, """
+            CREATE TABLE views (view_id TEXT PRIMARY KEY, url TEXT NOT NULL, site TEXT NOT NULL, title TEXT NOT NULL,
+              author TEXT, tags TEXT NOT NULL, description TEXT, kind TEXT NOT NULL, browser TEXT NOT NULL,
+              started_at REAL NOT NULL, ended_at REAL NOT NULL, active_seconds REAL NOT NULL,
+              watched_seconds REAL NOT NULL, media_duration REAL);
+            INSERT INTO views VALUES ('old','https://bilibili.com','bilibili.com','t',NULL,'[]',NULL,'video','chrome',1,2,1,1,NULL);
+            """, nil, nil, nil)
+        sqlite3_close(db)
+
+        store = try ContentStore(path: path)
+        var v = view("new", at: 3000)
+        v.backgroundSeconds = 5
+        try store.upsert(v)
+        let rows = try store.views(from: .distantPast, to: .distantFuture)
+        XCTAssertEqual(rows.map(\.viewId), ["new", "old"])
+        XCTAssertEqual(rows.first?.backgroundSeconds, 5)
     }
 
     func testReasonsAreStored() throws {

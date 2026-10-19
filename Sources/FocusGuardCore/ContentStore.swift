@@ -15,10 +15,12 @@ public struct ContentView: Codable, Equatable {
     /// Unix 时间（秒）
     public var startedAt: Double
     public var endedAt: Double
-    /// 页面在前台、人在操作或视频在播的秒数
+    /// 计入的总秒数：页面在前台且人在操作，或视频在播放（含后台播放）
     public var activeSeconds: Double
     /// 视频实际播放的秒数
     public var watchedSeconds: Double
+    /// 其中标签页在后台 / 窗口最小化或被挡住时播放的秒数（“放着听”）
+    public var backgroundSeconds: Double
     /// 视频总长度（秒）
     public var mediaDuration: Double?
 
@@ -27,7 +29,7 @@ public struct ContentView: Codable, Equatable {
     public init(viewId: String, url: String, title: String, author: String? = nil, tags: [String] = [],
                 description: String? = nil, kind: String = "page", browser: String = "chrome",
                 startedAt: Double, endedAt: Double, activeSeconds: Double, watchedSeconds: Double = 0,
-                mediaDuration: Double? = nil) {
+                backgroundSeconds: Double = 0, mediaDuration: Double? = nil) {
         self.viewId = viewId
         self.url = url
         self.title = title
@@ -40,6 +42,7 @@ public struct ContentView: Codable, Equatable {
         self.endedAt = endedAt
         self.activeSeconds = activeSeconds
         self.watchedSeconds = watchedSeconds
+        self.backgroundSeconds = backgroundSeconds
         self.mediaDuration = mediaDuration
     }
 
@@ -57,6 +60,7 @@ public struct ContentView: Codable, Equatable {
         endedAt = try c.decodeIfPresent(Double.self, forKey: .endedAt) ?? startedAt
         activeSeconds = try c.decodeIfPresent(Double.self, forKey: .activeSeconds) ?? 0
         watchedSeconds = try c.decodeIfPresent(Double.self, forKey: .watchedSeconds) ?? 0
+        backgroundSeconds = try c.decodeIfPresent(Double.self, forKey: .backgroundSeconds) ?? 0
         mediaDuration = try c.decodeIfPresent(Double.self, forKey: .mediaDuration)
     }
 }
@@ -112,7 +116,8 @@ public final class ContentStore {
                 author TEXT, tags TEXT NOT NULL, description TEXT,
                 kind TEXT NOT NULL, browser TEXT NOT NULL,
                 started_at REAL NOT NULL, ended_at REAL NOT NULL,
-                active_seconds REAL NOT NULL, watched_seconds REAL NOT NULL, media_duration REAL
+                active_seconds REAL NOT NULL, watched_seconds REAL NOT NULL, media_duration REAL,
+                background_seconds REAL NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS views_started ON views(started_at);
             CREATE TABLE IF NOT EXISTS reasons (
@@ -120,6 +125,11 @@ public final class ContentStore {
                 at REAL NOT NULL, reason TEXT NOT NULL, site TEXT NOT NULL, session_minutes INTEGER NOT NULL
             );
             """)
+        // 升级旧数据库：第一版没有 background_seconds 列
+        let columns = try query("PRAGMA table_info(views)", []) { Self.text($0, 1) ?? "" }
+        if !columns.contains("background_seconds") {
+            try exec("ALTER TABLE views ADD COLUMN background_seconds REAL NOT NULL DEFAULT 0")
+        }
     }
 
     deinit {
@@ -131,8 +141,9 @@ public final class ContentStore {
         let tags = String(data: try JSONEncoder().encode(v.tags), encoding: .utf8) ?? "[]"
         try run("""
             INSERT INTO views (view_id, url, site, title, author, tags, description, kind, browser,
-                               started_at, ended_at, active_seconds, watched_seconds, media_duration)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               started_at, ended_at, active_seconds, watched_seconds, media_duration,
+                               background_seconds)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(view_id) DO UPDATE SET
                 url = excluded.url, site = excluded.site, title = excluded.title,
                 author = COALESCE(excluded.author, author), tags = excluded.tags,
@@ -140,16 +151,18 @@ public final class ContentStore {
                 kind = excluded.kind, media_duration = COALESCE(excluded.media_duration, media_duration),
                 ended_at = MAX(ended_at, excluded.ended_at),
                 active_seconds = MAX(active_seconds, excluded.active_seconds),
-                watched_seconds = MAX(watched_seconds, excluded.watched_seconds)
+                watched_seconds = MAX(watched_seconds, excluded.watched_seconds),
+                background_seconds = MAX(background_seconds, excluded.background_seconds)
             """, [v.viewId, v.url, v.site, v.title, v.author, tags, v.description, v.kind, v.browser,
-                  v.startedAt, v.endedAt, v.activeSeconds, v.watchedSeconds, v.mediaDuration])
+                  v.startedAt, v.endedAt, v.activeSeconds, v.watchedSeconds, v.mediaDuration,
+                  v.backgroundSeconds])
     }
 
     /// 时间范围内开始的观看，新的在前
     public func views(from: Date, to: Date) throws -> [ContentView] {
         try query("""
             SELECT view_id, url, title, author, tags, description, kind, browser,
-                   started_at, ended_at, active_seconds, watched_seconds, media_duration
+                   started_at, ended_at, active_seconds, watched_seconds, media_duration, background_seconds
             FROM views WHERE started_at >= ? AND started_at < ? ORDER BY started_at DESC
             """, [from.timeIntervalSince1970, to.timeIntervalSince1970]) { s in
             let tagsJSON = Self.text(s, 4) ?? "[]"
@@ -160,6 +173,7 @@ public final class ContentStore {
                 description: Self.text(s, 5), kind: Self.text(s, 6)!, browser: Self.text(s, 7)!,
                 startedAt: sqlite3_column_double(s, 8), endedAt: sqlite3_column_double(s, 9),
                 activeSeconds: sqlite3_column_double(s, 10), watchedSeconds: sqlite3_column_double(s, 11),
+                backgroundSeconds: sqlite3_column_double(s, 13),
                 mediaDuration: sqlite3_column_type(s, 12) == SQLITE_NULL ? nil : sqlite3_column_double(s, 12))
         }
     }
