@@ -7,6 +7,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let monitor = ActivityMonitor()
     private let nudgeWindow = NudgeWindow()
     private let toast = Toast()
+    private var settings: SettingsWindow?
+    /// 最近一次在浏览器里看到的网页，用于“把当前网页加入列表”
+    private var lastBrowserURL: String?
     private var statusItem: NSStatusItem!
     private var timer: Timer?
 
@@ -65,6 +68,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let until = pausedUntil, now >= until { pausedUntil = nil }
         current = monitor.currentActivity()
         currentReason = current.flatMap { Classifier.junkReason(for: $0, config: config) }
+        if let url = current?.url, Classifier.siteRule(from: url) != nil, url != lastBrowserURL {
+            lastBrowserURL = url
+            settings?.model.browserURL = url
+        }
         let idle = monitor.idleSeconds() > config.idleSeconds
 
         // 强制关闭不受“暂停”影响，否则一暂停就绕过去了
@@ -139,6 +146,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         (config, configError) = Config.load()
         configModifiedAt = modificationDate(of: Config.fileURL)
         if timer != nil, config.checkIntervalSeconds != oldInterval { scheduleTimer() }
+        settings?.model.replace(with: config)
+    }
+
+    /// 设置页或菜单改了配置：保存并立即生效
+    private func applyConfig(_ new: Config) {
+        let oldInterval = config.checkIntervalSeconds
+        config = new
+        configError = nil
+        config.save()
+        configModifiedAt = modificationDate(of: Config.fileURL)
+        if config.checkIntervalSeconds != oldInterval { scheduleTimer() }
+        settings?.model.replace(with: config)
     }
 
     /// 用户保存配置文件后自动生效，无需重启
@@ -212,7 +231,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         _ = action("预览提醒效果", #selector(previewNudge))
 
         menu.addItem(.separator())
-        _ = action("编辑规则…", #selector(editConfig), key: ",")
+        if let url = lastBrowserURL, let rule = Classifier.siteRule(from: url) {
+            let add = NSMenuItem(title: "把 \(rule) 加入…", action: nil, keyEquivalent: "")
+            let sub = NSMenu()
+            for (title, inList, selector) in [
+                ("没营养网站（超时提醒）", config.junkSites.contains(rule), #selector(addToJunkSites(_:))),
+                ("强制关闭网站", config.forceCloseSites.contains(rule), #selector(addToForceSites(_:))),
+            ] {
+                let item = NSMenuItem(title: title, action: inList ? nil : selector, keyEquivalent: "")
+                item.target = self
+                item.representedObject = rule
+                item.state = inList ? .on : .off
+                sub.addItem(item)
+            }
+            add.submenu = sub
+            menu.addItem(add)
+        }
+        _ = action("设置…", #selector(openSettings), key: ",")
         let login = action("开机自动启动", #selector(toggleLaunchAtLogin))
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
 
@@ -221,9 +256,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func toggleForceClose() {
-        config.forceCloseEnabled.toggle()
-        config.save()
-        configModifiedAt = modificationDate(of: Config.fileURL)
+        var new = config
+        new.forceCloseEnabled.toggle()
+        applyConfig(new)
         toast.show(config.forceCloseEnabled
                    ? "🔒 强制关闭已开启：\(config.forceCloseSites.joined(separator: "、")) 连续看 \(Int(config.forceCloseMinutes)) 分钟会被自动关掉"
                    : "🔓 强制关闭已关闭")
@@ -246,10 +281,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         todayMinutes: Int(tracker.todaySeconds / 60) + 30, isNight: night, count: 1))
     }
 
-    @objc private func editConfig() {
-        if !FileManager.default.fileExists(atPath: Config.fileURL.path) { config.save() }
-        let textEdit = URL(fileURLWithPath: "/System/Applications/TextEdit.app")
-        NSWorkspace.shared.open([Config.fileURL], withApplicationAt: textEdit, configuration: NSWorkspace.OpenConfiguration())
+    @objc private func openSettings() {
+        if settings == nil {
+            let model = SettingsModel(config: config) { [weak self] in self?.applyConfig($0) }
+            model.browserURL = lastBrowserURL
+            settings = SettingsWindow(model: model)
+        }
+        settings?.show()
+    }
+
+    @objc private func addToJunkSites(_ sender: NSMenuItem) {
+        guard let rule = sender.representedObject as? String else { return }
+        var new = config
+        new.junkSites.append(rule)
+        applyConfig(new)
+        toast.show("✅ 已把 \(rule) 加入没营养网站")
+    }
+
+    @objc private func addToForceSites(_ sender: NSMenuItem) {
+        guard let rule = sender.representedObject as? String else { return }
+        var new = config
+        new.forceCloseSites.append(rule)
+        applyConfig(new)
+        toast.show(config.forceCloseEnabled ? "✅ 已把 \(rule) 加入强制关闭网站"
+                                            : "✅ 已把 \(rule) 加入强制关闭网站（强制关闭模式还没开）")
     }
 
     @objc private func openAutomationSettings() {

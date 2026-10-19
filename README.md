@@ -42,19 +42,15 @@ open build/FocusGuard.app
 
 ## 修改规则
 
-菜单 →“编辑规则…”，会打开 `~/Library/Application Support/FocusGuard/config.json`，保存后自动生效：
+**最快的方法：** 在浏览器里打开想管的网站，点菜单栏 🌱 →“把 xxx.com 加入…”，再选“没营养网站”或“强制关闭网站”。
 
-| 字段 | 含义 | 默认 |
-|---|---|---|
-| `daytimeLimitMinutes` / `nightLimitMinutes` | 白天 / 夜间连续多久提醒 | 20 / 5 |
-| `nightStartHour` / `nightEndHour` | 夜间时段 | 23 / 6 |
-| `snoozeMinutes` | “再刷一会儿”的时长 | 5 |
-| `junkApps` | 没营养的 App（名称包含或 Bundle ID） | 抖音、快手… |
-| `junkSites` | 没营养的网站，可带路径如 `youtube.com/shorts` | douyin.com… |
-| `forceCloseEnabled` | 强制关闭模式开关（菜单里也能切换） | false |
-| `forceCloseSites` | 强制关闭的网站，写法同 `junkSites` | 抖音、B 站… |
-| `forceCloseMinutes` | 连续看多久强制关闭 | 30 |
-| `forceCloseCooldownMinutes` | 关掉后多久内禁止再打开 | 15 |
+**设置页：** 菜单 →“设置…”（⌘,），有四个标签页：
+
+- **网站 / App**：没营养的网站和 App 列表。顶部会显示浏览器当前网页，点“添加这个网站”就能加进去；也可以直接粘贴网址（会自动只保留域名），或手动输入 `youtube.com/shorts` 这样带路径的规则。选中后按删除键或点“删除所选”可以移除
+- **强制关闭**：开关、时限、冷却时间，以及强制关闭的网站列表
+- **提醒**：白天/夜间提醒时长、夜间时段等
+
+改动立即生效。所有设置保存在 `~/Library/Application Support/FocusGuard/config.json`，也可以直接编辑这个文件。
 
 ## 开发
 
@@ -62,6 +58,7 @@ open build/FocusGuard.app
 swift test                                   # 规则与计时逻辑的单元测试
 FOCUSGUARD_DEBUG=1 build/FocusGuard.app/Contents/MacOS/FocusGuard   # 在终端打印每次检测结果
 FOCUSGUARD_RENDER_NUDGE=/tmp build/FocusGuard.app/Contents/MacOS/FocusGuard  # 把弹窗渲染成 PNG
+FOCUSGUARD_RENDER_SETTINGS=/tmp build/FocusGuard.app/Contents/MacOS/FocusGuard  # 把设置页渲染成 PNG
 FOCUSGUARD_CLOSE_JUNK=com.google.Chrome build/FocusGuard.app/Contents/MacOS/FocusGuard  # 关掉当前标签页（若在没营养的网站上）
 ```
 

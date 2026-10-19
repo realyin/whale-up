@@ -1,0 +1,267 @@
+import AppKit
+import SwiftUI
+import FocusGuardCore
+
+/// 设置页的数据。改动立刻交给 onChange 保存，不需要“保存”按钮。
+@MainActor
+final class SettingsModel: ObservableObject {
+    @Published var config: Config {
+        didSet { if config != oldValue && !replacing { onChange(config) } }
+    }
+    /// 最近一次在浏览器里看到的网址，用于“从浏览器添加”
+    @Published var browserURL: String?
+    private let onChange: (Config) -> Void
+    private var replacing = false
+
+    init(config: Config, onChange: @escaping (Config) -> Void) {
+        self.config = config
+        self.onChange = onChange
+    }
+
+    /// 配置文件在外部被修改时同步过来，不触发保存
+    func replace(with config: Config) {
+        replacing = true
+        self.config = config
+        replacing = false
+    }
+}
+
+enum SettingsTab: String, CaseIterable {
+    case sites = "网站", apps = "App", force = "强制关闭", reminders = "提醒"
+}
+
+@MainActor
+final class SettingsWindow {
+    let model: SettingsModel
+    private var window: NSWindow?
+
+    init(model: SettingsModel) {
+        self.model = model
+    }
+
+    func show(tab: SettingsTab = .sites) {
+        if window == nil {
+            let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(model: model, tab: tab)))
+            window.title = "专注守护 设置"
+            window.styleMask = [.titled, .closable, .miniaturizable]
+            window.isReleasedWhenClosed = false
+            window.center()
+            self.window = window
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+    }
+
+    /// 开发用：把某个标签页画成 PNG
+    static func renderPNG(model: SettingsModel, tab: SettingsTab, to url: URL) {
+        let view = NSHostingView(rootView: SettingsView(model: model, tab: tab))
+        // 列表是系统表格控件，要放进窗口并跑一下布局才画得出来
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: view.fittingSize),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = view
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+        view.layoutSubtreeIfNeeded()
+        guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        try? rep.representation(using: .png, properties: [:])?.write(to: url)
+    }
+}
+
+struct SettingsView: View {
+    @ObservedObject var model: SettingsModel
+    @State var tab: SettingsTab
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Picker("", selection: $tab) {
+                ForEach(SettingsTab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding([.horizontal, .top], 20)
+            .padding(.bottom, 12)
+
+            Group {
+                switch tab {
+                case .sites:
+                    RuleListEditor(
+                        note: "在这些网站上连续刷太久，会弹窗劝你休息。",
+                        placeholder: "输入网址或域名，如 zhihu.com、youtube.com/shorts",
+                        rules: $model.config.junkSites, browserURL: model.browserURL, isSite: true)
+                case .apps:
+                    RuleListEditor(
+                        note: "名字里包含这些文字的 App（或 Bundle ID 完全相同），算作没营养的内容。",
+                        placeholder: "输入 App 名称，如 抖音",
+                        rules: $model.config.junkApps, browserURL: nil, isSite: false)
+                case .force:
+                    ForceSettings(config: $model.config, browserURL: model.browserURL)
+                case .reminders:
+                    ReminderSettings(config: $model.config)
+                }
+            }
+            .padding(.horizontal, 20)
+
+            HStack {
+                Text("改动会立即生效").font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button("打开配置文件") {
+                    NSWorkspace.shared.open([Config.fileURL],
+                                            withApplicationAt: URL(fileURLWithPath: "/System/Applications/TextEdit.app"),
+                                            configuration: NSWorkspace.OpenConfiguration())
+                }
+                .buttonStyle(.link)
+                .font(.caption)
+            }
+            .padding(20)
+        }
+        .frame(width: 520, height: 520)
+    }
+}
+
+/// 可增删的规则列表。网站列表支持从浏览器当前网页填入。
+struct RuleListEditor: View {
+    let note: String
+    let placeholder: String
+    @Binding var rules: [String]
+    let browserURL: String?
+    let isSite: Bool
+
+    @State private var input = ""
+    @State private var selection: Set<String> = []
+    @State private var message: String?
+
+    private var browserRule: String? { browserURL.flatMap(Classifier.siteRule(from:)) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(note).font(.callout).foregroundStyle(.secondary)
+
+            if isSite, let rule = browserRule {
+                HStack {
+                    Image(systemName: "safari")
+                    Text("浏览器当前网页：**\(rule)**").lineLimit(1)
+                    Spacer()
+                    Button(rules.contains(rule) ? "已在列表中" : "添加这个网站") { add(rule) }
+                        .disabled(rules.contains(rule))
+                }
+                .padding(10)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.1)))
+            }
+
+            List(selection: $selection) {
+                ForEach(rules, id: \.self) { Text($0) }
+            }
+            .listStyle(.bordered(alternatesRowBackgrounds: true))
+            .onDeleteCommand(perform: removeSelected)
+
+            HStack {
+                TextField(placeholder, text: $input).onSubmit { add(input) }
+                Button("添加") { add(input) }
+                    .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button("删除所选", action: removeSelected)
+                    .disabled(selection.isEmpty)
+            }
+            if let message {
+                Text(message).font(.caption).foregroundStyle(.orange)
+            }
+        }
+    }
+
+    private func add(_ raw: String) {
+        let rule: String?
+        if isSite {
+            rule = Classifier.siteRule(from: raw)
+        } else {
+            let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            rule = name.isEmpty ? nil : name
+        }
+        guard let rule else {
+            message = "“\(raw)”看起来不是网址或域名"
+            return
+        }
+        if rules.contains(rule) {
+            message = "\(rule) 已经在列表中了"
+        } else {
+            rules.append(rule)
+            message = nil
+        }
+        input = ""
+    }
+
+    private func removeSelected() {
+        rules.removeAll { selection.contains($0) }
+        selection = []
+    }
+}
+
+struct ForceSettings: View {
+    @Binding var config: Config
+    let browserURL: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle(isOn: $config.forceCloseEnabled) {
+                Text("开启强制关闭").font(.headline)
+            }
+            .toggleStyle(.switch)
+            HStack(spacing: 24) {
+                MinutesStepper(title: "连续看", value: $config.forceCloseMinutes, range: 1...240, suffix: "分钟后关闭")
+                MinutesStepper(title: "之后", value: $config.forceCloseCooldownMinutes, range: 1...240, suffix: "分钟内禁止打开")
+            }
+            .disabled(!config.forceCloseEnabled)
+            Divider()
+            RuleListEditor(
+                note: "只对下面这些网站强制关闭（只关当前网页，不关浏览器）。",
+                placeholder: "输入网址或域名，如 douyin.com",
+                rules: $config.forceCloseSites, browserURL: browserURL, isSite: true)
+        }
+    }
+}
+
+struct ReminderSettings: View {
+    @Binding var config: Config
+
+    var body: some View {
+        Form {
+            Section("连续刷多久弹窗提醒") {
+                MinutesStepper(title: "白天", value: $config.daytimeLimitMinutes, range: 1...240, suffix: "分钟")
+                MinutesStepper(title: "夜间", value: $config.nightLimitMinutes, range: 1...240, suffix: "分钟")
+                HStack {
+                    Text("夜间时段")
+                    Picker("", selection: $config.nightStartHour) {
+                        ForEach(0..<24, id: \.self) { Text("\($0):00").tag($0) }
+                    }
+                    .labelsHidden().frame(width: 90)
+                    Text("到")
+                    Picker("", selection: $config.nightEndHour) {
+                        ForEach(0..<24, id: \.self) { Text("\($0):00").tag($0) }
+                    }
+                    .labelsHidden().frame(width: 90)
+                }
+            }
+            Section("其他") {
+                MinutesStepper(title: "点“再刷一会儿”后", value: $config.snoozeMinutes, range: 1...60, suffix: "分钟再提醒")
+                MinutesStepper(title: "离开超过", value: $config.sessionBreakMinutes, range: 1...60, suffix: "分钟，连续时长清零")
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+struct MinutesStepper: View {
+    let title: String
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let suffix: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title)
+            TextField("", value: $value, format: .number)
+                .frame(width: 48)
+                .multilineTextAlignment(.trailing)
+            Stepper("", value: $value, in: range, step: 1).labelsHidden()
+            Text(suffix)
+        }
+    }
+}

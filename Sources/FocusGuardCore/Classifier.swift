@@ -37,6 +37,25 @@ public enum Classifier {
         return rules.first { siteMatches($0, host: host, path: url.path) }
     }
 
+    /// 把浏览器网址或用户输入转成一条网站规则：
+    /// "https://www.bilibili.com/video/BV1" → "bilibili.com"；"youtube.com/shorts" 原样保留。
+    /// 网址只取域名（去掉 www./m.）；手动输入的可以带路径。不是网页时返回 nil。
+    public static func siteRule(from input: String) -> String? {
+        var text = input.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let isURL = text.contains("://")
+        if isURL {
+            guard text.hasPrefix("http://") || text.hasPrefix("https://"),
+                  let host = URL(string: text)?.host else { return nil }
+            text = host
+        }
+        for prefix in ["www.", "m."] where text.hasPrefix(prefix) {
+            text.removeFirst(prefix.count)
+        }
+        while text.hasSuffix("/") { text.removeLast() }
+        guard let host = text.split(separator: "/").first, host.contains("."), !host.contains(":") else { return nil }
+        return text
+    }
+
     /// "youtube.com/shorts" 匹配 www.youtube.com 下 /shorts 开头的路径；
     /// "x.com" 匹配 x.com 和 *.x.com，但不匹配 box.com。
     static func siteMatches(_ rule: String, host: String, path: String) -> Bool {

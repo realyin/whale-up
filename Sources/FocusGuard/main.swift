@@ -10,6 +10,15 @@ MainActor.assumeIsolated {
         }
         exit(0)
     }
+    if let dir = ProcessInfo.processInfo.environment["FOCUSGUARD_RENDER_SETTINGS"] {
+        let model = SettingsModel(config: Config.load().0) { _ in }
+        model.browserURL = "https://www.zhihu.com/question/123"
+        for tab in SettingsTab.allCases {
+            SettingsWindow.renderPNG(model: model, tab: tab,
+                                     to: URL(fileURLWithPath: dir).appendingPathComponent("settings-\(tab).png"))
+        }
+        exit(0)
+    }
     if let id = ProcessInfo.processInfo.environment["FOCUSGUARD_CLOSE_JUNK"] {
         print("closed:", ActivityMonitor().closeJunk(bundleID: id, nudgedURL: nil, rules: Config.load().0.junkSites))
         exit(0)

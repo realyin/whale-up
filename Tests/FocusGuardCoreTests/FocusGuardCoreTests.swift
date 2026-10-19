@@ -130,3 +130,23 @@ final class MessagesTests: XCTestCase {
         XCTAssertTrue(Messages.make(for: n).body.contains("睡"))
     }
 }
+
+final class SiteRuleTests: XCTestCase {
+    func testRuleFromBrowserURLDropsWwwAndPath() {
+        XCTAssertEqual(Classifier.siteRule(from: "https://www.bilibili.com/video/BV1?x=1"), "bilibili.com")
+        XCTAssertEqual(Classifier.siteRule(from: "https://m.douyin.com/share/1"), "douyin.com")
+        XCTAssertEqual(Classifier.siteRule(from: "https://live.bilibili.com/123"), "live.bilibili.com")
+    }
+
+    func testTypedInputIsNormalized() {
+        XCTAssertEqual(Classifier.siteRule(from: "  WWW.Zhihu.com/ "), "zhihu.com")
+        XCTAssertEqual(Classifier.siteRule(from: "youtube.com/shorts"), "youtube.com/shorts")
+        XCTAssertEqual(Classifier.siteRule(from: "http://weibo.com"), "weibo.com")
+    }
+
+    func testNonWebInputGivesNil() {
+        XCTAssertNil(Classifier.siteRule(from: "about:blank"))
+        XCTAssertNil(Classifier.siteRule(from: "   "))
+        XCTAssertNil(Classifier.siteRule(from: "chrome://newtab/"))
+    }
+}
