@@ -63,10 +63,10 @@ final class ActivityMonitor {
         "company.thebrowser.Browser": "Arc",
     ]
 
-    /// 关掉正在看的“没营养”页面：浏览器里只关当前这一个标签页，其他 App 直接退出。
+    /// 关掉正在看的页面（命中 rules 时）：浏览器里只关当前这一个标签页，其他 App 直接退出。
     /// nudgedURL 是弹窗出现时的网址；短视频网站划走后网址会变，所以优先看当前标签页。
     @discardableResult
-    func closeJunk(bundleID: String, nudgedURL: String?, config: Config) -> Bool {
+    func closeJunk(bundleID: String, nudgedURL: String?, rules: [String]) -> Bool {
         guard let browser = Self.browserNames[bundleID] else {
             NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).forEach { $0.terminate() }
             return true
@@ -80,7 +80,7 @@ final class ActivityMonitor {
                 return URL of \(current) of front window
             end tell
             """)
-        if let url = active, Classifier.junkSite(for: url, config: config) != nil {
+        if let url = active, Classifier.matchSite(url, rules: rules) != nil {
             return run("""
                 tell application "\(browser)"
                     set w to front window

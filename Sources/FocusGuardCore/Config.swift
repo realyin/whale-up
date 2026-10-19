@@ -26,6 +26,15 @@ public struct Config: Codable, Equatable {
         "tiktok.com", "youtube.com/shorts", "x.com", "twitter.com", "reddit.com", "9gag.com",
     ]
 
+    /// 强制关闭模式：在这些网站上连续看满 forceCloseMinutes 分钟，直接关掉当前网页；
+    /// 之后 forceCloseCooldownMinutes 分钟内再打开这些网站，会被立刻关掉
+    public var forceCloseEnabled = false
+    public var forceCloseMinutes: Double = 30
+    public var forceCloseCooldownMinutes: Double = 15
+    public var forceCloseSites: [String] = [
+        "douyin.com", "kuaishou.com", "bilibili.com", "tiktok.com", "youtube.com/shorts",
+    ]
+
     public init() {}
 
     public init(from decoder: Decoder) throws {
@@ -41,6 +50,10 @@ public struct Config: Codable, Equatable {
         checkIntervalSeconds = try c.decodeIfPresent(Double.self, forKey: .checkIntervalSeconds) ?? d.checkIntervalSeconds
         junkApps = try c.decodeIfPresent([String].self, forKey: .junkApps) ?? d.junkApps
         junkSites = try c.decodeIfPresent([String].self, forKey: .junkSites) ?? d.junkSites
+        forceCloseEnabled = try c.decodeIfPresent(Bool.self, forKey: .forceCloseEnabled) ?? d.forceCloseEnabled
+        forceCloseMinutes = try c.decodeIfPresent(Double.self, forKey: .forceCloseMinutes) ?? d.forceCloseMinutes
+        forceCloseCooldownMinutes = try c.decodeIfPresent(Double.self, forKey: .forceCloseCooldownMinutes) ?? d.forceCloseCooldownMinutes
+        forceCloseSites = try c.decodeIfPresent([String].self, forKey: .forceCloseSites) ?? d.forceCloseSites
     }
 
     public func isNight(_ date: Date, calendar: Calendar = .current) -> Bool {

@@ -11,7 +11,7 @@ MainActor.assumeIsolated {
         exit(0)
     }
     if let id = ProcessInfo.processInfo.environment["FOCUSGUARD_CLOSE_JUNK"] {
-        print("closed:", ActivityMonitor().closeJunk(bundleID: id, nudgedURL: nil, config: Config.load().0))
+        print("closed:", ActivityMonitor().closeJunk(bundleID: id, nudgedURL: nil, rules: Config.load().0.junkSites))
         exit(0)
     }
     let app = NSApplication.shared

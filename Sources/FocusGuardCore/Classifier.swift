@@ -28,8 +28,13 @@ public enum Classifier {
 
     /// 网址命中的“没营养”网站规则；不命中返回 nil。
     public static func junkSite(for urlString: String, config: Config) -> String? {
+        matchSite(urlString, rules: config.junkSites)
+    }
+
+    /// 网址命中的网站规则（规则写法同 junkSites）；不命中返回 nil。
+    public static func matchSite(_ urlString: String, rules: [String]) -> String? {
         guard let url = URL(string: urlString), let host = url.host?.lowercased() else { return nil }
-        return config.junkSites.first { siteMatches($0, host: host, path: url.path) }
+        return rules.first { siteMatches($0, host: host, path: url.path) }
     }
 
     /// "youtube.com/shorts" 匹配 www.youtube.com 下 /shorts 开头的路径；

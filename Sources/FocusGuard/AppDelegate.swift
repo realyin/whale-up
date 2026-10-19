@@ -6,6 +6,7 @@ import FocusGuardCore
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let monitor = ActivityMonitor()
     private let nudgeWindow = NudgeWindow()
+    private let toast = Toast()
     private var statusItem: NSStatusItem!
     private var timer: Timer?
 
@@ -14,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var configModifiedAt: Date?
 
     private var tracker = Tracker()
+    private var forceCloser = ForceCloser()
     private var lastTick = Date()
     private var current: Activity?
     private var currentReason: String?
@@ -29,6 +31,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let data = UserDefaults.standard.data(forKey: "tracker"),
            let saved = try? JSONDecoder().decode(Tracker.self, from: data) {
             tracker = saved
+        }
+        if let data = UserDefaults.standard.data(forKey: "forceCloser"),
+           let saved = try? JSONDecoder().decode(ForceCloser.self, from: data) {
+            forceCloser = saved
         }
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -56,30 +62,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let elapsed = min(now.timeIntervalSince(lastTick), config.checkIntervalSeconds * 2)
         lastTick = now
 
-        if let until = pausedUntil, now < until {
-            current = nil
-            currentReason = nil
-        } else {
-            pausedUntil = nil
-            current = monitor.currentActivity()
-            currentReason = current.flatMap { Classifier.junkReason(for: $0, config: config) }
-            let idle = monitor.idleSeconds() > config.idleSeconds
+        if let until = pausedUntil, now >= until { pausedUntil = nil }
+        current = monitor.currentActivity()
+        currentReason = current.flatMap { Classifier.junkReason(for: $0, config: config) }
+        let idle = monitor.idleSeconds() > config.idleSeconds
 
+        // 强制关闭不受“暂停”影响，否则一暂停就绕过去了
+        enforce(idle: idle, now: now, elapsed: elapsed)
+
+        if pausedUntil == nil {
             let nudge = tracker.record(isJunk: currentReason != nil, isIdle: idle, now: now, elapsed: elapsed,
                                        config: config, reason: currentReason ?? "",
                                        appName: current?.appName ?? "")
-            saveTracker()
-            if debug {
-                print("[\(now)] \(current?.appName ?? "-") \(current?.url ?? "") junk=\(currentReason ?? "no") idle=\(idle) session=\(Int(tracker.sessionSeconds))s today=\(Int(tracker.todaySeconds))s")
-                fflush(stdout)
-            }
             if let nudge, !nudgeWindow.isVisible {
                 nudgedBundleID = current?.bundleID
                 nudgedURL = current?.url
                 showNudge(nudge)
             }
         }
+        saveTracker()
+        if debug {
+            print("[\(now)] \(current?.appName ?? "-") \(current?.url ?? "") junk=\(currentReason ?? "no") idle=\(idle) session=\(Int(tracker.sessionSeconds))s today=\(Int(tracker.todaySeconds))s force=\(Int(forceCloser.sessionSeconds))s")
+            fflush(stdout)
+        }
         updateStatusTitle()
+    }
+
+    /// 强制关闭模式：在指定网站上停留太久就直接关掉当前网页
+    private func enforce(idle: Bool, now: Date, elapsed: Double) {
+        let rule = current?.url.flatMap { Classifier.matchSite($0, rules: config.forceCloseSites) }
+        switch forceCloser.record(onSite: rule != nil, isIdle: idle, now: now, elapsed: elapsed, config: config) {
+        case .warn:
+            toast.show("⏳ 还有 1 分钟，\(rule ?? "") 将被自动关闭")
+        case .close:
+            if let id = current?.bundleID {
+                monitor.closeJunk(bundleID: id, nudgedURL: current?.url, rules: config.forceCloseSites)
+            }
+            nudgeWindow.close()
+            tracker.acceptRest()
+            let until = forceCloser.blockedUntil?.formatted(date: .omitted, time: .shortened) ?? ""
+            toast.show("🚫 已自动关闭 \(rule ?? "")\n\(until) 之前再打开会被直接关掉")
+        case nil:
+            break
+        }
     }
 
     private func showNudge(_ nudge: Nudge) {
@@ -93,7 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         tracker.acceptRest()
         saveTracker()
         if let id = nudgedBundleID {
-            monitor.closeJunk(bundleID: id, nudgedURL: nudgedURL, config: config)
+            monitor.closeJunk(bundleID: id, nudgedURL: nudgedURL, rules: config.junkSites)
         }
         updateStatusTitle()
     }
@@ -101,6 +126,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func saveTracker() {
         if let data = try? JSONEncoder().encode(tracker) {
             UserDefaults.standard.set(data, forKey: "tracker")
+        }
+        if let data = try? JSONEncoder().encode(forceCloser) {
+            UserDefaults.standard.set(data, forKey: "forceCloser")
         }
     }
 
@@ -165,6 +193,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let configError { info("⚠️ \(configError)") }
 
         menu.addItem(.separator())
+        let force = action("强制关闭模式（连续 \(Int(config.forceCloseMinutes)) 分钟自动关网页）", #selector(toggleForceClose))
+        force.state = config.forceCloseEnabled ? .on : .off
+        if config.forceCloseEnabled {
+            if let until = forceCloser.blockedUntil, until > Date() {
+                info("    冷却中：\(until.formatted(date: .omitted, time: .shortened)) 前打开会被直接关掉")
+            } else if current?.url.flatMap({ Classifier.matchSite($0, rules: config.forceCloseSites) }) != nil {
+                info("    当前网页还能看 \(Int(forceCloser.remainingSeconds(config: config) / 60)) 分钟")
+            }
+        }
+
+        menu.addItem(.separator())
         if pausedUntil != nil {
             _ = action("恢复监测", #selector(resume))
         } else {
@@ -179,6 +218,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
         _ = action("退出", #selector(quit), key: "q")
+    }
+
+    @objc private func toggleForceClose() {
+        config.forceCloseEnabled.toggle()
+        config.save()
+        configModifiedAt = modificationDate(of: Config.fileURL)
+        toast.show(config.forceCloseEnabled
+                   ? "🔒 强制关闭已开启：\(config.forceCloseSites.joined(separator: "、")) 连续看 \(Int(config.forceCloseMinutes)) 分钟会被自动关掉"
+                   : "🔓 强制关闭已关闭")
     }
 
     @objc private func pauseOneHour() {

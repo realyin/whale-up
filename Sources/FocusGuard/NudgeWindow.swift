@@ -85,3 +85,57 @@ private struct NudgeView: View {
         .frame(width: 420)
     }
 }
+
+/// 右上角的小提示，几秒后自动消失，不打断操作
+@MainActor
+final class Toast {
+    private var panel: NSPanel?
+    private var hideWork: DispatchWorkItem?
+
+    func show(_ message: String, seconds: Double = 5) {
+        panel?.close()
+        let label = NSTextField(wrappingLabelWithString: message)
+        label.font = .systemFont(ofSize: 14, weight: .medium)
+        label.preferredMaxLayoutWidth = 320
+
+        let box = NSVisualEffectView()
+        box.material = .hudWindow
+        box.state = .active
+        box.wantsLayer = true
+        box.layer?.cornerRadius = 12
+        box.addSubview(label)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 16),
+            label.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -16),
+            label.topAnchor.constraint(equalTo: box.topAnchor, constant: 12),
+            label.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -12),
+        ])
+
+        let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
+                            backing: .buffered, defer: false)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.level = .statusBar
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.isReleasedWhenClosed = false
+        panel.contentView = box
+        panel.setContentSize(box.fittingSize)
+        if let screen = NSScreen.main?.visibleFrame {
+            panel.setFrameTopLeftPoint(NSPoint(x: screen.maxX - box.fittingSize.width - 16, y: screen.maxY - 16))
+        }
+        panel.orderFrontRegardless()
+        self.panel = panel
+
+        hideWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                self?.panel?.close()
+                self?.panel = nil
+            }
+        }
+        hideWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
+    }
+}

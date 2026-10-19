@@ -16,6 +16,15 @@
 
 键鼠 5 分钟没动算人不在，不计时；离开这些内容超过 5 分钟，连续时长清零。
 
+## 强制关闭模式
+
+在菜单里勾选“强制关闭模式”后（默认关闭）：
+
+- 在 `forceCloseSites` 里的网站（默认抖音、快手、B 站、TikTok、YouTube Shorts）上**连续**看满 **30 分钟**，当前网页会被**直接关掉**，不再询问
+- 关之前 1 分钟，右上角会提示一次
+- 关掉后 **15 分钟**内再打开这些网站，会被立刻关掉
+- “暂停 1 小时”不会停掉强制关闭，想停只能在菜单里取消勾选
+
 所有判断都在本机完成，不联网、不上传任何数据。
 
 ## 编译运行
@@ -42,6 +51,10 @@ open build/FocusGuard.app
 | `snoozeMinutes` | “再刷一会儿”的时长 | 5 |
 | `junkApps` | 没营养的 App（名称包含或 Bundle ID） | 抖音、快手… |
 | `junkSites` | 没营养的网站，可带路径如 `youtube.com/shorts` | douyin.com… |
+| `forceCloseEnabled` | 强制关闭模式开关（菜单里也能切换） | false |
+| `forceCloseSites` | 强制关闭的网站，写法同 `junkSites` | 抖音、B 站… |
+| `forceCloseMinutes` | 连续看多久强制关闭 | 30 |
+| `forceCloseCooldownMinutes` | 关掉后多久内禁止再打开 | 15 |
 
 ## 开发
 
