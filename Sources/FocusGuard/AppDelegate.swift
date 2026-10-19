@@ -62,11 +62,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.menu = menu
 
         ExtensionFiles.install()
+        enableLaunchAtLoginOnFirstInstall()
         startServer()
         try? contentStore?.prune(before: Date().addingTimeInterval(-90 * 86400))
 
         scheduleTimer()
         tick()
+    }
+
+    /// 第一次从“应用程序”文件夹启动时自动设为开机启动；之后以用户在菜单里的选择为准
+    private func enableLaunchAtLoginOnFirstInstall() {
+        let key = "didAutoEnableLaunchAtLogin"
+        guard Bundle.main.bundlePath.hasPrefix("/Applications/"),
+              !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        try? SMAppService.mainApp.register()
     }
 
     /// 接收浏览器扩展上报的观看记录，按“内容记录范围”过滤后存库
