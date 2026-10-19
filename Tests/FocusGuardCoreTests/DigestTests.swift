@@ -28,8 +28,11 @@ final class DigestTests: XCTestCase {
 
     func testDigestPromptSummarizesTheDay() {
         let reasons = [NudgeReason(at: Date(timeIntervalSince1970: at(23, 30)), reason: .tired, site: "douyin.com", sessionMinutes: 20)]
+        let nudges = [NudgeRecord(at: Date(timeIntervalSince1970: at(23, 30)), site: "douyin.com", sessionMinutes: 20,
+                                  isNight: true, byAI: true, title: "t", body: "该睡了", outcome: .snoozed)]
         let p = DigestPrompt.make(day: Date(timeIntervalSince1970: at(12)), views: views, reasons: reasons,
-                                  config: config, calendar: cal)
+                                  nudges: nudges, config: config, calendar: cal)
+        XCTAssertTrue(p.user.contains("今天的劝导：提醒 1 次"), p.user)
         XCTAssertTrue(p.user.contains("2026-10-20"))
         XCTAssertTrue(p.user.contains("没营养内容共 35 分钟"), p.user)  // 30 + 5（未判断的按网站规则算没营养）
         XCTAssertTrue(p.user.contains("23 点"))

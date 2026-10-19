@@ -132,6 +132,11 @@ public final class ContentStore {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 at REAL NOT NULL, reason TEXT NOT NULL, site TEXT NOT NULL, session_minutes INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS nudges (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, at REAL NOT NULL, site TEXT NOT NULL,
+                session_minutes INTEGER NOT NULL, is_night INTEGER NOT NULL, by_ai INTEGER NOT NULL,
+                title TEXT NOT NULL, body TEXT NOT NULL, outcome TEXT
+            );
             CREATE TABLE IF NOT EXISTS digests (
                 day TEXT PRIMARY KEY, text TEXT NOT NULL, model TEXT NOT NULL, created_at REAL NOT NULL
             );
@@ -267,9 +272,28 @@ public final class ContentStore {
     public func prune(before date: Date) throws {
         try run("DELETE FROM views WHERE started_at < ?", [date.timeIntervalSince1970])
         try run("DELETE FROM reasons WHERE at < ?", [date.timeIntervalSince1970])
+        try run("DELETE FROM nudges WHERE at < ?", [date.timeIntervalSince1970])
     }
 
     // MARK: - SQLite 小工具
+
+    /// 供扩展里的其他表使用
+    func insert(_ sql: String, _ params: [Any?]) throws -> Int64 {
+        try run(sql, params)
+        return sqlite3_last_insert_rowid(db)
+    }
+
+    func execute(_ sql: String, _ params: [Any?]) throws {
+        try run(sql, params)
+    }
+
+    func select<T>(_ sql: String, _ params: [Any?], row: (OpaquePointer?) -> T) throws -> [T] {
+        try query(sql, params, row: row)
+    }
+
+    static func columnText(_ stmt: OpaquePointer?, _ col: Int32) -> String? {
+        text(stmt, col)
+    }
 
     private var lastError: String { String(cString: sqlite3_errmsg(db)) }
 
@@ -317,5 +341,85 @@ extension ContentView {
         var copy = self
         copy.label = label
         return copy
+    }
+}
+
+/// 一次劝导弹窗以及用户的反应
+public struct NudgeRecord: Equatable {
+    public enum Outcome: String {
+        /// 点了“关掉它”
+        case accepted
+        /// 点了“再刷一会儿”
+        case snoozed
+    }
+
+    public var id: Int64 = 0
+    public var at: Date
+    public var site: String
+    public var sessionMinutes: Int
+    public var isNight: Bool
+    public var byAI: Bool
+    public var title: String
+    public var body: String
+    public var outcome: Outcome?
+
+    public init(at: Date, site: String, sessionMinutes: Int, isNight: Bool, byAI: Bool, title: String, body: String,
+                outcome: Outcome? = nil) {
+        self.at = at
+        self.site = site
+        self.sessionMinutes = sessionMinutes
+        self.isNight = isNight
+        self.byAI = byAI
+        self.title = title
+        self.body = body
+        self.outcome = outcome
+    }
+
+    /// 给大模型看的劝导效果总结：接受率 + 有效 / 无效的说法各举几例
+    public static func summary(_ records: [NudgeRecord]) -> String? {
+        guard !records.isEmpty else { return nil }
+        let accepted = records.filter { $0.outcome == .accepted }
+        let snoozed = records.filter { $0.outcome == .snoozed }
+        var text = "提醒 \(records.count) 次，接受 \(accepted.count) 次，再刷 \(snoozed.count) 次"
+        let ignored = records.count - accepted.count - snoozed.count
+        if ignored > 0 { text += "，没理会 \(ignored) 次" }
+        text += "。"
+        if !accepted.isEmpty {
+            text += "让他停下来的说法：" + accepted.suffix(3).map { "「\($0.body)」" }.joined(separator: "、") + "。"
+        }
+        if !snoozed.isEmpty {
+            text += "没用的说法：" + snoozed.suffix(3).map { "「\($0.body)」" }.joined(separator: "、") + "。"
+        }
+        return text
+    }
+}
+
+extension ContentStore {
+    @discardableResult
+    public func addNudge(_ r: NudgeRecord) throws -> Int64 {
+        try insert("""
+            INSERT INTO nudges (at, site, session_minutes, is_night, by_ai, title, body, outcome)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, [r.at.timeIntervalSince1970, r.site, r.sessionMinutes, r.isNight ? 1 : 0, r.byAI ? 1 : 0,
+                  r.title, r.body, r.outcome?.rawValue])
+    }
+
+    public func setNudgeOutcome(id: Int64, outcome: NudgeRecord.Outcome) throws {
+        try execute("UPDATE nudges SET outcome = ? WHERE id = ?", [outcome.rawValue, Int(id)])
+    }
+
+    public func nudges(from: Date, to: Date) throws -> [NudgeRecord] {
+        try select("""
+            SELECT id, at, site, session_minutes, is_night, by_ai, title, body, outcome
+            FROM nudges WHERE at >= ? AND at < ? ORDER BY at
+            """, [from.timeIntervalSince1970, to.timeIntervalSince1970]) { s in
+            var r = NudgeRecord(at: Date(timeIntervalSince1970: sqlite3_column_double(s, 1)),
+                                site: Self.columnText(s, 2) ?? "", sessionMinutes: Int(sqlite3_column_int(s, 3)),
+                                isNight: sqlite3_column_int(s, 4) != 0, byAI: sqlite3_column_int(s, 5) != 0,
+                                title: Self.columnText(s, 6) ?? "", body: Self.columnText(s, 7) ?? "",
+                                outcome: Self.columnText(s, 8).flatMap(NudgeRecord.Outcome.init(rawValue:)))
+            r.id = sqlite3_column_int64(s, 0)
+            return r
+        }
     }
 }

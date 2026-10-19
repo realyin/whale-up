@@ -32,8 +32,8 @@ extension ContentView {
 
 /// 写每日小结的提示词。数据都在本机整理好，只把整理后的文字发给大模型。
 public enum DigestPrompt {
-    public static func make(day: Date, views: [ContentView], reasons: [NudgeReason], config: Config,
-                            calendar: Calendar = .current) -> (system: String, user: String) {
+    public static func make(day: Date, views: [ContentView], reasons: [NudgeReason], nudges: [NudgeRecord] = [],
+                            config: Config, calendar: Calendar = .current) -> (system: String, user: String) {
         let system = """
             你是用户的个人注意力教练。下面是用户某一天在电脑上看视频、刷网页的记录（由浏览器扩展和一个小助手自动记录）。
             请用中文写一份简短的每日小结，语气像一个关心他、但说话直接的朋友：不说教，不空泛，用记录里的具体内容说话。
@@ -73,6 +73,7 @@ public enum DigestPrompt {
             }
             lines.append("被提醒时用户自己说的原因：" + text.joined(separator: "；"))
         }
+        if let summary = NudgeRecord.summary(nudges) { lines.append("今天的劝导：" + summary) }
         lines.append("\n看过的内容（按时间先后，🍟 没营养，🥦 有营养）：")
         for v in byTime.suffix(120) {
             var parts = ["\(time(v.startedAt, calendar)) \(v.isJunk(config: config) ? "🍟" : "🥦") \(v.site)", v.title]

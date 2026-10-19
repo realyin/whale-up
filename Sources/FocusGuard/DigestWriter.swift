@@ -33,7 +33,8 @@ final class DigestWriter {
         let end = Calendar.current.date(byAdding: .day, value: 1, to: start)!
         let views = try store.views(from: start, to: end)
         let reasons = try store.reasons(from: start, to: end)
-        let prompt = DigestPrompt.make(day: day, views: views, reasons: reasons, config: config)
+        let nudges = try store.nudges(from: start, to: end)
+        let prompt = DigestPrompt.make(day: day, views: views, reasons: reasons, nudges: nudges, config: config)
 
         let llm = config.llm
         let spec = ChatSpec(system: prompt.system, user: prompt.user, model: llm.reportModel,

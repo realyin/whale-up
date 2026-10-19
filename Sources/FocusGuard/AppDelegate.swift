@@ -215,7 +215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// 弹出劝导：开启 AI 时先请大模型写文案（最多等 4 秒），否则或失败时用固定文案
     private func showNudge(_ nudge: Nudge) {
         guard config.llm.enabled, config.llm.smartNudges, let store = contentStore else {
-            return presentNudge(nudge, text: Messages.make(for: nudge))
+            return presentNudge(nudge, text: Messages.make(for: nudge), byAI: false)
         }
         nudgePending = true
         let llm = config.llm
@@ -226,26 +226,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                       outcomes: nudgeOutcomeSummary, hourMinute: now.formatted(date: .omitted, time: .shortened))
         Task {
             var text = Messages.make(for: nudge)
+            var byAI = false
             do {
                 let request = try LLMRequest.chat(NudgePrompt.spec(prompt, llm: llm), llm: llm,
                                                   apiKey: APIKeyStore.get(llm.provider), timeout: 4)
                 let (data, _) = try await URLSession.shared.data(for: request)
                 text = try NudgePrompt.parse(data, provider: llm.provider)
+                byAI = true
             } catch {
                 // 超时、断网、格式不对：用固定文案
             }
             nudgePending = false
-            presentNudge(nudge, text: text)
+            presentNudge(nudge, text: text, byAI: byAI)
         }
     }
 
-    /// 以前劝导的效果，第 7 项填充
-    private var nudgeOutcomeSummary: String? { nil }
+    /// 最近两周劝导的效果，写进劝导提示词，让大模型知道哪种说法对你有效
+    private var nudgeOutcomeSummary: String? {
+        let now = Date()
+        return NudgeRecord.summary((try? contentStore?.nudges(from: now.addingTimeInterval(-14 * 86400), to: now)) ?? [])
+    }
 
-    private func presentNudge(_ nudge: Nudge, text: NudgeText) {
+    private func presentNudge(_ nudge: Nudge, text: NudgeText, byAI: Bool) {
+        let id = try? contentStore?.addNudge(NudgeRecord(at: Date(), site: nudge.reason, sessionMinutes: nudge.sessionMinutes,
+                                                         isNight: nudge.isNight, byAI: byAI, title: text.title, body: text.body))
+        let record: (NudgeRecord.Outcome) -> Void = { [weak self] outcome in
+            if let id { try? self?.contentStore?.setNudgeOutcome(id: id, outcome: outcome) }
+        }
         nudgeWindow.show(text, isNight: nudge.isNight, snoozeMinutes: Int(config.snoozeMinutes),
-                         onRest: { [weak self] in self?.acceptRest() },
-                         onSnooze: {},
+                         onRest: { [weak self] in record(.accepted); self?.acceptRest() },
+                         onSnooze: { record(.snoozed) },
                          onReason: { [weak self] kind in
                              try? self?.contentStore?.addReason(
                                  NudgeReason(at: Date(), reason: kind, site: nudge.reason, sessionMinutes: nudge.sessionMinutes))

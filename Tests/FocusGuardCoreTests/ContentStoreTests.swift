@@ -149,6 +149,30 @@ final class ContentStoreTests: XCTestCase {
         XCTAssertTrue(try store.unlabeledViews(limit: 10).isEmpty)
     }
 
+    func testNudgeOutcomesAreRecordedAndSummarized() throws {
+        let t = Date(timeIntervalSince1970: 100_000)
+        let a = try store.addNudge(NudgeRecord(at: t, site: "douyin.com", sessionMinutes: 20, isNight: true, byAI: true,
+                                               title: "秋官也困了", body: "郑少秋都收工了，你也睡吧"))
+        let b = try store.addNudge(NudgeRecord(at: t.addingTimeInterval(600), site: "douyin.com", sessionMinutes: 30,
+                                               isNight: true, byAI: false, title: "该睡觉啦", body: "夜深了"))
+        _ = try store.addNudge(NudgeRecord(at: t.addingTimeInterval(900), site: "bilibili.com", sessionMinutes: 20,
+                                           isNight: false, byAI: true, title: "歇会儿", body: "起来走走"))
+        try store.setNudgeOutcome(id: a, outcome: .accepted)
+        try store.setNudgeOutcome(id: b, outcome: .snoozed)
+
+        let records = try store.nudges(from: t.addingTimeInterval(-1), to: t.addingTimeInterval(1000))
+        XCTAssertEqual(records.count, 3)
+        XCTAssertEqual(records.first { $0.id == a }?.outcome, .accepted)
+
+        let summary = NudgeRecord.summary(records)!
+        XCTAssertTrue(summary.contains("提醒 3 次"), summary)
+        XCTAssertTrue(summary.contains("接受 1 次"), summary)
+        XCTAssertTrue(summary.contains("再刷 1 次"), summary)
+        XCTAssertTrue(summary.contains("郑少秋都收工了"), "接受过的说法作为正面例子")
+        XCTAssertTrue(summary.contains("夜深了"), "被无视的说法作为反面例子")
+        XCTAssertNil(NudgeRecord.summary([]))
+    }
+
     func testReasonsAreStored() throws {
         try store.addReason(NudgeReason(at: Date(timeIntervalSince1970: 1000), reason: .tired, site: "bilibili.com", sessionMinutes: 20))
         let r = try store.reasons(from: .distantPast, to: .distantFuture)
