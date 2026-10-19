@@ -93,6 +93,20 @@ final class LabelingTests: XCTestCase {
         XCTAssertEqual(label.model, "claude-haiku-5-5")
     }
 
+    func testHookIsRequestedAndParsed() throws {
+        let p = LabelPrompt.make(for: view, llm: LLMConfig())
+        XCTAssertTrue(p.system.contains("hook"))
+        XCTAssertTrue((LabelPrompt.schema["required"] as! [String]).contains("hook"))
+        XCTAssertTrue(LabelPrompt.example.contains("hook"))
+        let json = #"{"choices":[{"message":{"content":"{\"isJunk\":true,\"nutrition\":1,\"category\":\"娱乐\",\"reason\":\"r\",\"hook\":\"猎奇\"}"}}]}"#
+        XCTAssertEqual(try LLMResponse.parseLabel(Data(json.utf8), provider: .deepseek, model: "m").hook, "猎奇")
+    }
+
+    func testOldLabelWithoutHookStillDecodes() throws {
+        let json = #"{"isJunk":true,"nutrition":2,"category":"娱乐","reason":"r","model":"m","labeledAt":1}"#
+        XCTAssertNil(try JSONDecoder().decode(ContentLabel.self, from: Data(json.utf8)).hook)
+    }
+
     func testAnthropicRefusalIsAnError() {
         let json = #"{"content":[],"stop_reason":"refusal"}"#
         XCTAssertThrowsError(try LLMResponse.parseLabel(Data(json.utf8), provider: .anthropic, model: "m"))

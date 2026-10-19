@@ -311,7 +311,8 @@ private struct ContentRow: View {
                         .font(.caption).foregroundStyle(.tertiary).lineLimit(1)
                 }
                 if let label = view.label {
-                    Text("\(label.isJunk ? "🍟 没营养" : "🥦 有营养") \(label.nutrition)/5 · \(label.category) · \(label.reason)")
+                    let hook = label.hook.flatMap { $0 == "无" ? nil : " · 钩子：\($0)" } ?? ""
+                    Text("\(label.isJunk ? "🍟 没营养" : "🥦 有营养") \(label.nutrition)/5 · \(label.category)\(hook) · \(label.reason)")
                         .font(.caption).lineLimit(2)
                         .help("由 \(label.model) 判断")
                 }

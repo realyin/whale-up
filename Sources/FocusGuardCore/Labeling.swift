@@ -50,6 +50,7 @@ public enum LabelPrompt {
             nutrition 是 1 到 5 的整数：1 纯消遣，3 一般，5 很有收获。isJunk 为 true 表示没营养。
             category 用两到四个字的中文主题，例如：学习、技术、新闻、知识科普、娱乐、搞笑、情感、游戏、音乐、影视、生活。
             reason 用一句中文说明理由，不超过 30 个字。
+            hook 是这条内容主要靠什么抓住人的注意力，从这些里选一个：\(hooks.joined(separator: "、"))。没有明显钩子就填“无”。
             """
         var lines = ["网站：\(v.site)", "类型：\(v.kind == "video" ? "视频" : "网页")", "标题：\(v.title)"]
         if let author = v.author, !author.isEmpty { lines.append("作者：\(author)") }
@@ -59,7 +60,10 @@ public enum LabelPrompt {
         return (system, lines.joined(separator: "\n"))
     }
 
-    static let example = #"{"isJunk": true, "nutrition": 2, "category": "娱乐", "reason": "搞笑段子，看完没有收获"}"#
+    /// 吸引注意力的钩子类型
+    public static let hooks = ["猎奇", "愤怒", "焦虑", "爽感", "搞笑", "情感共鸣", "颜值", "悬念", "无"]
+
+    static let example = #"{"isJunk": true, "nutrition": 2, "category": "娱乐", "reason": "搞笑段子，看完没有收获", "hook": "搞笑"}"#
 
     static let schema: [String: Any] = [
         "type": "object",
@@ -68,8 +72,9 @@ public enum LabelPrompt {
             "nutrition": ["type": "integer"],
             "category": ["type": "string"],
             "reason": ["type": "string"],
+            "hook": ["type": "string", "enum": hooks],
         ],
-        "required": ["isJunk", "nutrition", "category", "reason"],
+        "required": ["isJunk", "nutrition", "category", "reason", "hook"],
         "additionalProperties": false,
     ]
 }

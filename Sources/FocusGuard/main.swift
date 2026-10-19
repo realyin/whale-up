@@ -46,6 +46,16 @@ MainActor.assumeIsolated {
         }
         RunLoop.main.run()
     }
+    if ProcessInfo.processInfo.environment["FOCUSGUARD_TEST_LABEL"] != nil {
+        // 开发用：用当前配置判断两条示例
+        Task {
+            for v in Labeler.samples {
+                do { print(v.title, "→", try await Labeler.classify(v, llm: Config.load().0.llm)) } catch { print("失败：\(error)") }
+            }
+            exit(0)
+        }
+        RunLoop.main.run()
+    }
     if let id = ProcessInfo.processInfo.environment["FOCUSGUARD_CLOSE_JUNK"] {
         print("closed:", ActivityMonitor().closeJunk(bundleID: id, nudgedURL: nil, rules: Config.load().0.junkSites))
         exit(0)

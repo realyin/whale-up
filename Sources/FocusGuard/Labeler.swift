@@ -86,6 +86,14 @@ final class Labeler {
         }
     }
 
+    /// 设置页“测试”用的两条示例：一条学习、一条娱乐
+    static let samples = [
+        ContentView(viewId: "t1", url: "https://www.bilibili.com/video/test1", title: "坚持这样练英语听力，1个月就能看见效果",
+                    author: "英语老师Lee", tags: ["英语听力", "英语学习"], kind: "video", startedAt: 0, endedAt: 0, activeSeconds: 0),
+        ContentView(viewId: "t2", url: "https://www.douyin.com/video/test2", title: "这也太好笑了吧哈哈哈 #搞笑 #沙雕日常",
+                    author: "快乐小王", tags: ["搞笑", "沙雕日常"], kind: "video", startedAt: 0, endedAt: 0, activeSeconds: 0),
+    ]
+
     static func classify(_ view: ContentView, llm: LLMConfig) async throws -> ContentLabel {
         let request = try LLMRequest.labeling(view, llm: llm, apiKey: APIKeyStore.get(llm.provider))
         let (data, _) = try await URLSession.shared.data(for: request)
