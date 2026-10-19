@@ -135,7 +135,7 @@ public final class ContentStore {
             CREATE TABLE IF NOT EXISTS nudges (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, at REAL NOT NULL, site TEXT NOT NULL,
                 session_minutes INTEGER NOT NULL, is_night INTEGER NOT NULL, by_ai INTEGER NOT NULL,
-                title TEXT NOT NULL, body TEXT NOT NULL, outcome TEXT
+                title TEXT NOT NULL, body TEXT NOT NULL, outcome TEXT, note TEXT
             );
             CREATE TABLE IF NOT EXISTS digests (
                 day TEXT PRIMARY KEY, text TEXT NOT NULL, model TEXT NOT NULL, created_at REAL NOT NULL
@@ -148,6 +148,8 @@ public final class ContentStore {
             try exec("ALTER TABLE views ADD COLUMN \(name) \(type)")
         }
         try exec("CREATE INDEX IF NOT EXISTS views_url ON views(url)")
+        let nudgeColumns = try query("PRAGMA table_info(nudges)", []) { Self.text($0, 1) ?? "" }
+        if !nudgeColumns.contains("note") { try exec("ALTER TABLE nudges ADD COLUMN note TEXT") }
     }
 
     deinit {
@@ -362,6 +364,8 @@ public struct NudgeRecord: Equatable {
     public var title: String
     public var body: String
     public var outcome: Outcome?
+    /// 想继续刷时写下的理由
+    public var note: String?
 
     public init(at: Date, site: String, sessionMinutes: Int, isNight: Bool, byAI: Bool, title: String, body: String,
                 outcome: Outcome? = nil) {
@@ -387,6 +391,10 @@ public struct NudgeRecord: Equatable {
         if !accepted.isEmpty {
             text += "让他停下来的说法：" + accepted.suffix(3).map { "「\($0.body)」" }.joined(separator: "、") + "。"
         }
+        let notes = records.compactMap(\.note).filter { !$0.isEmpty }
+        if !notes.isEmpty {
+            text += "他坚持要继续时写的理由：" + notes.suffix(5).map { "「\($0)」" }.joined(separator: "、") + "。"
+        }
         if !snoozed.isEmpty {
             text += "没用的说法：" + snoozed.suffix(3).map { "「\($0.body)」" }.joined(separator: "、") + "。"
         }
@@ -404,13 +412,13 @@ extension ContentStore {
                   r.title, r.body, r.outcome?.rawValue])
     }
 
-    public func setNudgeOutcome(id: Int64, outcome: NudgeRecord.Outcome) throws {
-        try execute("UPDATE nudges SET outcome = ? WHERE id = ?", [outcome.rawValue, Int(id)])
+    public func setNudgeOutcome(id: Int64, outcome: NudgeRecord.Outcome, note: String? = nil) throws {
+        try execute("UPDATE nudges SET outcome = ?, note = ? WHERE id = ?", [outcome.rawValue, note, Int(id)])
     }
 
     public func nudges(from: Date, to: Date) throws -> [NudgeRecord] {
         try select("""
-            SELECT id, at, site, session_minutes, is_night, by_ai, title, body, outcome
+            SELECT id, at, site, session_minutes, is_night, by_ai, title, body, outcome, note
             FROM nudges WHERE at >= ? AND at < ? ORDER BY at
             """, [from.timeIntervalSince1970, to.timeIntervalSince1970]) { s in
             var r = NudgeRecord(at: Date(timeIntervalSince1970: sqlite3_column_double(s, 1)),
@@ -419,6 +427,7 @@ extension ContentStore {
                                 title: Self.columnText(s, 6) ?? "", body: Self.columnText(s, 7) ?? "",
                                 outcome: Self.columnText(s, 8).flatMap(NudgeRecord.Outcome.init(rawValue:)))
             r.id = sqlite3_column_int64(s, 0)
+            r.note = Self.columnText(s, 9)
             return r
         }
     }

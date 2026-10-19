@@ -7,6 +7,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let monitor = ActivityMonitor()
     private let nudgeWindow = NudgeWindow()
     private let toast = Toast()
+    private let pausePanel = PausePanel()
+    private var wasJunk = false
+    private var lastPauseAt: Date?
     private var settings: SettingsWindow?
     private var statsWindow: StatsWindow?
     private var stats = UsageStats.load()
@@ -146,6 +149,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let idle = monitor.idleSeconds() > config.idleSeconds
         recordUsage(idle: idle, now: now, elapsed: elapsed)
 
+        // 打开前先停一下：从正常内容切到没营养的内容时
+        let isJunk = currentReason != nil
+        if pausedUntil == nil, !nudgeWindow.isVisible, !nudgePending,
+           PauseGate.shouldPause(wasJunk: wasJunk, isJunk: isJunk, lastPauseAt: lastPauseAt, now: now, config: config),
+           let activity = current, let id = activity.bundleID {
+            lastPauseAt = now
+            var detail = "今天已经刷了 \(formatDuration(todayJunkSeconds))"
+            if let left = config.budgetRemainingSeconds(usedToday: tracker.todaySeconds) {
+                detail += "，额度还剩 \(formatDuration(left))"
+            }
+            pausePanel.show(site: currentReason ?? activity.appName, detail: detail, seconds: config.frictionWaitSeconds) { [weak self] in
+                guard let self else { return }
+                self.monitor.closeJunk(bundleID: id, nudgedURL: activity.url, rules: self.config.junkSites + self.config.forceCloseSites)
+            }
+        }
+        wasJunk = isJunk
+
         // 强制关闭不受“暂停”影响，否则一暂停就绕过去了
         enforce(idle: idle, now: now, elapsed: elapsed)
         digestWriter?.autoRun(config: config, now: now)
@@ -267,12 +287,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func presentNudge(_ nudge: Nudge, text: NudgeText, byAI: Bool) {
         let id = try? contentStore?.addNudge(NudgeRecord(at: Date(), site: nudge.reason, sessionMinutes: nudge.sessionMinutes,
                                                          isNight: nudge.isNight, byAI: byAI, title: text.title, body: text.body))
-        let record: (NudgeRecord.Outcome) -> Void = { [weak self] outcome in
-            if let id { try? self?.contentStore?.setNudgeOutcome(id: id, outcome: outcome) }
+        let record: (NudgeRecord.Outcome, String?) -> Void = { [weak self] outcome, note in
+            if let id { try? self?.contentStore?.setNudgeOutcome(id: id, outcome: outcome, note: note) }
         }
         nudgeWindow.show(text, isNight: nudge.isNight, snoozeMinutes: Int(config.snoozeMinutes),
-                         onRest: { [weak self] in record(.accepted); self?.acceptRest() },
-                         onSnooze: { record(.snoozed) },
+                         friction: Friction.level(for: nudge, config: config),
+                         onRest: { [weak self] in record(.accepted, nil); self?.acceptRest() },
+                         onSnooze: { note in record(.snoozed, note) },
                          onReason: { [weak self] kind in
                              try? self?.contentStore?.addReason(
                                  NudgeReason(at: Date(), reason: kind, site: nudge.reason, sessionMinutes: nudge.sessionMinutes))

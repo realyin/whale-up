@@ -8,6 +8,9 @@ MainActor.assumeIsolated {
             NudgeWindow.renderPNG(Messages.make(for: n), isNight: night,
                                   to: URL(fileURLWithPath: dir).appendingPathComponent(night ? "nudge-night.png" : "nudge-day.png"))
         }
+        let n3 = Nudge(reason: "douyin.com", appName: "Safari", sessionMinutes: 30, todayMinutes: 70, isNight: false, count: 3)
+        NudgeWindow.renderPNG(Messages.make(for: n3), isNight: false, friction: .writeReason(waitSeconds: 10),
+                              to: URL(fileURLWithPath: dir).appendingPathComponent("nudge-friction.png"))
         exit(0)
     }
     if let dir = ProcessInfo.processInfo.environment["FOCUSGUARD_RENDER_SETTINGS"] {

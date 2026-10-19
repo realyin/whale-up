@@ -9,14 +9,14 @@ final class NudgeWindow {
 
     var isVisible: Bool { panel?.isVisible ?? false }
 
-    func show(_ text: NudgeText, isNight: Bool, snoozeMinutes: Int,
-              onRest: @escaping () -> Void, onSnooze: @escaping () -> Void,
+    func show(_ text: NudgeText, isNight: Bool, snoozeMinutes: Int, friction: Friction = .none,
+              onRest: @escaping () -> Void, onSnooze: @escaping (_ note: String?) -> Void,
               onReason: @escaping (ReasonKind) -> Void = { _ in }) {
         close()
         let view = NudgeView(
-            text: text, isNight: isNight, snoozeMinutes: snoozeMinutes,
+            text: text, isNight: isNight, snoozeMinutes: snoozeMinutes, friction: friction,
             onRest: { [weak self] in self?.close(); onRest() },
-            onSnooze: { [weak self] in self?.close(); onSnooze() },
+            onSnooze: { [weak self] note in self?.close(); onSnooze(note) },
             onReason: onReason)
 
         let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 420, height: 300),
@@ -33,6 +33,7 @@ final class NudgeWindow {
         panel.setContentSize(panel.contentView!.fittingSize)
         panel.center()
         panel.orderFrontRegardless()
+        if case .writeReason = friction { panel.makeKey() }  // 要打字，需要成为键盘焦点
         NSSound(named: "Glass")?.play()
         self.panel = panel
     }
@@ -43,9 +44,9 @@ final class NudgeWindow {
     }
 
     /// 开发用：把弹窗画成 PNG，便于调整样式（不需要屏幕录制权限）
-    static func renderPNG(_ text: NudgeText, isNight: Bool, to url: URL) {
-        let view = NSHostingView(rootView: NudgeView(text: text, isNight: isNight, snoozeMinutes: 5,
-                                                     onRest: {}, onSnooze: {}, onReason: { _ in }))
+    static func renderPNG(_ text: NudgeText, isNight: Bool, friction: Friction = .none, to url: URL) {
+        let view = NSHostingView(rootView: NudgeView(text: text, isNight: isNight, snoozeMinutes: 5, friction: friction,
+                                                     onRest: {}, onSnooze: { _ in }, onReason: { _ in }))
         view.frame.size = view.fittingSize
         view.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
@@ -58,10 +59,24 @@ private struct NudgeView: View {
     let text: NudgeText
     let isNight: Bool
     let snoozeMinutes: Int
+    var friction: Friction = .none
     let onRest: () -> Void
-    let onSnooze: () -> Void
+    let onSnooze: (String?) -> Void
     let onReason: (ReasonKind) -> Void
     @State private var reason: ReasonKind?
+    @State private var waited = 0
+    @State private var note = ""
+    private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    private var waitSeconds: Int {
+        switch friction {
+        case .none: return 0
+        case .wait(let s): return s
+        case .writeReason(let s): return s
+        }
+    }
+    private var needsNote: Bool { if case .writeReason = friction { return true } else { return false } }
+    private var canSnooze: Bool { waited >= waitSeconds && (!needsNote || Friction.isAcceptableReason(note)) }
 
     var body: some View {
         VStack(spacing: 14) {
@@ -95,15 +110,92 @@ private struct NudgeView: View {
                 }
                 .keyboardShortcut(.defaultAction)
                 .controlSize(.large)
-                Button("再刷 \(snoozeMinutes) 分钟", action: onSnooze)
+                if needsNote {
+                    TextField("真的还要继续？写一句理由", text: $note)
+                        .textFieldStyle(.roundedBorder)
+                        .padding(.top, 4)
+                }
+                Button(snoozeTitle) { onSnooze(needsNote ? note.trimmingCharacters(in: .whitespacesAndNewlines) : nil) }
                     .buttonStyle(.link)
+                    .disabled(!canSnooze)
                     .padding(.top, 2)
             }
             .padding(.top, 6)
         }
+        .onReceive(ticker) { _ in if waited < waitSeconds { waited += 1 } }
         .padding(.horizontal, 32)
         .padding(.vertical, 28)
         .frame(width: 420)
+    }
+
+    private var snoozeTitle: String {
+        let left = waitSeconds - waited
+        return left > 0 ? "再刷 \(snoozeMinutes) 分钟（\(left) 秒后可点）" : "再刷 \(snoozeMinutes) 分钟"
+    }
+}
+
+/// “打开前先停一下”：切到没营养的内容时，先深呼吸几秒再决定
+@MainActor
+final class PausePanel {
+    private var panel: NSPanel?
+
+    var isVisible: Bool { panel?.isVisible ?? false }
+
+    func show(site: String, detail: String, seconds: Int, onLeave: @escaping () -> Void) {
+        panel?.close()
+        let view = PauseView(site: site, detail: detail, seconds: seconds,
+                             onLeave: { [weak self] in self?.close(); onLeave() },
+                             onContinue: { [weak self] in self?.close() })
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 360, height: 220),
+                            styleMask: [.titled, .fullSizeContentView, .nonactivatingPanel],
+                            backing: .buffered, defer: false)
+        panel.titleVisibility = .hidden
+        panel.titlebarAppearsTransparent = true
+        panel.level = .statusBar
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.isReleasedWhenClosed = false
+        panel.contentView = NSHostingView(rootView: view)
+        panel.setContentSize(panel.contentView!.fittingSize)
+        panel.center()
+        panel.orderFrontRegardless()
+        self.panel = panel
+    }
+
+    func close() {
+        panel?.close()
+        panel = nil
+    }
+}
+
+private struct PauseView: View {
+    let site: String
+    let detail: String
+    let seconds: Int
+    let onLeave: () -> Void
+    let onContinue: () -> Void
+    @State private var left = 0
+    private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text("🫁").font(.system(size: 44))
+            Text("要打开 \(site) 吗？").font(.title2.bold())
+            Text(left > 0 ? "先深呼吸，\(left) 秒后再决定" : "想好了吗？").foregroundStyle(.secondary)
+            if !detail.isEmpty { Text(detail).font(.caption).foregroundStyle(.secondary) }
+            HStack(spacing: 10) {
+                Button(action: onLeave) { Text("不看了").frame(minWidth: 90) }
+                    .keyboardShortcut(.defaultAction)
+                    .controlSize(.large)
+                Button(action: onContinue) { Text("继续看").frame(minWidth: 90) }
+                    .controlSize(.large)
+                    .disabled(left > 0)
+            }
+            .padding(.top, 4)
+        }
+        .padding(28)
+        .frame(width: 360)
+        .onAppear { left = seconds }
+        .onReceive(ticker) { _ in if left > 0 { left -= 1 } }
     }
 }
 

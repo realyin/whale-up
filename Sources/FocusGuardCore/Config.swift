@@ -77,6 +77,11 @@ public struct Config: Codable, Equatable {
     public var dailyBudgetMinutes: Double = 0
     /// 额度用完后直接关掉没营养的网页
     public var budgetCloses = false
+    /// 逐级加强：第二次提醒起“再刷”要等倒计时，第三次起还要写理由
+    public var frictionEnabled = true
+    public var frictionWaitSeconds = 10
+    /// 从正常内容切到没营养的内容时，先停一下（10 分钟内最多一次）
+    public var pauseBeforeJunk = false
     /// 点了“再刷一会儿”后，多久再提醒
     public var snoozeMinutes: Double = 5
     /// 离开“没营养”内容超过这么久，连续时长清零
@@ -134,6 +139,9 @@ public struct Config: Codable, Equatable {
         workLimitMinutes = try c.decodeIfPresent(Double.self, forKey: .workLimitMinutes) ?? d.workLimitMinutes
         dailyBudgetMinutes = try c.decodeIfPresent(Double.self, forKey: .dailyBudgetMinutes) ?? d.dailyBudgetMinutes
         budgetCloses = try c.decodeIfPresent(Bool.self, forKey: .budgetCloses) ?? d.budgetCloses
+        frictionEnabled = try c.decodeIfPresent(Bool.self, forKey: .frictionEnabled) ?? d.frictionEnabled
+        frictionWaitSeconds = try c.decodeIfPresent(Int.self, forKey: .frictionWaitSeconds) ?? d.frictionWaitSeconds
+        pauseBeforeJunk = try c.decodeIfPresent(Bool.self, forKey: .pauseBeforeJunk) ?? d.pauseBeforeJunk
         junkApps = try c.decodeIfPresent([String].self, forKey: .junkApps) ?? d.junkApps
         junkSites = try c.decodeIfPresent([String].self, forKey: .junkSites) ?? d.junkSites
         forceCloseEnabled = try c.decodeIfPresent(Bool.self, forKey: .forceCloseEnabled) ?? d.forceCloseEnabled

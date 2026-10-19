@@ -281,6 +281,11 @@ struct ReminderSettings: View {
                     MinutesStepper(title: "工作时段连续刷", value: $config.workLimitMinutes, range: 1...60, suffix: "分钟就提醒")
                 }
             }
+            Section("逐级加强") {
+                Toggle("第二次提醒起“再刷”要等倒计时，第三次起还要写一句理由", isOn: $config.frictionEnabled)
+                Toggle("打开没营养的内容前，先停下来深呼吸几秒（10 分钟内最多一次）", isOn: $config.pauseBeforeJunk)
+                Stepper("等待 \(config.frictionWaitSeconds) 秒", value: $config.frictionWaitSeconds, in: 3...60)
+            }
             Section("其他") {
                 MinutesStepper(title: "点“再刷一会儿”后", value: $config.snoozeMinutes, range: 1...60, suffix: "分钟再提醒")
                 MinutesStepper(title: "离开超过", value: $config.sessionBreakMinutes, range: 1...60, suffix: "分钟，连续时长清零")
