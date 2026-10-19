@@ -60,6 +60,7 @@ final class LocalServer {
     }
 
     private func respond(_ conn: NWConnection, to req: HTTPRequest) {
+        Self.log("\(req.method) \(req.path) origin=\(req.headers["origin"] ?? "-") trusted=\(req.isFromExtension)")
         guard req.isFromExtension else { return send(conn, status: 403, json: ["error": "forbidden"]) }
         switch (req.method, req.path) {
         case ("GET", "/status"):
@@ -69,10 +70,31 @@ final class LocalServer {
                 return send(conn, status: 400, json: ["error": "invalid json"])
             }
             lastReportAt = Date()
+            Self.log("  收到 \(views.count) 条：" + views.map { "\($0.site) \(Int($0.activeSeconds))s" }.joined(separator: ", "))
             onViews(views)
             send(conn, status: 200, json: ["ok": true])
         default:
             send(conn, status: 404, json: ["error": "not found"])
+        }
+    }
+
+    /// 请求日志：~/Library/Logs/FocusGuard/server.log（超过 1MB 清空重写）
+    static let logURL = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Logs/FocusGuard/server.log")
+
+    private static func log(_ line: String) {
+        let fm = FileManager.default
+        try? fm.createDirectory(at: logURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let size = (try? fm.attributesOfItem(atPath: logURL.path))?[.size] as? Int, size > 1_000_000 {
+            try? fm.removeItem(at: logURL)
+        }
+        let text = "\(Date().formatted(date: .numeric, time: .standard)) \(line)\n"
+        if let handle = try? FileHandle(forWritingTo: logURL) {
+            handle.seekToEndOfFile()
+            handle.write(Data(text.utf8))
+            try? handle.close()
+        } else {
+            try? Data(text.utf8).write(to: logURL)
         }
     }
 
