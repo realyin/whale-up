@@ -14,6 +14,8 @@ public enum LLMProvider: String, Codable, CaseIterable {
     case anthropic
     /// 任何兼容 OpenAI Chat Completions 的接口
     case openai
+    /// DeepSeek（兼容 OpenAI 格式，但只支持 json_object 输出模式）
+    case deepseek
     /// 本机 Ollama，内容不出电脑
     case ollama
 }

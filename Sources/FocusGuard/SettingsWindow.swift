@@ -375,7 +375,7 @@ struct AISettings: View {
     private var needsKey: Bool { model.config.llm.provider != .ollama }
 
     private static let providerNames: [LLMProvider: String] = [
-        .anthropic: "Anthropic", .openai: "OpenAI 兼容接口", .ollama: "本机 Ollama",
+        .anthropic: "Anthropic", .deepseek: "DeepSeek", .openai: "OpenAI 兼容接口", .ollama: "本机 Ollama",
     ]
 
     var body: some View {
@@ -449,6 +449,7 @@ struct AISettings: View {
         switch model.config.llm.provider {
         case .anthropic: return "https://api.anthropic.com"
         case .openai: return "https://api.openai.com/v1"
+        case .deepseek: return "https://api.deepseek.com"
         case .ollama: return "http://127.0.0.1:11434/v1"
         }
     }
@@ -461,6 +462,7 @@ struct AISettings: View {
     private func applyDefaults(for provider: LLMProvider) {
         let defaults: [LLMProvider: (String, String)] = [
             .anthropic: ("claude-haiku-5-5", "claude-opus-5-5"),
+            .deepseek: ("deepseek-flash", "deepseek-v4-pro"),
             .openai: ("", ""),
             .ollama: ("qwen3:8b", "qwen3:8b"),
         ]

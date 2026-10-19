@@ -53,6 +53,26 @@ final class LabelingTests: XCTestCase {
         XCTAssertNil(req.value(forHTTPHeaderField: "Authorization"))
     }
 
+    func testDeepSeekUsesJSONObjectModeWithExampleInPrompt() throws {
+        let llm = LLMConfig(provider: .deepseek, taggingModel: "deepseek-flash", reportModel: "deepseek-v4-pro", baseURL: "")
+        let req = try LLMRequest.labeling(view, llm: llm, apiKey: "sk-ds")
+        XCTAssertEqual(req.url?.absoluteString, "https://api.deepseek.com/chat/completions")
+        XCTAssertEqual(req.value(forHTTPHeaderField: "Authorization"), "Bearer sk-ds")
+        let body = try JSONSerialization.jsonObject(with: req.httpBody!) as! [String: Any]
+        XCTAssertEqual(body["model"] as? String, "deepseek-flash")
+        XCTAssertEqual((body["response_format"] as! [String: Any])["type"] as? String, "json_object")
+        XCTAssertNotNil(body["max_tokens"])
+        let system = (body["messages"] as! [[String: Any]])[0]["content"] as! String
+        XCTAssertTrue(system.lowercased().contains("json"))
+        XCTAssertTrue(system.contains("\"isJunk\""), "json_object 模式要求在提示词里给出示例")
+        XCTAssertThrowsError(try LLMRequest.labeling(view, llm: llm, apiKey: nil))
+    }
+
+    func testDeepSeekEmptyContentIsAnError() {
+        let json = #"{"choices":[{"message":{"content":""}}]}"#
+        XCTAssertThrowsError(try LLMResponse.parseLabel(Data(json.utf8), provider: .deepseek, model: "m"))
+    }
+
     func testCloudProvidersNeedKey() {
         XCTAssertThrowsError(try LLMRequest.labeling(view, llm: LLMConfig(), apiKey: nil))
         XCTAssertThrowsError(try LLMRequest.labeling(view, llm: LLMConfig(), apiKey: "  "))

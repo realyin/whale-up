@@ -110,6 +110,22 @@ public enum LLMRequest {
                 // 分类任务简单，低思考强度即可；格式由 JSON Schema 约束
                 "output_config": ["effort": "low", "format": ["type": "json_schema", "schema": LabelPrompt.schema]],
             ]
+        case .deepseek:
+            req = URLRequest(url: try endpoint(llm.baseURL, default: "https://api.deepseek.com", path: "chat/completions"))
+            req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+            // DeepSeek 只支持 json_object：提示词里必须出现 json 字样并给出示例
+            let system = prompt.system + """
+
+
+                请只输出一个 JSON 对象，格式示例：
+                {"isJunk": true, "nutrition": 2, "category": "娱乐", "reason": "搞笑段子，看完没有收获"}
+                """
+            body = [
+                "model": llm.taggingModel,
+                "max_tokens": 1024,
+                "messages": [["role": "system", "content": system], ["role": "user", "content": prompt.user]],
+                "response_format": ["type": "json_object"],
+            ]
         case .openai, .ollama:
             let base = llm.provider == .ollama ? "http://127.0.0.1:11434/v1" : "https://api.openai.com/v1"
             req = URLRequest(url: try endpoint(llm.baseURL, default: base, path: "chat/completions"))
@@ -159,7 +175,7 @@ public enum LLMResponse {
             }
             let blocks = json["content"] as? [[String: Any]] ?? []
             text = blocks.filter { $0["type"] as? String == "text" }.compactMap { $0["text"] as? String }.joined()
-        case .openai, .ollama:
+        case .openai, .ollama, .deepseek:
             let choice = (json["choices"] as? [[String: Any]])?.first
             text = (choice?["message"] as? [String: Any])?["content"] as? String ?? ""
         }
