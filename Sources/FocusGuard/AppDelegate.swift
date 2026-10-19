@@ -28,6 +28,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var lastTick = Date()
     private var current: Activity?
     private var currentReason: String?
+    /// 大模型对当前网页的判断（开启 AI 判断且已判断过时才有）
+    private var currentLabel: ContentLabel?
+    private lazy var labeler: Labeler? = contentStore.map { store in
+        let l = Labeler(store: store)
+        l.onChange = { [weak self] in
+            self?.statsWindow?.model.contentVersion += 1
+            self?.settings?.model.labelerStatus = self?.labelerStatus
+        }
+        return l
+    }
     private var pausedUntil: Date?
     /// 最近一次提醒时在前台的 App，点“去休息”时把它隐藏
     private var nudgedBundleID: String?
@@ -69,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
                 self.settings?.model.extensionLastSeen = Date()
                 self.statsWindow?.model.contentVersion += 1
+                self.labeler?.kick(config: self.config)
             },
             status: { [weak self] in
                 guard let self else { return [:] }
@@ -77,6 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 return ["ok": true, "scope": self.config.contentScope.rawValue, "todayViews": count]
             })
         server?.start()
+        labeler?.kick(config: config)  // 处理上次没判断完的
     }
 
     // MARK: - 检测循环
@@ -97,7 +109,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         if let until = pausedUntil, now >= until { pausedUntil = nil }
         current = monitor.currentActivity()
-        currentReason = current.flatMap { Classifier.junkReason(for: $0, config: config) }
+        // 网站规则先判断；开启 AI 判断后，大模型对这个网页的判断优先
+        let ruleReason = current.flatMap { Classifier.junkReason(for: $0, config: config) }
+        currentLabel = config.llm.enabled
+            ? current?.url.flatMap { try? contentStore?.label(forURL: $0.components(separatedBy: "#")[0]) } ?? nil
+            : nil
+        currentReason = JunkJudge.isJunk(siteRuleMatched: ruleReason != nil, label: currentLabel, config: config)
+            ? (ruleReason ?? currentLabel.map { "\($0.category)内容" })
+            : nil
         if let url = current?.url, Classifier.siteRule(from: url) != nil, url != lastBrowserURL {
             lastBrowserURL = url
             settings?.model.browserURL = url
@@ -130,7 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func recordUsage(idle: Bool, now: Date, elapsed: Double) {
         if !idle, let activity = current,
            activity.bundleID != Bundle.main.bundleIdentifier, activity.bundleID != "com.apple.loginwindow" {
-            stats.add(UsageStats.key(for: activity, config: config), seconds: elapsed, at: now)
+            stats.add(UsageStats.key(for: activity, config: config, label: currentLabel), seconds: elapsed, at: now)
         }
         if now.timeIntervalSince(lastStatsSave) >= 60 { saveStats() }
     }
@@ -153,7 +172,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// 强制关闭模式：在指定网站上停留太久就直接关掉当前网页
     private func enforce(idle: Bool, now: Date, elapsed: Double) {
         let rule = current?.url.flatMap { Classifier.matchSite($0, rules: config.forceCloseSites) }
-        switch forceCloser.record(onSite: rule != nil, isIdle: idle, now: now, elapsed: elapsed, config: config) {
+        // 强制关闭只针对名单里的网站；大模型判断为有营养的内容不计时
+        let onSite = rule != nil && JunkJudge.isJunk(siteRuleMatched: true, label: currentLabel, config: config)
+        switch forceCloser.record(onSite: onSite, isIdle: idle, now: now, elapsed: elapsed, config: config) {
         case .warn:
             toast.show("⏳ 还有 1 分钟，\(rule ?? "") 将被自动关闭")
         case .close:
@@ -209,6 +230,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statsWindow?.model.config = config
     }
 
+    private var labelerStatus: String? {
+        guard let labeler else { return nil }
+        if let error = labeler.lastError { return "⚠️ \(error)" }
+        if let at = labeler.lastSuccessAt { return "最近一次判断：\(at.formatted(date: .omitted, time: .shortened))" }
+        return nil
+    }
+
     /// 设置页或菜单改了配置：保存并立即生效
     private func applyConfig(_ new: Config) {
         let oldInterval = config.checkIntervalSeconds
@@ -219,6 +247,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if config.checkIntervalSeconds != oldInterval { scheduleTimer() }
         settings?.model.replace(with: config)
         statsWindow?.model.config = config
+        labeler?.kick(config: config)
     }
 
     /// 用户保存配置文件后自动生效，无需重启
@@ -363,6 +392,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             model.browserURL = lastBrowserURL
             model.extensionLastSeen = server?.lastReportAt
             model.serverError = server?.error ?? (contentStore == nil ? "内容数据库打开失败" : nil)
+            model.labelerStatus = labelerStatus
             settings = SettingsWindow(model: model)
         }
         settings?.show()

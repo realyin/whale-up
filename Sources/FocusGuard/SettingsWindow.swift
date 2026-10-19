@@ -13,6 +13,8 @@ final class SettingsModel: ObservableObject {
     /// 浏览器扩展最近一次上报的时间
     @Published var extensionLastSeen: Date?
     @Published var serverError: String?
+    /// 大模型判断的最近状态
+    @Published var labelerStatus: String?
     private let onChange: (Config) -> Void
     private var replacing = false
 
@@ -30,7 +32,7 @@ final class SettingsModel: ObservableObject {
 }
 
 enum SettingsTab: String, CaseIterable {
-    case sites = "网站", apps = "App", force = "强制关闭", reminders = "提醒", content = "内容记录"
+    case sites = "网站", apps = "App", force = "强制关闭", reminders = "提醒", content = "内容记录", ai = "AI 判断"
 }
 
 @MainActor
@@ -102,6 +104,8 @@ struct SettingsView: View {
                     ReminderSettings(config: $model.config)
                 case .content:
                     ContentSettings(model: model)
+                case .ai:
+                    AISettings(model: model)
                 }
             }
             .padding(.horizontal, 20)
@@ -119,7 +123,7 @@ struct SettingsView: View {
             }
             .padding(20)
         }
-        .frame(width: 520, height: 520)
+        .frame(width: 560, height: 560)
     }
 }
 
@@ -335,10 +339,6 @@ struct ContentSettings: View {
                 }
             }
 
-            Section("大模型分析") {
-                Text("下一阶段开放：可选择 Anthropic / OpenAI 兼容接口 / 本地 Ollama，以及打标签和写报告分别用的模型。")
-                    .font(.callout).foregroundStyle(.secondary)
-            }
         }
         .formStyle(.grouped)
     }
@@ -360,6 +360,138 @@ enum ExtensionFiles {
             let target = folder.appendingPathComponent(name)
             try? fm.removeItem(at: target)
             try? fm.copyItem(at: source.appendingPathComponent(name), to: target)
+        }
+    }
+}
+
+struct AISettings: View {
+    @ObservedObject var model: SettingsModel
+    @State private var apiKey = ""
+    @State private var keySaved = false
+    @State private var testResult: String?
+    @State private var testing = false
+
+    private var llm: Binding<LLMConfig> { $model.config.llm }
+    private var needsKey: Bool { model.config.llm.provider != .ollama }
+
+    private static let providerNames: [LLMProvider: String] = [
+        .anthropic: "Anthropic", .openai: "OpenAI 兼容接口", .ollama: "本机 Ollama",
+    ]
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle(isOn: llm.enabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("让大模型判断内容有没有营养").font(.headline)
+                        Text("学习类视频不再提醒、不会被强制关闭；娱乐内容照常处理。还没判断出来时按网站规则。")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
+                if model.config.contentScope == .off {
+                    Text("⚠️ 需要先在“内容记录”里开启记录，并安装 Chrome 扩展").foregroundStyle(.orange)
+                }
+                if let status = model.labelerStatus {
+                    Text(status).font(.callout).foregroundStyle(status.hasPrefix("⚠️") ? .orange : .secondary)
+                }
+            }
+
+            Section("你的标准") {
+                TextEditor(text: llm.preferences)
+                    .font(.callout)
+                    .frame(height: 70)
+                Text("用自己的话写什么算有营养、什么算没营养，会原样告诉大模型。").font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section("模型") {
+                Picker("服务商", selection: llm.provider) {
+                    ForEach(LLMProvider.allCases, id: \.self) { Text(Self.providerNames[$0]!).tag($0) }
+                }
+                .onChange(of: model.config.llm.provider) { provider in
+                    applyDefaults(for: provider)
+                    loadKey()
+                }
+                TextField("判断用的模型", text: llm.taggingModel)
+                TextField("写报告用的模型（日报功能下一步开放）", text: llm.reportModel)
+                TextField("接口地址（留空用默认）", text: llm.baseURL,
+                          prompt: Text(defaultBaseURL))
+                if needsKey {
+                    HStack {
+                        SecureField("API Key", text: $apiKey, prompt: Text(keySaved ? "已保存在钥匙串（重新输入可替换）" : "粘贴 API Key"))
+                        Button("保存") {
+                            APIKeyStore.set(apiKey, for: model.config.llm.provider)
+                            apiKey = ""
+                            loadKey()
+                        }
+                        .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                }
+                HStack {
+                    Button(testing ? "测试中…" : "用两条示例测试") { runTest() }
+                        .disabled(testing || (needsKey && !keySaved))
+                    if let testResult {
+                        Text(testResult).font(.callout).textSelection(.enabled)
+                    }
+                }
+            }
+
+            Section("会发送什么") {
+                Text("每条内容只发送：网站名、标题、作者、标签、简介、视频时长。不发送完整网址，不发送你什么时候看的。同一条内容只判断一次。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear(perform: loadKey)
+    }
+
+    private var defaultBaseURL: String {
+        switch model.config.llm.provider {
+        case .anthropic: return "https://api.anthropic.com"
+        case .openai: return "https://api.openai.com/v1"
+        case .ollama: return "http://127.0.0.1:11434/v1"
+        }
+    }
+
+    private func loadKey() {
+        keySaved = APIKeyStore.get(model.config.llm.provider) != nil
+    }
+
+    /// 换服务商时，模型名还是别家的默认值就换成新服务商的默认值
+    private func applyDefaults(for provider: LLMProvider) {
+        let defaults: [LLMProvider: (String, String)] = [
+            .anthropic: ("claude-haiku-5-5", "claude-opus-5-5"),
+            .openai: ("", ""),
+            .ollama: ("qwen3:8b", "qwen3:8b"),
+        ]
+        let known = Set(defaults.values.flatMap { [$0.0, $0.1] })
+        if known.contains(model.config.llm.taggingModel) { model.config.llm.taggingModel = defaults[provider]!.0 }
+        if known.contains(model.config.llm.reportModel) { model.config.llm.reportModel = defaults[provider]!.1 }
+    }
+
+    private func runTest() {
+        testing = true
+        testResult = nil
+        let llm = model.config.llm
+        let samples = [
+            ContentView(viewId: "t1", url: "https://www.bilibili.com/video/test1", title: "坚持这样练英语听力，1个月就能看见效果",
+                        author: "英语老师Lee", tags: ["英语听力", "英语学习"], kind: "video", startedAt: 0, endedAt: 0, activeSeconds: 0),
+            ContentView(viewId: "t2", url: "https://www.douyin.com/video/test2", title: "这也太好笑了吧哈哈哈 #搞笑 #沙雕日常",
+                        author: "快乐小王", tags: ["搞笑", "沙雕日常"], kind: "video", startedAt: 0, endedAt: 0, activeSeconds: 0),
+        ]
+        Task {
+            var lines: [String] = []
+            for s in samples {
+                do {
+                    let l = try await Labeler.classify(s, llm: llm)
+                    lines.append("\(l.isJunk ? "🍟 没营养" : "🥦 有营养") \(l.nutrition)/5 · \(l.category) · \(l.reason)")
+                } catch {
+                    lines.append("❌ \(error)")
+                    break
+                }
+            }
+            testResult = lines.joined(separator: "\n")
+            testing = false
         }
     }
 }

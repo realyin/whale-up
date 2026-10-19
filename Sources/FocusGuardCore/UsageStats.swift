@@ -24,17 +24,26 @@ public struct UsageStats: Codable, Equatable {
 
     public init() {}
 
-    /// 当前活动记在哪个名目下：浏览器记网站（命中规则时用规则本身，如 youtube.com/shorts），其他记 App 名
-    public static func key(for activity: Activity, config: Config) -> String {
+    /// 大模型判断和网站规则不一致时，在名目后面加上标记，分开统计
+    public static let nutritiousSuffix = " · 有营养"
+    public static let junkSuffix = " · 没营养"
+
+    /// 当前活动记在哪个名目下：浏览器记网站（命中规则时用规则本身，如 youtube.com/shorts），其他记 App 名。
+    /// 开启 AI 判断时：名单内但被判有营养的记为“xx · 有营养”，名单外但被判没营养的记为“xx · 没营养”。
+    public static func key(for activity: Activity, config: Config, label: ContentLabel? = nil) -> String {
+        var key = "app:" + activity.appName
         if let url = activity.url {
             if let rule = Classifier.matchSite(url, rules: config.junkSites + config.forceCloseSites) {
-                return "site:" + rule
-            }
-            if let site = Classifier.siteRule(from: url) {
-                return "site:" + site
+                key = "site:" + rule
+            } else if let site = Classifier.siteRule(from: url) {
+                key = "site:" + site
             }
         }
-        return "app:" + activity.appName
+        guard config.llm.enabled, let label, key.hasPrefix("site:") else { return key }
+        let ruleJunk = isJunk(name: String(key.dropFirst(5)), isSite: true, config: config)
+        if ruleJunk && !label.isJunk { return key + nutritiousSuffix }
+        if !ruleJunk && label.isJunk { return key + junkSuffix }
+        return key
     }
 
     public mutating func add(_ key: String, seconds: Double, at date: Date, calendar: Calendar = .current) {
@@ -75,6 +84,8 @@ public struct UsageStats: Codable, Equatable {
     }
 
     static func isJunk(name: String, isSite: Bool, config: Config) -> Bool {
+        if name.hasSuffix(nutritiousSuffix) { return false }
+        if name.hasSuffix(junkSuffix) { return true }
         if isSite {
             let rules = config.junkSites + config.forceCloseSites
             return rules.contains(name) || Classifier.matchSite("https://" + name, rules: rules) != nil

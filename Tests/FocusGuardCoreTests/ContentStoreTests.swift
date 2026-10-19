@@ -109,6 +109,46 @@ final class ContentStoreTests: XCTestCase {
         XCTAssertEqual(rows.first?.backgroundSeconds, 5)
     }
 
+    func testLabelsAreStoredAndFoundByURL() throws {
+        try store.upsert(view("a", at: 1000))
+        try store.upsert(view("b", at: 2000))
+        XCTAssertEqual(try store.unlabeledViews(limit: 10).map(\.viewId), ["b", "a"])
+
+        let label = ContentLabel(isJunk: false, nutrition: 4, category: "学习", reason: "r", model: "m")
+        try store.setLabel(viewId: "a", label: label)
+        XCTAssertEqual(try store.unlabeledViews(limit: 10).map(\.viewId), ["b"])
+        XCTAssertEqual(try store.label(forURL: "https://www.bilibili.com/video/a"), label)
+        XCTAssertNil(try store.label(forURL: "https://www.bilibili.com/video/b"))
+        XCTAssertEqual(try store.views(from: .distantPast, to: .distantFuture).first { $0.viewId == "a" }?.label, label)
+    }
+
+    func testLatestLabelWinsForSameURL() throws {
+        // 抖音信息流：同一个网址下先后看了两个视频
+        var first = view("x1", at: 1000)
+        first.url = "https://www.douyin.com/?recommend=1"
+        var second = view("x2", at: 2000)
+        second.url = first.url
+        try store.upsert(first)
+        try store.upsert(second)
+        try store.setLabel(viewId: "x1", label: ContentLabel(isJunk: false, nutrition: 4, category: "学习", reason: "", model: "m"))
+        try store.setLabel(viewId: "x2", label: ContentLabel(isJunk: true, nutrition: 1, category: "娱乐", reason: "", model: "m"))
+        XCTAssertEqual(try store.label(forURL: first.url)?.category, "娱乐")
+    }
+
+    func testCachedLabelReusedForSameContent() throws {
+        try store.upsert(view("a", at: 1000, title: "同一个视频"))
+        try store.setLabel(viewId: "a", label: ContentLabel(isJunk: true, nutrition: 2, category: "娱乐", reason: "", model: "m"))
+        let again = view("a2", at: 3000, title: "同一个视频")
+        XCTAssertEqual(try store.cachedLabel(for: again)?.category, "娱乐")
+        XCTAssertNil(try store.cachedLabel(for: view("c", at: 3000, title: "别的视频")))
+    }
+
+    func testFailedLabelingGivesUpAfterThreeAttempts() throws {
+        try store.upsert(view("a", at: 1000))
+        for _ in 0..<3 { try store.markLabelAttempt(viewId: "a") }
+        XCTAssertTrue(try store.unlabeledViews(limit: 10).isEmpty)
+    }
+
     func testReasonsAreStored() throws {
         try store.addReason(NudgeReason(at: Date(timeIntervalSince1970: 1000), reason: .tired, site: "bilibili.com", sessionMinutes: 20))
         let r = try store.reasons(from: .distantPast, to: .distantFuture)

@@ -23,6 +23,8 @@ public struct ContentView: Codable, Equatable {
     public var backgroundSeconds: Double
     /// 视频总长度（秒）
     public var mediaDuration: Double?
+    /// 大模型的判断（App 生成，扩展不上报）
+    public var label: ContentLabel?
 
     public var site: String { Classifier.siteRule(from: url) ?? "" }
 
@@ -44,6 +46,11 @@ public struct ContentView: Codable, Equatable {
         self.watchedSeconds = watchedSeconds
         self.backgroundSeconds = backgroundSeconds
         self.mediaDuration = mediaDuration
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case viewId, url, title, author, tags, description, kind, browser, startedAt, endedAt
+        case activeSeconds, watchedSeconds, backgroundSeconds, mediaDuration
     }
 
     public init(from decoder: Decoder) throws {
@@ -117,7 +124,8 @@ public final class ContentStore {
                 kind TEXT NOT NULL, browser TEXT NOT NULL,
                 started_at REAL NOT NULL, ended_at REAL NOT NULL,
                 active_seconds REAL NOT NULL, watched_seconds REAL NOT NULL, media_duration REAL,
-                background_seconds REAL NOT NULL DEFAULT 0
+                background_seconds REAL NOT NULL DEFAULT 0,
+                label TEXT, label_attempts INTEGER NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS views_started ON views(started_at);
             CREATE TABLE IF NOT EXISTS reasons (
@@ -125,11 +133,13 @@ public final class ContentStore {
                 at REAL NOT NULL, reason TEXT NOT NULL, site TEXT NOT NULL, session_minutes INTEGER NOT NULL
             );
             """)
-        // 升级旧数据库：第一版没有 background_seconds 列
+        // 升级旧数据库：补上后来加的列
         let columns = try query("PRAGMA table_info(views)", []) { Self.text($0, 1) ?? "" }
-        if !columns.contains("background_seconds") {
-            try exec("ALTER TABLE views ADD COLUMN background_seconds REAL NOT NULL DEFAULT 0")
+        for (name, type) in [("background_seconds", "REAL NOT NULL DEFAULT 0"), ("label", "TEXT"),
+                             ("label_attempts", "INTEGER NOT NULL DEFAULT 0")] where !columns.contains(name) {
+            try exec("ALTER TABLE views ADD COLUMN \(name) \(type)")
         }
+        try exec("CREATE INDEX IF NOT EXISTS views_url ON views(url)")
     }
 
     deinit {
@@ -161,21 +171,66 @@ public final class ContentStore {
     /// 时间范围内开始的观看，新的在前
     public func views(from: Date, to: Date) throws -> [ContentView] {
         try query("""
-            SELECT view_id, url, title, author, tags, description, kind, browser,
-                   started_at, ended_at, active_seconds, watched_seconds, media_duration, background_seconds
-            FROM views WHERE started_at >= ? AND started_at < ? ORDER BY started_at DESC
-            """, [from.timeIntervalSince1970, to.timeIntervalSince1970]) { s in
-            let tagsJSON = Self.text(s, 4) ?? "[]"
-            return ContentView(
-                viewId: Self.text(s, 0)!, url: Self.text(s, 1)!, title: Self.text(s, 2)!,
-                author: Self.text(s, 3),
-                tags: (try? JSONDecoder().decode([String].self, from: Data(tagsJSON.utf8))) ?? [],
-                description: Self.text(s, 5), kind: Self.text(s, 6)!, browser: Self.text(s, 7)!,
-                startedAt: sqlite3_column_double(s, 8), endedAt: sqlite3_column_double(s, 9),
-                activeSeconds: sqlite3_column_double(s, 10), watchedSeconds: sqlite3_column_double(s, 11),
-                backgroundSeconds: sqlite3_column_double(s, 13),
-                mediaDuration: sqlite3_column_type(s, 12) == SQLITE_NULL ? nil : sqlite3_column_double(s, 12))
-        }
+            SELECT \(Self.viewColumns) FROM views
+            WHERE started_at >= ? AND started_at < ? ORDER BY started_at DESC
+            """, [from.timeIntervalSince1970, to.timeIntervalSince1970], row: Self.viewRow)
+    }
+
+    private static func viewRow(_ s: OpaquePointer?) -> ContentView {
+        let tagsJSON = text(s, 4) ?? "[]"
+        return ContentView(
+            viewId: text(s, 0)!, url: text(s, 1)!, title: text(s, 2)!,
+            author: text(s, 3),
+            tags: (try? JSONDecoder().decode([String].self, from: Data(tagsJSON.utf8))) ?? [],
+            description: text(s, 5), kind: text(s, 6)!, browser: text(s, 7)!,
+            startedAt: sqlite3_column_double(s, 8), endedAt: sqlite3_column_double(s, 9),
+            activeSeconds: sqlite3_column_double(s, 10), watchedSeconds: sqlite3_column_double(s, 11),
+            backgroundSeconds: sqlite3_column_double(s, 13),
+            mediaDuration: sqlite3_column_type(s, 12) == SQLITE_NULL ? nil : sqlite3_column_double(s, 12))
+            .with(label: decodeLabel(text(s, 14)))
+    }
+
+    private static let viewColumns = """
+        view_id, url, title, author, tags, description, kind, browser,
+        started_at, ended_at, active_seconds, watched_seconds, media_duration, background_seconds, label
+        """
+
+    // MARK: - 大模型判断
+
+    /// 还没判断过、有标题、停留了一会儿、失败不到 3 次的观看，新的在前
+    public func unlabeledViews(limit: Int) throws -> [ContentView] {
+        try query("""
+            SELECT \(Self.viewColumns) FROM views
+            WHERE label IS NULL AND title != '' AND active_seconds >= 5 AND label_attempts < 3
+            ORDER BY started_at DESC LIMIT ?
+            """, [limit], row: Self.viewRow)
+    }
+
+    public func setLabel(viewId: String, label: ContentLabel) throws {
+        let json = String(data: try JSONEncoder().encode(label), encoding: .utf8)
+        try run("UPDATE views SET label = ? WHERE view_id = ?", [json, viewId])
+    }
+
+    public func markLabelAttempt(viewId: String) throws {
+        try run("UPDATE views SET label_attempts = label_attempts + 1 WHERE view_id = ?", [viewId])
+    }
+
+    /// 这个网址最近一次的判断（抖音信息流网址不变，取最新看的那个视频）
+    public func label(forURL url: String) throws -> ContentLabel? {
+        try query("SELECT label FROM views WHERE url = ? AND label IS NOT NULL ORDER BY started_at DESC LIMIT 1",
+                  [url]) { Self.decodeLabel(Self.text($0, 0)) }.first ?? nil
+    }
+
+    /// 同一条内容（网站 + 标题 + 作者相同）以前判断过，就直接复用，不再调用大模型
+    public func cachedLabel(for v: ContentView) throws -> ContentLabel? {
+        try query("""
+            SELECT label FROM views WHERE site = ? AND title = ? AND IFNULL(author, '') = ? AND label IS NOT NULL
+            ORDER BY started_at DESC LIMIT 1
+            """, [v.site, v.title, v.author ?? ""]) { Self.decodeLabel(Self.text($0, 0)) }.first ?? nil
+    }
+
+    private static func decodeLabel(_ json: String?) -> ContentLabel? {
+        json.flatMap { try? JSONDecoder().decode(ContentLabel.self, from: Data($0.utf8)) }
     }
 
     public func addReason(_ r: NudgeReason) throws {
@@ -237,5 +292,13 @@ public final class ContentStore {
 
     private static func text(_ stmt: OpaquePointer?, _ col: Int32) -> String? {
         sqlite3_column_text(stmt, col).map { String(cString: $0) }
+    }
+}
+
+extension ContentView {
+    func with(label: ContentLabel?) -> ContentView {
+        var copy = self
+        copy.label = label
+        return copy
     }
 }
