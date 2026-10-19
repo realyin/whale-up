@@ -10,6 +10,10 @@ MainActor.assumeIsolated {
         }
         exit(0)
     }
+    if let id = ProcessInfo.processInfo.environment["FOCUSGUARD_LIST_JUNK"] {
+        print("junk tabs:", ActivityMonitor().junkTabURLs(browser: id, config: Config.load().0))
+        exit(0)
+    }
     let app = NSApplication.shared
     let delegate = AppDelegate()
     app.delegate = delegate

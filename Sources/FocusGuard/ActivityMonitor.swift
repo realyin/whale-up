@@ -55,6 +55,74 @@ final class ActivityMonitor {
         return activity
     }
 
+    private static let browserNames: [String: String] = [
+        "com.apple.Safari": "Safari",
+        "com.google.Chrome": "Google Chrome",
+        "com.microsoft.edgemac": "Microsoft Edge",
+        "com.brave.Browser": "Brave Browser",
+        "company.thebrowser.Browser": "Arc",
+    ]
+
+    /// 关掉“没营养”的内容：浏览器里关掉所有命中规则的标签页，其他 App 直接退出。
+    /// 返回关掉的标签页数量（退出 App 时为 0）。
+    @discardableResult
+    func closeJunk(bundleID: String, config: Config) -> Int {
+        guard let browser = Self.browserNames[bundleID] else {
+            NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).forEach { $0.terminate() }
+            return 0
+        }
+
+        let junkURLs = junkTabURLs(browser: browser, config: config)
+        guard !junkURLs.isEmpty else { return 0 }
+
+        let list = junkURLs.map { "\"" + $0.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"") + "\"" }.joined(separator: ", ")
+        let close = """
+            set junkList to {\(list)}
+            tell application "\(browser)"
+                repeat with w in (every window)
+                    try
+                        set ts to tabs of w
+                        repeat with i from (count of ts) to 1 by -1
+                            try
+                                if junkList contains (URL of item i of ts as text) then close item i of ts
+                            end try
+                        end repeat
+                    end try
+                end repeat
+            end tell
+            """
+        var error: NSDictionary?
+        NSAppleScript(source: close)?.executeAndReturnError(&error)
+        if let error { NSLog("FocusGuard: 关闭 %@ 标签页失败 %@", browser, error) }
+        return error == nil ? junkURLs.count : 0
+    }
+
+    /// 浏览器里所有命中规则的标签页网址。在 Swift 里按规则精确匹配，避免误关 box.com 这类相似域名。
+    func junkTabURLs(browser: String, config: Config) -> [String] {
+        // 逐个窗口、逐个标签页取，某个窗口出错（比如没有标签页）不影响其他窗口
+        let source = """
+            set out to ""
+            tell application "\(browser)"
+                repeat with w in (every window)
+                    try
+                        repeat with t in (every tab of w)
+                            try
+                                set out to out & (URL of t) & linefeed
+                            end try
+                        end repeat
+                    end try
+                end repeat
+            end tell
+            return out
+            """
+        var error: NSDictionary?
+        let result = NSAppleScript(source: source)?.executeAndReturnError(&error)
+        if let error { NSLog("FocusGuard: 读取 %@ 标签页失败 %@", browser, error) }
+        return (result?.stringValue ?? "").components(separatedBy: "\n")
+            .filter { Classifier.junkSite(for: $0, config: config) != nil }
+    }
+
     /// 距离最后一次键盘/鼠标操作的秒数
     func idleSeconds() -> Double {
         CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)

@@ -30,6 +30,12 @@ final class ClassifierTests: XCTestCase {
         XCTAssertNotNil(Classifier.junkReason(for: a, config: config))
     }
 
+    func testJunkSiteFiltersTabsToClose() {
+        let tabs = ["https://www.bilibili.com/video/BV1", "https://github.com/", "https://www.box.com/", "about:blank"]
+        XCTAssertEqual(tabs.filter { Classifier.junkSite(for: $0, config: config) != nil },
+                       ["https://www.bilibili.com/video/BV1"])
+    }
+
     func testWorkAppIsNotJunk() {
         let a = Activity(appName: "Xcode", bundleID: "com.apple.dt.Xcode", url: nil, title: nil)
         XCTAssertNil(Classifier.junkReason(for: a, config: config))

@@ -10,13 +10,12 @@ final class NudgeWindow {
     var isVisible: Bool { panel?.isVisible ?? false }
 
     func show(_ text: NudgeText, isNight: Bool, snoozeMinutes: Int,
-              onRest: @escaping () -> Void, onSnooze: @escaping () -> Void, onSleep: @escaping () -> Void) {
+              onRest: @escaping () -> Void, onSnooze: @escaping () -> Void) {
         close()
         let view = NudgeView(
             text: text, isNight: isNight, snoozeMinutes: snoozeMinutes,
             onRest: { [weak self] in self?.close(); onRest() },
-            onSnooze: { [weak self] in self?.close(); onSnooze() },
-            onSleep: { [weak self] in self?.close(); onSleep() })
+            onSnooze: { [weak self] in self?.close(); onSnooze() })
 
         let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 420, height: 300),
                             styleMask: [.titled, .fullSizeContentView, .nonactivatingPanel],
@@ -44,7 +43,7 @@ final class NudgeWindow {
     /// 开发用：把弹窗画成 PNG，便于调整样式（不需要屏幕录制权限）
     static func renderPNG(_ text: NudgeText, isNight: Bool, to url: URL) {
         let view = NSHostingView(rootView: NudgeView(text: text, isNight: isNight, snoozeMinutes: 5,
-                                                     onRest: {}, onSnooze: {}, onSleep: {}))
+                                                     onRest: {}, onSnooze: {}))
         view.frame.size = view.fittingSize
         view.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
@@ -59,7 +58,6 @@ private struct NudgeView: View {
     let snoozeMinutes: Int
     let onRest: () -> Void
     let onSnooze: () -> Void
-    let onSleep: () -> Void
 
     var body: some View {
         VStack(spacing: 14) {
@@ -71,17 +69,11 @@ private struct NudgeView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             VStack(spacing: 8) {
-                if isNight {
-                    Button(action: onSleep) { Text("好，关屏去睡觉").frame(maxWidth: .infinity) }
-                        .keyboardShortcut(.defaultAction)
-                        .controlSize(.large)
-                    Button(action: onRest) { Text("先收起来").frame(maxWidth: .infinity) }
-                        .controlSize(.large)
-                } else {
-                    Button(action: onRest) { Text("好，我去休息一下").frame(maxWidth: .infinity) }
-                        .keyboardShortcut(.defaultAction)
-                        .controlSize(.large)
+                Button(action: onRest) {
+                    Text(isNight ? "好，关掉它去睡觉" : "好，关掉它休息一下").frame(maxWidth: .infinity)
                 }
+                .keyboardShortcut(.defaultAction)
+                .controlSize(.large)
                 Button("再刷 \(snoozeMinutes) 分钟", action: onSnooze)
                     .buttonStyle(.link)
                     .padding(.top, 2)

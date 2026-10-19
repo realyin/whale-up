@@ -23,10 +23,13 @@ public enum Classifier {
         for rule in config.junkApps where !rule.isEmpty {
             if name.contains(rule.lowercased()) || activity.bundleID == rule { return rule }
         }
-        if let urlString = activity.url, let url = URL(string: urlString), let host = url.host?.lowercased() {
-            for rule in config.junkSites where siteMatches(rule, host: host, path: url.path) { return rule }
-        }
-        return nil
+        return activity.url.flatMap { junkSite(for: $0, config: config) }
+    }
+
+    /// 网址命中的“没营养”网站规则；不命中返回 nil。
+    public static func junkSite(for urlString: String, config: Config) -> String? {
+        guard let url = URL(string: urlString), let host = url.host?.lowercased() else { return nil }
+        return config.junkSites.first { siteMatches($0, host: host, path: url.path) }
     }
 
     /// "youtube.com/shorts" 匹配 www.youtube.com 下 /shorts 开头的路径；

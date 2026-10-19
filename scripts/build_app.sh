@@ -31,6 +31,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-# 本地临时签名，系统权限（自动化）需要一个有效签名的 App
-codesign --force --sign - "$APP"
+# 签名。优先用本机的 Apple Development 证书：签名身份固定，重新编译后不用再次授权“控制浏览器”。
+# 没有证书时退回临时签名（每次编译后系统会重新询问授权）。
+IDENTITY="$(security find-identity -v -p codesigning | awk -F'"' '/Apple Development/ {print $2; exit}')"
+codesign --force --sign "${IDENTITY:--}" "$APP"
+echo "签名：${IDENTITY:-临时签名}"
 echo "已生成 $APP"

@@ -83,21 +83,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func showNudge(_ nudge: Nudge) {
         nudgeWindow.show(Messages.make(for: nudge), isNight: nudge.isNight, snoozeMinutes: Int(config.snoozeMinutes),
                          onRest: { [weak self] in self?.acceptRest() },
-                         onSnooze: {},
-                         onSleep: { [weak self] in
-                             self?.acceptRest()
-                             let p = Process()
-                             p.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
-                             p.arguments = ["displaysleepnow"]
-                             try? p.run()
-                         })
+                         onSnooze: {})
     }
 
+    /// 用户同意不刷了：关掉刚才在刷的网页（或退出那个 App），连续时长清零
     private func acceptRest() {
         tracker.acceptRest()
         saveTracker()
         if let id = nudgedBundleID {
-            NSRunningApplication.runningApplications(withBundleIdentifier: id).forEach { $0.hide() }
+            monitor.closeJunk(bundleID: id, config: config)
         }
         updateStatusTitle()
     }
