@@ -26,6 +26,8 @@ public struct LLMConfig: Codable, Equatable {
     public var enabled = false
     /// 你自己对“有营养 / 没营养”的看法，会写进提示词
     public var preferences = "学习、技术、编程、英语、知识科普、纪录片、新闻深度分析算有营养；娱乐八卦、搞笑段子、情感纠纷、无脑短剧、游戏直播切片、猎奇和吵架类内容算没营养。"
+    /// 劝导弹窗的文案由大模型结合此刻情况来写（失败或超时用固定文案）
+    public var smartNudges = true
     public var provider: LLMProvider = .anthropic
     /// 给单条内容打标签（量大，用小模型）
     public var taggingModel = "claude-haiku-5-5"
@@ -48,6 +50,7 @@ public struct LLMConfig: Codable, Equatable {
         let d = LLMConfig()
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? d.enabled
         preferences = try c.decodeIfPresent(String.self, forKey: .preferences) ?? d.preferences
+        smartNudges = try c.decodeIfPresent(Bool.self, forKey: .smartNudges) ?? d.smartNudges
         provider = try c.decodeIfPresent(LLMProvider.self, forKey: .provider) ?? d.provider
         taggingModel = try c.decodeIfPresent(String.self, forKey: .taggingModel) ?? d.taggingModel
         reportModel = try c.decodeIfPresent(String.self, forKey: .reportModel) ?? d.reportModel

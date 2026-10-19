@@ -150,7 +150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let nudge = tracker.record(isJunk: currentReason != nil, isIdle: idle, now: now, elapsed: elapsed,
                                        config: config, reason: currentReason ?? "",
                                        appName: current?.appName ?? "")
-            if let nudge, !nudgeWindow.isVisible {
+            if let nudge, !nudgeWindow.isVisible, !nudgePending {
                 nudgedBundleID = current?.bundleID
                 nudgedURL = current?.url
                 showNudge(nudge)
@@ -209,8 +209,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// 正在请大模型写劝导文案，期间不再触发新的弹窗
+    private var nudgePending = false
+
+    /// 弹出劝导：开启 AI 时先请大模型写文案（最多等 4 秒），否则或失败时用固定文案
     private func showNudge(_ nudge: Nudge) {
-        nudgeWindow.show(Messages.make(for: nudge), isNight: nudge.isNight, snoozeMinutes: Int(config.snoozeMinutes),
+        guard config.llm.enabled, config.llm.smartNudges, let store = contentStore else {
+            return presentNudge(nudge, text: Messages.make(for: nudge))
+        }
+        nudgePending = true
+        let llm = config.llm
+        let now = Date()
+        let recent = (try? store.views(from: now.addingTimeInterval(-45 * 60), to: now)) ?? []
+        let reasons = ((try? store.reasons(from: now.addingTimeInterval(-7 * 86400), to: now)) ?? []).map(\.reason)
+        let prompt = NudgePrompt.make(nudge: nudge, recentViews: recent, reasons: reasons,
+                                      outcomes: nudgeOutcomeSummary, hourMinute: now.formatted(date: .omitted, time: .shortened))
+        Task {
+            var text = Messages.make(for: nudge)
+            do {
+                let request = try LLMRequest.chat(NudgePrompt.spec(prompt, llm: llm), llm: llm,
+                                                  apiKey: APIKeyStore.get(llm.provider), timeout: 4)
+                let (data, _) = try await URLSession.shared.data(for: request)
+                text = try NudgePrompt.parse(data, provider: llm.provider)
+            } catch {
+                // 超时、断网、格式不对：用固定文案
+            }
+            nudgePending = false
+            presentNudge(nudge, text: text)
+        }
+    }
+
+    /// 以前劝导的效果，第 7 项填充
+    private var nudgeOutcomeSummary: String? { nil }
+
+    private func presentNudge(_ nudge: Nudge, text: NudgeText) {
+        nudgeWindow.show(text, isNight: nudge.isNight, snoozeMinutes: Int(config.snoozeMinutes),
                          onRest: { [weak self] in self?.acceptRest() },
                          onSnooze: {},
                          onReason: { [weak self] kind in

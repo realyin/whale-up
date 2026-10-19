@@ -56,6 +56,25 @@ MainActor.assumeIsolated {
         }
         RunLoop.main.run()
     }
+    if ProcessInfo.processInfo.environment["FOCUSGUARD_TEST_NUDGE"] != nil, let store = try? ContentStore() {
+        // 开发用：按最近 2 小时的记录写一条劝导文案
+        Task {
+            let llm = Config.load().0.llm
+            let now = Date()
+            let recent = (try? store.views(from: now.addingTimeInterval(-7200), to: now)) ?? []
+            let p = NudgePrompt.make(nudge: Nudge(reason: "youtube.com", appName: "Chrome", sessionMinutes: 25, todayMinutes: 60,
+                                                  isNight: true, count: 1),
+                                     recentViews: recent, reasons: [.tired], outcomes: nil, hourMinute: "00:40")
+            let started = Date()
+            do {
+                let req = try LLMRequest.chat(NudgePrompt.spec(p, llm: llm), llm: llm, apiKey: APIKeyStore.get(llm.provider), timeout: 4)
+                let (data, _) = try await URLSession.shared.data(for: req)
+                print(try NudgePrompt.parse(data, provider: llm.provider), String(format: "%.1fs", Date().timeIntervalSince(started)))
+            } catch { print("失败：\(error)", String(format: "%.1fs", Date().timeIntervalSince(started))) }
+            exit(0)
+        }
+        RunLoop.main.run()
+    }
     if let id = ProcessInfo.processInfo.environment["FOCUSGUARD_CLOSE_JUNK"] {
         print("closed:", ActivityMonitor().closeJunk(bundleID: id, nudgedURL: nil, rules: Config.load().0.junkSites))
         exit(0)

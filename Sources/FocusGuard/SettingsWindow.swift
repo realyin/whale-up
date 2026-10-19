@@ -392,6 +392,8 @@ struct AISettings: View {
                 if model.config.contentScope == .off {
                     Text("⚠️ 需要先在“内容记录”里开启记录，并安装 Chrome 扩展").foregroundStyle(.orange)
                 }
+                Toggle("劝导文案由大模型结合你正在看的内容来写", isOn: llm.smartNudges)
+                    .disabled(!model.config.llm.enabled)
                 Picker("每天几点自动写小结", selection: $model.config.digestHour) {
                     ForEach(17..<24, id: \.self) { Text("\($0):00").tag($0) }
                 }
