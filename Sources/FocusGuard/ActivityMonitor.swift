@@ -63,64 +63,73 @@ final class ActivityMonitor {
         "company.thebrowser.Browser": "Arc",
     ]
 
-    /// 关掉“没营养”的内容：浏览器里关掉所有命中规则的标签页，其他 App 直接退出。
-    /// 返回关掉的标签页数量（退出 App 时为 0）。
+    /// 关掉正在看的“没营养”页面：浏览器里只关当前这一个标签页，其他 App 直接退出。
+    /// nudgedURL 是弹窗出现时的网址；短视频网站划走后网址会变，所以优先看当前标签页。
     @discardableResult
-    func closeJunk(bundleID: String, config: Config) -> Int {
+    func closeJunk(bundleID: String, nudgedURL: String?, config: Config) -> Bool {
         guard let browser = Self.browserNames[bundleID] else {
             NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).forEach { $0.terminate() }
-            return 0
+            return true
+        }
+        let current = bundleID == "com.apple.Safari" ? "current tab" : "active tab"
+
+        // 1. 当前标签页还在没营养的网站上 → 关掉它
+        let active = run("""
+            tell application "\(browser)"
+                if (count of windows) is 0 then return ""
+                return URL of \(current) of front window
+            end tell
+            """)
+        if let url = active, Classifier.junkSite(for: url, config: config) != nil {
+            return run("""
+                tell application "\(browser)"
+                    set w to front window
+                    \(Self.closeOrBlank("\(current) of w"))
+                end tell
+                return "ok"
+                """) != nil
         }
 
-        let junkURLs = junkTabURLs(browser: browser, config: config)
-        guard !junkURLs.isEmpty else { return 0 }
-
-        let list = junkURLs.map { "\"" + $0.replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"") + "\"" }.joined(separator: ", ")
-        let close = """
-            set junkList to {\(list)}
-            tell application "\(browser)"
-                repeat with w in (every window)
-                    try
-                        set ts to tabs of w
-                        repeat with i from (count of ts) to 1 by -1
-                            try
-                                if junkList contains (URL of item i of ts as text) then close item i of ts
-                            end try
-                        end repeat
-                    end try
-                end repeat
-            end tell
-            """
-        var error: NSDictionary?
-        NSAppleScript(source: close)?.executeAndReturnError(&error)
-        if let error { NSLog("FocusGuard: 关闭 %@ 标签页失败 %@", browser, error) }
-        return error == nil ? junkURLs.count : 0
-    }
-
-    /// 浏览器里所有命中规则的标签页网址。在 Swift 里按规则精确匹配，避免误关 box.com 这类相似域名。
-    func junkTabURLs(browser: String, config: Config) -> [String] {
-        // 逐个窗口、逐个标签页取，某个窗口出错（比如没有标签页）不影响其他窗口
-        let source = """
-            set out to ""
+        // 2. 用户已经切到别的标签页 → 按弹窗时的网址找到那一个关掉
+        guard let target = nudgedURL else { return false }
+        let quoted = "\"" + target.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"") + "\""
+        return run("""
             tell application "\(browser)"
                 repeat with w in (every window)
                     try
                         repeat with t in (every tab of w)
-                            try
-                                set out to out & (URL of t) & linefeed
-                            end try
+                            if (URL of t as text) is \(quoted) then
+                                \(Self.closeOrBlank("t"))
+                                return "ok"
+                            end if
                         end repeat
                     end try
                 end repeat
             end tell
-            return out
-            """
+            return "notfound"
+            """) == "ok"
+    }
+
+    /// 窗口里只剩这一个标签页时改成空白页，避免整个窗口被关掉
+    private static func closeOrBlank(_ tab: String) -> String {
+        """
+        if (count of tabs of w) is 1 then
+            set URL of \(tab) to "about:blank"
+        else
+            close \(tab)
+        end if
+        """
+    }
+
+    private func run(_ source: String) -> String? {
         var error: NSDictionary?
         let result = NSAppleScript(source: source)?.executeAndReturnError(&error)
-        if let error { NSLog("FocusGuard: 读取 %@ 标签页失败 %@", browser, error) }
-        return (result?.stringValue ?? "").components(separatedBy: "\n")
-            .filter { Classifier.junkSite(for: $0, config: config) != nil }
+        if let error {
+            NSLog("FocusGuard: AppleScript 出错 %@", error)
+            return nil
+        }
+        return result?.stringValue
     }
 
     /// 距离最后一次键盘/鼠标操作的秒数

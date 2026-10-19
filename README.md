@@ -11,7 +11,7 @@
 
 连续刷满 **20 分钟**（夜间 23:00–6:00 为 **5 分钟**）就提醒：
 
-- 点“好，关掉它”：浏览器里**所有**命中规则的标签页都会被关掉（其他网页不受影响），如果是抖音这类 App 就直接退出
+- 点“好，关掉它”：只关掉**当前正在看**的那个网页，浏览器和其他标签页都不动（窗口里只剩这一页时变成空白页）；如果是抖音这类 App 就直接退出
 - 点“再刷 5 分钟”：5 分钟后还在刷会再提醒，语气会越来越认真
 
 键鼠 5 分钟没动算人不在，不计时；离开这些内容超过 5 分钟，连续时长清零。
@@ -49,7 +49,7 @@ open build/FocusGuard.app
 swift test                                   # 规则与计时逻辑的单元测试
 FOCUSGUARD_DEBUG=1 build/FocusGuard.app/Contents/MacOS/FocusGuard   # 在终端打印每次检测结果
 FOCUSGUARD_RENDER_NUDGE=/tmp build/FocusGuard.app/Contents/MacOS/FocusGuard  # 把弹窗渲染成 PNG
-FOCUSGUARD_LIST_JUNK=Safari build/FocusGuard.app/Contents/MacOS/FocusGuard   # 列出会被关掉的标签页（不真关）
+FOCUSGUARD_CLOSE_JUNK=com.google.Chrome build/FocusGuard.app/Contents/MacOS/FocusGuard  # 关掉当前标签页（若在没营养的网站上）
 ```
 
 代码结构：`Sources/FocusGuardCore` 是纯逻辑（分类、计时、文案），`Sources/FocusGuard` 是菜单栏 App（系统监测、弹窗）。

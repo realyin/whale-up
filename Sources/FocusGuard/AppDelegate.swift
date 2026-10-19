@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var pausedUntil: Date?
     /// 最近一次提醒时在前台的 App，点“去休息”时把它隐藏
     private var nudgedBundleID: String?
+    private var nudgedURL: String?
 
     private let debug = ProcessInfo.processInfo.environment["FOCUSGUARD_DEBUG"] != nil
 
@@ -74,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             if let nudge, !nudgeWindow.isVisible {
                 nudgedBundleID = current?.bundleID
+                nudgedURL = current?.url
                 showNudge(nudge)
             }
         }
@@ -91,7 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         tracker.acceptRest()
         saveTracker()
         if let id = nudgedBundleID {
-            monitor.closeJunk(bundleID: id, config: config)
+            monitor.closeJunk(bundleID: id, nudgedURL: nudgedURL, config: config)
         }
         updateStatusTitle()
     }
