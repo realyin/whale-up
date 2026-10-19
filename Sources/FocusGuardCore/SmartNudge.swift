@@ -16,6 +16,8 @@ public enum NudgePrompt {
             "正在 \(nudge.reason.isEmpty ? nudge.appName : nudge.reason) 上，已经连续 \(nudge.sessionMinutes) 分钟，今天累计 \(nudge.todayMinutes) 分钟没营养的内容。",
             "这是这一轮的第 \(nudge.count) 次提醒。",
         ]
+        if nudge.overBudget { lines.append("他给自己定的今日额度已经用完了。") }
+        if nudge.isWorkTime { lines.append("现在是他设定的工作时间，应该回到工作上。") }
         let junk = recentViews.filter { $0.label?.isJunk ?? true }
         if !junk.isEmpty {
             lines.append("刚才看的（最近的在前）：")

@@ -150,3 +150,73 @@ final class SiteRuleTests: XCTestCase {
         XCTAssertNil(Classifier.siteRule(from: "chrome://newtab/"))
     }
 }
+
+final class BudgetAndWorkTimeTests: XCTestCase {
+    let cal = Calendar(identifier: .gregorian)
+
+    /// 2026-10-20 是周二，10-24 是周六
+    func date(_ d: Int, _ h: Int, _ m: Int = 0) -> Date {
+        cal.date(from: DateComponents(year: 2026, month: 10, day: d, hour: h, minute: m))!
+    }
+
+    var config: Config = {
+        var c = Config()
+        c.workHoursEnabled = true
+        c.workStartHour = 9
+        c.workEndHour = 18
+        c.workLimitMinutes = 3
+        c.daytimeLimitMinutes = 20
+        return c
+    }()
+
+    func testWorkTimeOnlyOnWorkdaysWithinHours() {
+        XCTAssertTrue(config.isWorkTime(date(20, 10), calendar: cal))
+        XCTAssertFalse(config.isWorkTime(date(20, 19), calendar: cal))
+        XCTAssertFalse(config.isWorkTime(date(24, 10), calendar: cal), "周六不算")
+        var off = config
+        off.workHoursEnabled = false
+        XCTAssertFalse(off.isWorkTime(date(20, 10), calendar: cal))
+    }
+
+    func testWorkTimeUsesStricterLimit() {
+        XCTAssertEqual(config.limitSeconds(at: date(20, 10), calendar: cal), 180)
+        XCTAssertEqual(config.limitSeconds(at: date(20, 19), calendar: cal), 1200)
+    }
+
+    func testOverBudgetNudgesAfterOneMinute() {
+        var c = config
+        c.workHoursEnabled = false
+        c.dailyBudgetMinutes = 10
+        var t = Tracker()
+        var nudges: [Nudge] = []
+        // 白天刷 10 分钟（没到 20 分钟的连续提醒，但用完了额度），然后休息 10 分钟，再刷
+        for i in 1...10 {
+            if let n = t.record(isJunk: true, isIdle: false, now: date(20, 14, i), elapsed: 60, config: c, calendar: cal) { nudges.append(n) }
+        }
+        XCTAssertEqual(nudges.count, 1, "额度用完的那一刻提醒一次")
+        XCTAssertEqual(nudges.first?.overBudget, true)
+        let n = t.record(isJunk: true, isIdle: false, now: date(20, 14, 21), elapsed: 60, config: c, calendar: cal)
+        XCTAssertNotNil(n, "额度用完后，新一轮刷 1 分钟就提醒")
+        XCTAssertEqual(n?.overBudget, true)
+        XCTAssertTrue(Messages.make(for: n!).body.contains("额度"))
+    }
+
+    func testWorkTimeFlagOnNudge() {
+        var t = Tracker()
+        var last: Nudge?
+        for i in 1...3 {
+            last = t.record(isJunk: true, isIdle: false, now: date(20, 10, i), elapsed: 60, config: config, calendar: cal) ?? last
+        }
+        XCTAssertEqual(last?.isWorkTime, true)
+        XCTAssertTrue(Messages.make(for: last!).body.contains("工作"))
+    }
+
+    func testBudgetRemaining() {
+        var c = config
+        c.dailyBudgetMinutes = 30
+        XCTAssertEqual(c.budgetRemainingSeconds(usedToday: 600), 1200)
+        XCTAssertEqual(c.budgetRemainingSeconds(usedToday: 4000), 0)
+        c.dailyBudgetMinutes = 0
+        XCTAssertNil(c.budgetRemainingSeconds(usedToday: 600))
+    }
+}

@@ -211,7 +211,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case nil:
             break
         }
+
+        // 每日额度用完且设置了直接关闭：刷没营养的网页就关掉（10 秒内只关一次）
+        if config.budgetCloses, currentReason != nil, let activity = current, activity.url != nil,
+           config.budgetRemainingSeconds(usedToday: tracker.todaySeconds) == 0,
+           now.timeIntervalSince(lastBudgetCloseAt) > 10, let id = activity.bundleID {
+            lastBudgetCloseAt = now
+            if monitor.closeJunk(bundleID: id, nudgedURL: activity.url, rules: config.junkSites + config.forceCloseSites) {
+                nudgeWindow.close()
+                toast.show("⛽️ 今天 \(Int(config.dailyBudgetMinutes)) 分钟的额度用完了，已关掉 \(currentReason ?? "这个网页")")
+            }
+        }
     }
+
+    private var lastBudgetCloseAt = Date.distantPast
 
     /// 正在请大模型写劝导文案，期间不再触发新的弹窗
     private var nudgePending = false
@@ -352,6 +365,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         info("今天刷了 \(formatDuration(todayJunkSeconds))没营养的内容")
+        if let remaining = config.budgetRemainingSeconds(usedToday: tracker.todaySeconds) {
+            info(remaining > 0 ? "    今日额度还剩 \(formatDuration(remaining))（共 \(Int(config.dailyBudgetMinutes)) 分钟）"
+                               : "    ⛽️ 今日 \(Int(config.dailyBudgetMinutes)) 分钟额度已用完")
+        }
+        if config.isWorkTime(Date()) { info("    💼 工作时段：连续 \(Int(config.workLimitMinutes)) 分钟就提醒") }
         for item in todayJunkItems.prefix(3) {
             info("    \(item.name)  \(formatDuration(item.seconds))")
         }

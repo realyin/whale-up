@@ -248,6 +248,39 @@ struct ReminderSettings: View {
                     .labelsHidden().frame(width: 90)
                 }
             }
+            Section("每日额度") {
+                MinutesStepper(title: "每天没营养的内容最多", value: $config.dailyBudgetMinutes, range: 0...600, suffix: "分钟（0 = 不限）")
+                Toggle("额度用完后直接关掉没营养的网页（否则只提醒）", isOn: $config.budgetCloses)
+                    .disabled(config.dailyBudgetMinutes == 0)
+            }
+            Section("工作时段") {
+                Toggle("工作时段更严格", isOn: $config.workHoursEnabled)
+                if config.workHoursEnabled {
+                    HStack(spacing: 4) {
+                        ForEach([2, 3, 4, 5, 6, 7, 1], id: \.self) { day in
+                            Toggle(["", "日", "一", "二", "三", "四", "五", "六"][day], isOn: Binding(
+                                get: { config.workDays.contains(day) },
+                                set: { on in
+                                    if on { config.workDays.append(day) } else { config.workDays.removeAll { $0 == day } }
+                                    config.workDays.sort()
+                                }))
+                            .toggleStyle(.button)
+                        }
+                    }
+                    HStack {
+                        Picker("", selection: $config.workStartHour) {
+                            ForEach(0..<24, id: \.self) { Text("\($0):00").tag($0) }
+                        }
+                        .labelsHidden().frame(width: 90)
+                        Text("到")
+                        Picker("", selection: $config.workEndHour) {
+                            ForEach(1..<25, id: \.self) { Text("\($0):00").tag($0) }
+                        }
+                        .labelsHidden().frame(width: 90)
+                    }
+                    MinutesStepper(title: "工作时段连续刷", value: $config.workLimitMinutes, range: 1...60, suffix: "分钟就提醒")
+                }
+            }
             Section("其他") {
                 MinutesStepper(title: "点“再刷一会儿”后", value: $config.snoozeMinutes, range: 1...60, suffix: "分钟再提醒")
                 MinutesStepper(title: "离开超过", value: $config.sessionBreakMinutes, range: 1...60, suffix: "分钟，连续时长清零")

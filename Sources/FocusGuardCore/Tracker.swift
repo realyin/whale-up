@@ -9,14 +9,20 @@ public struct Nudge: Equatable {
     public var isNight: Bool
     /// 本次连续刷的过程中第几次提醒（用于语气逐步加重）
     public var count: Int
+    public var isWorkTime: Bool
+    /// 今天的额度已经用完
+    public var overBudget: Bool
 
-    public init(reason: String, appName: String, sessionMinutes: Int, todayMinutes: Int, isNight: Bool, count: Int) {
+    public init(reason: String, appName: String, sessionMinutes: Int, todayMinutes: Int, isNight: Bool, count: Int,
+                isWorkTime: Bool = false, overBudget: Bool = false) {
         self.reason = reason
         self.appName = appName
         self.sessionMinutes = sessionMinutes
         self.todayMinutes = todayMinutes
         self.isNight = isNight
         self.count = count
+        self.isWorkTime = isWorkTime
+        self.overBudget = overBudget
     }
 }
 
@@ -54,14 +60,19 @@ public struct Tracker: Codable, Equatable {
         todaySeconds += elapsed
         lastJunkAt = now
 
-        guard sessionSeconds >= config.limitSeconds(at: now, calendar: calendar) else { return nil }
+        let overBudget = config.budgetRemainingSeconds(usedToday: todaySeconds) == 0
+        // 额度用完后，再刷 1 分钟就提醒
+        let limit = overBudget ? min(60, config.limitSeconds(at: now, calendar: calendar))
+                               : config.limitSeconds(at: now, calendar: calendar)
+        guard sessionSeconds >= limit else { return nil }
         if let next = nextNudgeAllowedAt, now < next { return nil }
 
         nudgeCount += 1
         nextNudgeAllowedAt = now.addingTimeInterval(config.snoozeMinutes * 60)
         return Nudge(reason: reason, appName: appName,
                      sessionMinutes: Int(sessionSeconds / 60), todayMinutes: Int(todaySeconds / 60),
-                     isNight: config.isNight(now, calendar: calendar), count: nudgeCount)
+                     isNight: config.isNight(now, calendar: calendar), count: nudgeCount,
+                     isWorkTime: config.isWorkTime(now, calendar: calendar), overBudget: overBudget)
     }
 
     /// 用户接受了建议去休息：连续时长重新开始

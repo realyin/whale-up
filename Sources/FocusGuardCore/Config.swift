@@ -67,6 +67,16 @@ public struct Config: Codable, Equatable {
     /// 夜间时段 [nightStartHour, nightEndHour)，可跨零点
     public var nightStartHour: Int = 23
     public var nightEndHour: Int = 6
+    /// 工作时段：更严格，连续 workLimitMinutes 分钟就提醒。workDays 用 Calendar 的 weekday（1 = 周日，2 = 周一…）
+    public var workHoursEnabled = false
+    public var workDays = [2, 3, 4, 5, 6]
+    public var workStartHour = 9
+    public var workEndHour = 18
+    public var workLimitMinutes: Double = 3
+    /// 每天没营养内容的额度（分钟），0 = 不限。用完后再刷 1 分钟就提醒
+    public var dailyBudgetMinutes: Double = 0
+    /// 额度用完后直接关掉没营养的网页
+    public var budgetCloses = false
     /// 点了“再刷一会儿”后，多久再提醒
     public var snoozeMinutes: Double = 5
     /// 离开“没营养”内容超过这么久，连续时长清零
@@ -117,6 +127,13 @@ public struct Config: Codable, Equatable {
         sessionBreakMinutes = try c.decodeIfPresent(Double.self, forKey: .sessionBreakMinutes) ?? d.sessionBreakMinutes
         idleSeconds = try c.decodeIfPresent(Double.self, forKey: .idleSeconds) ?? d.idleSeconds
         checkIntervalSeconds = try c.decodeIfPresent(Double.self, forKey: .checkIntervalSeconds) ?? d.checkIntervalSeconds
+        workHoursEnabled = try c.decodeIfPresent(Bool.self, forKey: .workHoursEnabled) ?? d.workHoursEnabled
+        workDays = try c.decodeIfPresent([Int].self, forKey: .workDays) ?? d.workDays
+        workStartHour = try c.decodeIfPresent(Int.self, forKey: .workStartHour) ?? d.workStartHour
+        workEndHour = try c.decodeIfPresent(Int.self, forKey: .workEndHour) ?? d.workEndHour
+        workLimitMinutes = try c.decodeIfPresent(Double.self, forKey: .workLimitMinutes) ?? d.workLimitMinutes
+        dailyBudgetMinutes = try c.decodeIfPresent(Double.self, forKey: .dailyBudgetMinutes) ?? d.dailyBudgetMinutes
+        budgetCloses = try c.decodeIfPresent(Bool.self, forKey: .budgetCloses) ?? d.budgetCloses
         junkApps = try c.decodeIfPresent([String].self, forKey: .junkApps) ?? d.junkApps
         junkSites = try c.decodeIfPresent([String].self, forKey: .junkSites) ?? d.junkSites
         forceCloseEnabled = try c.decodeIfPresent(Bool.self, forKey: .forceCloseEnabled) ?? d.forceCloseEnabled
@@ -145,8 +162,21 @@ public struct Config: Codable, Equatable {
         return h >= nightStartHour || h < nightEndHour
     }
 
+    public func isWorkTime(_ date: Date, calendar: Calendar = .current) -> Bool {
+        guard workHoursEnabled, workDays.contains(calendar.component(.weekday, from: date)) else { return false }
+        let h = calendar.component(.hour, from: date)
+        return h >= workStartHour && h < workEndHour
+    }
+
     public func limitSeconds(at date: Date, calendar: Calendar = .current) -> Double {
-        (isNight(date, calendar: calendar) ? nightLimitMinutes : daytimeLimitMinutes) * 60
+        if isWorkTime(date, calendar: calendar) { return workLimitMinutes * 60 }
+        return (isNight(date, calendar: calendar) ? nightLimitMinutes : daytimeLimitMinutes) * 60
+    }
+
+    /// 今天还剩多少额度；没设额度时为 nil
+    public func budgetRemainingSeconds(usedToday: Double) -> Double? {
+        guard dailyBudgetMinutes > 0 else { return nil }
+        return max(0, dailyBudgetMinutes * 60 - usedToday)
     }
 
     // MARK: - 读写
