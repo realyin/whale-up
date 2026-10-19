@@ -40,6 +40,16 @@ open build/FocusGuard.app
 构建脚本会优先用本机的 Apple Development 证书签名，这样重新编译后不用再次授权。
 想开机自启：把 `FocusGuard.app` 拖进“应用程序”文件夹，再在菜单里勾选“开机自动启动”。
 
+## 统计
+
+菜单里直接显示今天刷没营养内容的总时长，以及最多的 3 个网站或 App。点“查看统计…”会打开统计窗口：
+
+- **最近 7 天**每天刷没营养内容的时长柱状图，点某根柱子可以看那天的明细
+- **每天明细**：每个网站 / App 用了多久，可以切换“没营养的 / 全部”。“全部”里也能看到电脑总使用时长
+- 网站按域名统计，命中规则的按规则统计（比如 `youtube.com/shorts` 和其他 YouTube 页面分开算）；其他程序按 App 名统计
+- 键鼠 5 分钟没动不计时。保留最近 30 天，数据存在 `~/Library/Application Support/FocusGuard/stats.json`，只在本机
+- 规则改了，历史数据会按新规则重新归类：比如把知乎加入没营养网站后，以前在知乎上的时间也会算进去
+
 ## 修改规则
 
 **最快的方法：** 在浏览器里打开想管的网站，点菜单栏 🌱 →“把 xxx.com 加入…”，再选“没营养网站”或“强制关闭网站”。
@@ -59,6 +69,7 @@ swift test                                   # 规则与计时逻辑的单元测
 FOCUSGUARD_DEBUG=1 build/FocusGuard.app/Contents/MacOS/FocusGuard   # 在终端打印每次检测结果
 FOCUSGUARD_RENDER_NUDGE=/tmp build/FocusGuard.app/Contents/MacOS/FocusGuard  # 把弹窗渲染成 PNG
 FOCUSGUARD_RENDER_SETTINGS=/tmp build/FocusGuard.app/Contents/MacOS/FocusGuard  # 把设置页渲染成 PNG
+FOCUSGUARD_RENDER_STATS=/tmp build/FocusGuard.app/Contents/MacOS/FocusGuard     # 用示例数据把统计页渲染成 PNG
 FOCUSGUARD_CLOSE_JUNK=com.google.Chrome build/FocusGuard.app/Contents/MacOS/FocusGuard  # 关掉当前标签页（若在没营养的网站上）
 ```
 

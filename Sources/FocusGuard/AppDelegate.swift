@@ -8,6 +8,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let nudgeWindow = NudgeWindow()
     private let toast = Toast()
     private var settings: SettingsWindow?
+    private var statsWindow: StatsWindow?
+    private var stats = UsageStats.load()
+    private var lastStatsSave = Date()
     /// 最近一次在浏览器里看到的网页，用于“把当前网页加入列表”
     private var lastBrowserURL: String?
     private var statusItem: NSStatusItem!
@@ -73,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             settings?.model.browserURL = url
         }
         let idle = monitor.idleSeconds() > config.idleSeconds
+        recordUsage(idle: idle, now: now, elapsed: elapsed)
 
         // 强制关闭不受“暂停”影响，否则一暂停就绕过去了
         enforce(idle: idle, now: now, elapsed: elapsed)
@@ -94,6 +98,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         updateStatusTitle()
     }
+
+    /// 统计每个网站 / App 的使用时长（人不在时不算）
+    private func recordUsage(idle: Bool, now: Date, elapsed: Double) {
+        if !idle, let activity = current,
+           activity.bundleID != Bundle.main.bundleIdentifier, activity.bundleID != "com.apple.loginwindow" {
+            stats.add(UsageStats.key(for: activity, config: config), seconds: elapsed, at: now)
+        }
+        if now.timeIntervalSince(lastStatsSave) >= 60 { saveStats() }
+    }
+
+    private func saveStats() {
+        stats.prune(keepingDays: 30, now: Date())
+        stats.save()
+        lastStatsSave = Date()
+        statsWindow?.model.stats = stats
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        saveStats()
+    }
+
+    /// 今天没营养内容的总时长（来自统计，规则改了会重新归类）
+    private var todayJunkItems: [UsageItem] { stats.items(on: Date(), config: config).filter(\.isJunk) }
+    private var todayJunkSeconds: Double { todayJunkItems.reduce(0) { $0 + $1.seconds } }
 
     /// 强制关闭模式：在指定网站上停留太久就直接关掉当前网页
     private func enforce(idle: Bool, now: Date, elapsed: Double) {
@@ -147,6 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         configModifiedAt = modificationDate(of: Config.fileURL)
         if timer != nil, config.checkIntervalSeconds != oldInterval { scheduleTimer() }
         settings?.model.replace(with: config)
+        statsWindow?.model.config = config
     }
 
     /// 设置页或菜单改了配置：保存并立即生效
@@ -158,6 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         configModifiedAt = modificationDate(of: Config.fileURL)
         if config.checkIntervalSeconds != oldInterval { scheduleTimer() }
         settings?.model.replace(with: config)
+        statsWindow?.model.config = config
     }
 
     /// 用户保存配置文件后自动生效，无需重启
@@ -172,7 +202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - 菜单栏
 
     private func updateStatusTitle() {
-        let minutes = Int(tracker.todaySeconds / 60)
+        let minutes = Int(todayJunkSeconds / 60)
         let icon: String
         if pausedUntil != nil { icon = "⏸" }
         else if currentReason != nil { icon = "👀" }
@@ -195,7 +225,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return item
         }
 
-        info("今天刷了 \(Int(tracker.todaySeconds / 60)) 分钟没营养的内容")
+        info("今天刷了 \(formatDuration(todayJunkSeconds))没营养的内容")
+        for item in todayJunkItems.prefix(3) {
+            info("    \(item.name)  \(formatDuration(item.seconds))")
+        }
+        _ = action("查看统计…", #selector(openStats))
         if let until = pausedUntil {
             info("已暂停，\(until.formatted(date: .omitted, time: .shortened)) 恢复")
         } else if let reason = currentReason {
@@ -279,6 +313,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         nudgedBundleID = nil
         showNudge(Nudge(reason: "douyin.com", appName: "预览", sessionMinutes: Int(config.limitSeconds(at: Date()) / 60),
                         todayMinutes: Int(tracker.todaySeconds / 60) + 30, isNight: night, count: 1))
+    }
+
+    @objc private func openStats() {
+        saveStats()
+        if statsWindow == nil {
+            statsWindow = StatsWindow(model: StatsModel(stats: stats, config: config))
+        }
+        statsWindow?.model.stats = stats
+        statsWindow?.show()
     }
 
     @objc private func openSettings() {
