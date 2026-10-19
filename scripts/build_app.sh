@@ -10,6 +10,8 @@ APP=build/FocusGuard.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp "$BIN" "$APP/Contents/MacOS/FocusGuard"
+mkdir -p "$APP/Contents/Resources"
+cp -R extension/chrome "$APP/Contents/Resources/ChromeExtension"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

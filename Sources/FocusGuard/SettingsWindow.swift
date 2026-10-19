@@ -10,6 +10,9 @@ final class SettingsModel: ObservableObject {
     }
     /// 最近一次在浏览器里看到的网址，用于“从浏览器添加”
     @Published var browserURL: String?
+    /// 浏览器扩展最近一次上报的时间
+    @Published var extensionLastSeen: Date?
+    @Published var serverError: String?
     private let onChange: (Config) -> Void
     private var replacing = false
 
@@ -27,7 +30,7 @@ final class SettingsModel: ObservableObject {
 }
 
 enum SettingsTab: String, CaseIterable {
-    case sites = "网站", apps = "App", force = "强制关闭", reminders = "提醒"
+    case sites = "网站", apps = "App", force = "强制关闭", reminders = "提醒", content = "内容记录"
 }
 
 @MainActor
@@ -97,6 +100,8 @@ struct SettingsView: View {
                     ForceSettings(config: $model.config, browserURL: model.browserURL)
                 case .reminders:
                     ReminderSettings(config: $model.config)
+                case .content:
+                    ContentSettings(model: model)
                 }
             }
             .padding(.horizontal, 20)
@@ -262,6 +267,99 @@ struct MinutesStepper: View {
                 .multilineTextAlignment(.trailing)
             Stepper("", value: $value, in: range, step: 1).labelsHidden()
             Text(suffix)
+        }
+    }
+}
+
+struct ContentSettings: View {
+    @ObservedObject var model: SettingsModel
+
+    private static let scopeNotes: [ContentScope: (String, String)] = [
+        .junk: ("只记录没营养网站", "没营养网站和强制关闭网站上看的内容会被记下来，其他网页一律不记。"),
+        .all: ("记录所有网页", "所有网页的标题、作者、标签和停留时长都会记下来，分析会更全面。"),
+        .off: ("不记录", "只统计时长，不记录看了什么。"),
+    ]
+
+    private var extensionFolder: URL? {
+        FileManager.default.fileExists(atPath: ExtensionFiles.folder.path) ? ExtensionFiles.folder : nil
+    }
+
+    var body: some View {
+        Form {
+            Section("记录哪些网页的内容") {
+                Picker("", selection: $model.config.contentScope) {
+                    ForEach([ContentScope.junk, .all, .off], id: \.self) { scope in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(Self.scopeNotes[scope]!.0)
+                            Text(Self.scopeNotes[scope]!.1).font(.caption).foregroundStyle(.secondary)
+                        }
+                        .tag(scope)
+                    }
+                }
+                .pickerStyle(.radioGroup)
+                .labelsHidden()
+                Text("记录的是标题、作者、标签、简介和观看时长，不录屏、不读正文。只保存在这台电脑上。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section("Chrome 扩展") {
+                HStack(spacing: 6) {
+                    Circle().fill(model.extensionLastSeen == nil ? Color.secondary : Color.green).frame(width: 8, height: 8)
+                    if let seen = model.extensionLastSeen {
+                        Text("已连接，最后一次收到数据：\(seen.formatted(.relative(presentation: .named)))")
+                    } else {
+                        Text("还没收到扩展的数据")
+                    }
+                }
+                if let error = model.serverError {
+                    Text("⚠️ \(error)").foregroundStyle(.red)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("安装方法（只需一次）：").bold()
+                    Text("1. 点下面的“打开扩展文件夹”")
+                    Text("2. 点“打开 Chrome 扩展页”，打开右上角的“开发者模式”")
+                    Text("3. 点“加载已解压的扩展程序”，选中刚才那个文件夹")
+                    Text("App 更新后，在 Chrome 扩展页点一下扩展上的刷新按钮即可。").foregroundStyle(.secondary)
+                }
+                .font(.callout)
+                HStack {
+                    if let folder = extensionFolder {
+                        Button("打开扩展文件夹") { NSWorkspace.shared.activateFileViewerSelecting([folder]) }
+                    }
+                    Button("打开 Chrome 扩展页") {
+                        if let chrome = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.google.Chrome") {
+                            NSWorkspace.shared.open([URL(string: "chrome://extensions")!], withApplicationAt: chrome,
+                                                    configuration: NSWorkspace.OpenConfiguration())
+                        }
+                    }
+                }
+            }
+
+            Section("大模型分析") {
+                Text("下一阶段开放：可选择 Anthropic / OpenAI 兼容接口 / 本地 Ollama，以及打标签和写报告分别用的模型。")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// 浏览器扩展放在固定位置，App 挪动或重新编译后 Chrome 仍能找到
+enum ExtensionFiles {
+    static var folder: URL {
+        Config.fileURL.deletingLastPathComponent().appendingPathComponent("ChromeExtension")
+    }
+
+    /// 启动时把 App 里带的扩展复制过去（覆盖旧版本）
+    static func install() {
+        guard let source = Bundle.main.resourceURL?.appendingPathComponent("ChromeExtension"),
+              FileManager.default.fileExists(atPath: source.path) else { return }
+        let fm = FileManager.default
+        try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        for name in (try? fm.contentsOfDirectory(atPath: source.path)) ?? [] {
+            let target = folder.appendingPathComponent(name)
+            try? fm.removeItem(at: target)
+            try? fm.copyItem(at: source.appendingPathComponent(name), to: target)
         }
     }
 }

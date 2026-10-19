@@ -10,12 +10,14 @@ final class NudgeWindow {
     var isVisible: Bool { panel?.isVisible ?? false }
 
     func show(_ text: NudgeText, isNight: Bool, snoozeMinutes: Int,
-              onRest: @escaping () -> Void, onSnooze: @escaping () -> Void) {
+              onRest: @escaping () -> Void, onSnooze: @escaping () -> Void,
+              onReason: @escaping (ReasonKind) -> Void = { _ in }) {
         close()
         let view = NudgeView(
             text: text, isNight: isNight, snoozeMinutes: snoozeMinutes,
             onRest: { [weak self] in self?.close(); onRest() },
-            onSnooze: { [weak self] in self?.close(); onSnooze() })
+            onSnooze: { [weak self] in self?.close(); onSnooze() },
+            onReason: onReason)
 
         let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 420, height: 300),
                             styleMask: [.titled, .fullSizeContentView, .nonactivatingPanel],
@@ -43,7 +45,7 @@ final class NudgeWindow {
     /// 开发用：把弹窗画成 PNG，便于调整样式（不需要屏幕录制权限）
     static func renderPNG(_ text: NudgeText, isNight: Bool, to url: URL) {
         let view = NSHostingView(rootView: NudgeView(text: text, isNight: isNight, snoozeMinutes: 5,
-                                                     onRest: {}, onSnooze: {}))
+                                                     onRest: {}, onSnooze: {}, onReason: { _ in }))
         view.frame.size = view.fittingSize
         view.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
@@ -58,6 +60,8 @@ private struct NudgeView: View {
     let snoozeMinutes: Int
     let onRest: () -> Void
     let onSnooze: () -> Void
+    let onReason: (ReasonKind) -> Void
+    @State private var reason: ReasonKind?
 
     var body: some View {
         VStack(spacing: 14) {
@@ -68,6 +72,23 @@ private struct NudgeView: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            VStack(spacing: 6) {
+                Text(reason == nil ? "为什么在刷？点一下就好" : "记下了，谢谢 🙏")
+                    .font(.caption).foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    ForEach(ReasonKind.allCases, id: \.self) { kind in
+                        Button(kind.label) {
+                            if reason == nil { onReason(kind) }
+                            reason = kind
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .tint(reason == kind ? .accentColor : nil)
+                        .disabled(reason != nil && reason != kind)
+                    }
+                }
+            }
+            .padding(.top, 2)
             VStack(spacing: 8) {
                 Button(action: onRest) {
                     Text(isNight ? "好，关掉它去睡觉" : "好，关掉它休息一下").frame(maxWidth: .infinity)

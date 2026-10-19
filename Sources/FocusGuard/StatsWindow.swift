@@ -7,6 +7,9 @@ import FocusGuardCore
 final class StatsModel: ObservableObject {
     @Published var stats: UsageStats
     @Published var config: Config
+    var contentStore: ContentStore?
+    /// 有新的观看记录时 +1，让内容列表刷新
+    @Published var contentVersion = 0
 
     init(stats: UsageStats, config: Config) {
         self.stats = stats
@@ -62,6 +65,7 @@ struct StatsView: View {
     @State var junkOnly = true
     @State private var selectedDay = Calendar.current.startOfDay(for: Date())
     @State private var hoveredDay: Date?
+    @State private var showContent = false
 
     private let calendar = Calendar.current
     private var today: Date { calendar.startOfDay(for: Date()) }
@@ -71,10 +75,20 @@ struct StatsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            weekChart
-            Divider()
-            dayHeader
-            dayList
+            Picker("", selection: $showContent) {
+                Text("时长统计").tag(false)
+                Text("看过的内容").tag(true)
+            }
+            .pickerStyle(.segmented).labelsHidden()
+            if showContent {
+                dayNavigator
+                ContentList(model: model, day: selectedDay)
+            } else {
+                weekChart
+                Divider()
+                dayHeader
+                dayList
+            }
         }
         .padding(20)
         .frame(width: 520, height: 640)
@@ -136,14 +150,21 @@ struct StatsView: View {
 
     // MARK: 某一天明细
 
+    private var dayNavigator: some View {
+        HStack {
+            Button { shiftDay(-1) } label: { Image(systemName: "chevron.left") }
+                .disabled(selectedDay <= calendar.date(byAdding: .day, value: -29, to: today)!)
+            Text(dayTitle(selectedDay)).font(.headline).frame(minWidth: 120)
+            Button { shiftDay(1) } label: { Image(systemName: "chevron.right") }
+                .disabled(selectedDay >= today)
+        }
+        .buttonStyle(.borderless)
+    }
+
     private var dayHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Button { shiftDay(-1) } label: { Image(systemName: "chevron.left") }
-                    .disabled(selectedDay <= calendar.date(byAdding: .day, value: -29, to: today)!)
-                Text(dayTitle(selectedDay)).font(.headline).frame(minWidth: 120)
-                Button { shiftDay(1) } label: { Image(systemName: "chevron.right") }
-                    .disabled(selectedDay >= today)
+                dayNavigator
                 Spacer()
                 Picker("", selection: $junkOnly) {
                     Text("没营养的").tag(true)
@@ -223,5 +244,74 @@ private struct UsageRow: View {
             .frame(height: 6)
             .padding(.leading, 22)
         }
+    }
+}
+
+/// 某一天看过的视频 / 网页（来自浏览器扩展），以及劝导时记录的原因
+private struct ContentList: View {
+    @ObservedObject var model: StatsModel
+    let day: Date
+
+    private var range: (Date, Date) { (day, Calendar.current.date(byAdding: .day, value: 1, to: day)!) }
+    private var views: [ContentView] {
+        _ = model.contentVersion
+        return (try? model.contentStore?.views(from: range.0, to: range.1)) ?? []
+    }
+    private var reasons: [NudgeReason] {
+        (try? model.contentStore?.reasons(from: range.0, to: range.1)) ?? []
+    }
+
+    var body: some View {
+        let views = self.views
+        let reasons = self.reasons
+        VStack(alignment: .leading, spacing: 10) {
+            let total = views.reduce(0) { $0 + $1.activeSeconds }
+            Text("\(views.count) 条 · 共 \(formatDuration(total))").font(.callout).foregroundStyle(.secondary)
+            if !reasons.isEmpty {
+                let counts = Dictionary(grouping: reasons, by: \.reason).mapValues(\.count)
+                Text("你说刷的原因：" + ReasonKind.allCases.compactMap { k in counts[k].map { "\(k.label) ×\($0)" } }.joined(separator: "  "))
+                    .font(.callout)
+            }
+            if views.isEmpty {
+                VStack(spacing: 6) {
+                    Spacer()
+                    Text("这一天没有内容记录").foregroundStyle(.secondary)
+                    Text("需要先安装 Chrome 扩展：菜单 → 设置… → 内容记录").font(.caption).foregroundStyle(.tertiary)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity)
+            } else {
+                List(views, id: \.viewId) { v in ContentRow(view: v) }
+                    .listStyle(.inset(alternatesRowBackgrounds: true))
+            }
+        }
+    }
+}
+
+private struct ContentRow: View {
+    let view: ContentView
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(Date(timeIntervalSince1970: view.startedAt).formatted(date: .omitted, time: .shortened))
+                .monospacedDigit().foregroundStyle(.secondary).frame(width: 44, alignment: .leading)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(view.title.isEmpty ? view.url : view.title).lineLimit(2)
+                Text([view.site, view.author].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.caption).foregroundStyle(.secondary)
+                if !view.tags.isEmpty {
+                    Text(view.tags.prefix(6).map { "#" + $0 }.joined(separator: " "))
+                        .font(.caption).foregroundStyle(.tertiary).lineLimit(1)
+                }
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(view.activeSeconds < 60 ? "\(Int(view.activeSeconds)) 秒" : formatDuration(view.activeSeconds)).monospacedDigit()
+                if let d = view.mediaDuration, d > 0, view.kind == "video" {
+                    Text("看了 \(min(100, Int(view.watchedSeconds / d * 100)))%").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.vertical, 2)
     }
 }

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+  body { font: 13px -apple-system, system-ui, sans-serif; width: 260px; margin: 14px; color: #222; }
+  h1 { font-size: 14px; margin: 0 0 10px; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #bbb; flex: none; }
+  .ok .dot { background: #2fb344; }
+  .bad .dot { background: #d63939; }
+  .muted { color: #777; font-size: 12px; line-height: 1.5; }
+  @media (prefers-color-scheme: dark) { body { background: #222; color: #eee; } .muted { color: #aaa; } }
+</style>
+</head>
+<body>
+  <h1>🌱 专注守护</h1>
+  <div id="status" class="row"><span class="dot"></span><span id="text">正在连接本机 App…</span></div>
+  <p id="scope" class="muted"></p>
+  <p class="muted">记录范围在 App 菜单“设置… → 内容记录”里修改。数据只保存在这台电脑上。</p>
+  <script src="popup.js"></script>
+</body>
+</html>

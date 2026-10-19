@@ -11,6 +11,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statsWindow: StatsWindow?
     private var stats = UsageStats.load()
     private var lastStatsSave = Date()
+    /// 看过的内容和劝导原因（本地 SQLite）
+    private let contentStore = try? ContentStore()
+    private var server: LocalServer?
     /// 最近一次在浏览器里看到的网页，用于“把当前网页加入列表”
     private var lastBrowserURL: String?
     private var statusItem: NSStatusItem!
@@ -48,8 +51,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.delegate = self
         statusItem.menu = menu
 
+        ExtensionFiles.install()
+        startServer()
+        try? contentStore?.prune(before: Date().addingTimeInterval(-90 * 86400))
+
         scheduleTimer()
         tick()
+    }
+
+    /// 接收浏览器扩展上报的观看记录，按“内容记录范围”过滤后存库
+    private func startServer() {
+        server = LocalServer(
+            onViews: { [weak self] views in
+                guard let self, let store = self.contentStore else { return }
+                for v in views where self.config.shouldRecordContent(url: v.url) {
+                    try? store.upsert(v)
+                }
+                self.settings?.model.extensionLastSeen = Date()
+                self.statsWindow?.model.contentVersion += 1
+            },
+            status: { [weak self] in
+                guard let self else { return [:] }
+                let today = Calendar.current.startOfDay(for: Date())
+                let count = (try? self.contentStore?.views(from: today, to: today.addingTimeInterval(86400)))??.count ?? 0
+                return ["ok": true, "scope": self.config.contentScope.rawValue, "todayViews": count]
+            })
+        server?.start()
     }
 
     // MARK: - 检测循环
@@ -145,7 +172,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func showNudge(_ nudge: Nudge) {
         nudgeWindow.show(Messages.make(for: nudge), isNight: nudge.isNight, snoozeMinutes: Int(config.snoozeMinutes),
                          onRest: { [weak self] in self?.acceptRest() },
-                         onSnooze: {})
+                         onSnooze: {},
+                         onReason: { [weak self] kind in
+                             try? self?.contentStore?.addReason(
+                                 NudgeReason(at: Date(), reason: kind, site: nudge.reason, sessionMinutes: nudge.sessionMinutes))
+                         })
     }
 
     /// 用户同意不刷了：关掉刚才在刷的网页（或退出那个 App），连续时长清零
@@ -318,7 +349,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func openStats() {
         saveStats()
         if statsWindow == nil {
-            statsWindow = StatsWindow(model: StatsModel(stats: stats, config: config))
+            let model = StatsModel(stats: stats, config: config)
+            model.contentStore = contentStore
+            statsWindow = StatsWindow(model: model)
         }
         statsWindow?.model.stats = stats
         statsWindow?.show()
@@ -328,6 +361,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if settings == nil {
             let model = SettingsModel(config: config) { [weak self] in self?.applyConfig($0) }
             model.browserURL = lastBrowserURL
+            model.extensionLastSeen = server?.lastReportAt
+            model.serverError = server?.error ?? (contentStore == nil ? "内容数据库打开失败" : nil)
             settings = SettingsWindow(model: model)
         }
         settings?.show()

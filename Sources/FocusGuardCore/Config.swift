@@ -1,5 +1,52 @@
 import Foundation
 
+/// 记录哪些网页的内容（标题、作者、标签、观看时长）用于分析
+public enum ContentScope: String, Codable, CaseIterable {
+    /// 不记录
+    case off
+    /// 只记录没营养网站和强制关闭网站
+    case junk
+    /// 记录所有网页
+    case all
+}
+
+public enum LLMProvider: String, Codable, CaseIterable {
+    case anthropic
+    /// 任何兼容 OpenAI Chat Completions 的接口
+    case openai
+    /// 本机 Ollama，内容不出电脑
+    case ollama
+}
+
+/// 大模型设置。API Key 存钥匙串，不在这里。
+public struct LLMConfig: Codable, Equatable {
+    public var provider: LLMProvider = .anthropic
+    /// 给单条内容打标签（量大，用小模型）
+    public var taggingModel = "claude-haiku-5-5"
+    /// 写日报 / 周报（用强模型）
+    public var reportModel = "claude-opus-5-5"
+    /// 留空用服务商默认地址
+    public var baseURL = ""
+
+    public init() {}
+
+    public init(provider: LLMProvider, taggingModel: String, reportModel: String, baseURL: String) {
+        self.provider = provider
+        self.taggingModel = taggingModel
+        self.reportModel = reportModel
+        self.baseURL = baseURL
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = LLMConfig()
+        provider = try c.decodeIfPresent(LLMProvider.self, forKey: .provider) ?? d.provider
+        taggingModel = try c.decodeIfPresent(String.self, forKey: .taggingModel) ?? d.taggingModel
+        reportModel = try c.decodeIfPresent(String.self, forKey: .reportModel) ?? d.reportModel
+        baseURL = try c.decodeIfPresent(String.self, forKey: .baseURL) ?? d.baseURL
+    }
+}
+
 /// 用户可编辑的规则，保存在 ~/Library/Application Support/FocusGuard/config.json。
 /// 缺少的字段使用默认值，方便只改自己关心的几项。
 public struct Config: Codable, Equatable {
@@ -35,6 +82,11 @@ public struct Config: Codable, Equatable {
         "douyin.com", "kuaishou.com", "bilibili.com", "tiktok.com", "youtube.com/shorts",
     ]
 
+    /// 内容记录范围
+    public var contentScope: ContentScope = .junk
+    /// 大模型（第 2 阶段起使用）
+    public var llm = LLMConfig()
+
     public init() {}
 
     public init(from decoder: Decoder) throws {
@@ -54,6 +106,17 @@ public struct Config: Codable, Equatable {
         forceCloseMinutes = try c.decodeIfPresent(Double.self, forKey: .forceCloseMinutes) ?? d.forceCloseMinutes
         forceCloseCooldownMinutes = try c.decodeIfPresent(Double.self, forKey: .forceCloseCooldownMinutes) ?? d.forceCloseCooldownMinutes
         forceCloseSites = try c.decodeIfPresent([String].self, forKey: .forceCloseSites) ?? d.forceCloseSites
+        contentScope = try c.decodeIfPresent(ContentScope.self, forKey: .contentScope) ?? d.contentScope
+        llm = try c.decodeIfPresent(LLMConfig.self, forKey: .llm) ?? d.llm
+    }
+
+    /// 这个网页的内容要不要记录下来
+    public func shouldRecordContent(url: String) -> Bool {
+        switch contentScope {
+        case .off: return false
+        case .all: return Classifier.siteRule(from: url) != nil
+        case .junk: return Classifier.matchSite(url, rules: junkSites + forceCloseSites) != nil
+        }
     }
 
     public func isNight(_ date: Date, calendar: Calendar = .current) -> Bool {
