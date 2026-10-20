@@ -9,7 +9,10 @@ final class StatsModel: ObservableObject {
     @Published var config: Config
     var contentStore: ContentStore?
     var digestWriter: DigestWriter?
-    @Published var mode: StatsMode = .time
+    @Published var mode: StatsMode = .timeline
+    /// 删除某一天 / 某个网站的全部记录（由 AppDelegate 处理，同时清掉时长统计）
+    var deleteDay: (Date) -> Void = { _ in }
+    var deleteSite: (String) -> Void = { _ in }
     /// 有新的观看记录时 +1，让内容列表刷新
     @Published var contentVersion = 0
 
@@ -20,7 +23,7 @@ final class StatsModel: ObservableObject {
 }
 
 enum StatsMode: String, CaseIterable {
-    case time = "时长统计", content = "看过的内容", digest = "每日小结"
+    case timeline = "时间线", time = "时长统计", content = "看过的内容", digest = "每日小结"
 }
 
 @MainActor
@@ -84,7 +87,10 @@ struct StatsView: View {
                 ForEach(StatsMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented).labelsHidden()
-            if model.mode == .content {
+            if model.mode == .timeline {
+                dayNavigator
+                TimelinePage(model: model, day: selectedDay)
+            } else if model.mode == .content {
                 dayNavigator
                 ContentList(model: model, day: selectedDay)
             } else if model.mode == .digest {
@@ -98,7 +104,7 @@ struct StatsView: View {
             }
         }
         .padding(20)
-        .frame(width: 520, height: 640)
+        .frame(width: 560, height: 680)
     }
 
     // MARK: 最近 7 天
@@ -288,7 +294,11 @@ private struct ContentList: View {
                 }
                 .frame(maxWidth: .infinity)
             } else {
-                List(views, id: \.viewId) { v in ContentRow(view: v) }
+                List(views, id: \.viewId) { v in
+                    ContentRow(view: v).contextMenu {
+                        Button("删除 \(v.site) 的所有记录…") { confirmDeleteSite(v.site, model: model) }
+                    }
+                }
                     .listStyle(.inset(alternatesRowBackgrounds: true))
             }
         }
@@ -425,5 +435,171 @@ struct MarkdownBlock: View {
 
     private func inline(_ s: String) -> AttributedString {
         (try? AttributedString(markdown: s)) ?? AttributedString(s)
+    }
+}
+
+/// 有营养 / 没营养的颜色（色盲友好的蓝 / 橙，分别适配浅色和深色）
+enum NutritionColor {
+    static let good = Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        ? NSColor(srgbRed: 0x39 / 255, green: 0x87 / 255, blue: 0xe5 / 255, alpha: 1)
+        : NSColor(srgbRed: 0x2a / 255, green: 0x78 / 255, blue: 0xd6 / 255, alpha: 1) })
+    static let junk = Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        ? NSColor(srgbRed: 0xd9 / 255, green: 0x59 / 255, blue: 0x26 / 255, alpha: 1)
+        : NSColor(srgbRed: 0xeb / 255, green: 0x68 / 255, blue: 0x34 / 255, alpha: 1) })
+}
+
+@MainActor
+func confirmDeleteSite(_ site: String, model: StatsModel) {
+    let alert = NSAlert()
+    alert.messageText = "删除 \(site) 的所有记录？"
+    alert.informativeText = "所有日子里在这个网站上的观看记录和时长统计都会删除，不能恢复。"
+    alert.addButton(withTitle: "删除")
+    alert.addButton(withTitle: "取消")
+    alert.buttons.first?.hasDestructiveAction = true
+    if alert.runModal() == .alertFirstButtonReturn { model.deleteSite(site) }
+}
+
+/// 时间线：一天 24 小时的分布 + 按时间排列的浏览段落
+private struct TimelinePage: View {
+    @ObservedObject var model: StatsModel
+    let day: Date
+    @State private var hovered: Int?
+    @State private var expanded: Set<String> = []
+
+    var body: some View {
+        let _ = model.contentVersion
+        let end = Calendar.current.date(byAdding: .day, value: 1, to: day)!
+        let views = (try? model.contentStore?.views(from: day, to: end)) ?? []
+        let timeline = Timeline.build(views: views, config: model.config)
+        let junk = timeline.sessions.reduce(0) { $0 + $1.junkSeconds }
+        let total = timeline.sessions.reduce(0) { $0 + $1.activeSeconds }
+
+        VStack(alignment: .leading, spacing: 10) {
+            if views.isEmpty {
+                Spacer()
+                VStack(spacing: 6) {
+                    Text("这一天没有浏览记录").foregroundStyle(.secondary)
+                    Text("想看到所有网页的时间线：设置… → 内容记录 → 记录所有网页").font(.caption).foregroundStyle(.tertiary)
+                }
+                .frame(maxWidth: .infinity)
+                Spacer()
+            } else {
+                hourChart(timeline.hours)
+                Text(summary(hovered.map { timeline.hours[$0] }, junk: junk, total: total, count: timeline.sessions.count))
+                    .font(.callout).foregroundStyle(.secondary)
+                List {
+                    ForEach(timeline.sessions) { session in
+                        sessionRow(session)
+                            .contextMenu {
+                                Button("删除 \(session.site) 的所有记录…") { confirmDeleteSite(session.site, model: model) }
+                            }
+                    }
+                }
+                .listStyle(.inset)
+                HStack {
+                    Spacer()
+                    Button("删除这一天的全部记录…", role: .destructive) { confirmDeleteDay() }
+                        .buttonStyle(.link).font(.caption)
+                }
+            }
+        }
+    }
+
+    private func hourChart(_ hours: [HourBucket]) -> some View {
+        Chart {
+            ForEach(hours) { h in
+                BarMark(x: .value("小时", Double(h.hour)), y: .value("分钟", h.goodSeconds / 60), width: 10)
+                    .foregroundStyle(by: .value("类型", "🥦 有营养"))
+                BarMark(x: .value("小时", Double(h.hour)), y: .value("分钟", h.junkSeconds / 60), width: 10)
+                    .foregroundStyle(by: .value("类型", "🍟 没营养"))
+            }
+            if let hovered {
+                RuleMark(x: .value("小时", Double(hovered))).foregroundStyle(.quaternary)
+            }
+        }
+        .chartForegroundStyleScale(["🥦 有营养": NutritionColor.good, "🍟 没营养": NutritionColor.junk])
+        .chartLegend(position: .top, alignment: .leading)
+        .chartXScale(domain: -0.5...23.5)
+        .chartXAxis {
+            AxisMarks(values: [0.0, 6, 12, 18]) { v in
+                AxisValueLabel { if let h = v.as(Double.self) { Text("\(Int(h)) 点") } }
+            }
+        }
+        .chartYAxis {
+            AxisMarks(position: .leading) { v in
+                AxisGridLine().foregroundStyle(.quaternary)
+                AxisValueLabel { if let m = v.as(Double.self) { Text("\(Int(m))′") } }
+            }
+        }
+        .chartOverlay { proxy in
+            GeometryReader { geo in
+                Rectangle().fill(.clear).contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active(let p):
+                            let x = p.x - geo[proxy.plotAreaFrame].origin.x
+                            if let h: Double = proxy.value(atX: x) { hovered = min(23, max(0, Int(h.rounded()))) }
+                        case .ended:
+                            hovered = nil
+                        }
+                    }
+            }
+        }
+        .frame(height: 130)
+    }
+
+    private func summary(_ hour: HourBucket?, junk: Double, total: Double, count: Int) -> String {
+        if let h = hour {
+            return "\(h.hour) 点：没营养 \(formatDuration(h.junkSeconds))，有营养 \(formatDuration(h.goodSeconds))"
+        }
+        return "\(count) 段 · 没营养 \(formatDuration(junk)) · 有营养 \(formatDuration(total - junk))"
+    }
+
+    private func sessionRow(_ s: TimelineSession) -> some View {
+        let isOpen = expanded.contains(s.id)
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 10) {
+                Text(timeRange(s)).monospacedDigit().foregroundStyle(.secondary).frame(width: 92, alignment: .leading)
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(s.isJunk ? NutritionColor.junk : NutritionColor.good)
+                    .frame(width: 4)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(s.isJunk ? "🍟" : "🥦")
+                        Text(s.site).bold()
+                        Text(s.items.count > 1 ? "\(s.items.count) 条 · \(formatDuration(s.activeSeconds))" : formatDuration(s.activeSeconds))
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(s.items.prefix(isOpen ? s.items.count : 2).map(\.title).joined(separator: isOpen ? "\n" : " / "))
+                        .font(.callout).lineLimit(isOpen ? nil : 1).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if s.items.count > 2 {
+                    Button(isOpen ? "收起" : "展开") {
+                        if isOpen { expanded.remove(s.id) } else { expanded.insert(s.id) }
+                    }
+                    .buttonStyle(.link).font(.caption)
+                }
+            }
+        }
+        .padding(.vertical, 3)
+    }
+
+    private func timeRange(_ s: TimelineSession) -> String {
+        let f = { (t: Double) -> String in
+            let c = Calendar.current.dateComponents([.hour, .minute], from: Date(timeIntervalSince1970: t))
+            return String(format: "%02d:%02d", c.hour!, c.minute!)
+        }
+        return f(s.start) == f(s.end) ? f(s.start) : "\(f(s.start))–\(f(s.end))"
+    }
+
+    private func confirmDeleteDay() {
+        let alert = NSAlert()
+        alert.messageText = "删除这一天的全部记录？"
+        alert.informativeText = "看过的内容、劝导记录、小结和时长统计都会删除，不能恢复。（已经写进 Obsidian 的笔记不会删）"
+        alert.addButton(withTitle: "删除")
+        alert.addButton(withTitle: "取消")
+        alert.buttons.first?.hasDestructiveAction = true
+        if alert.runModal() == .alertFirstButtonReturn { model.deleteDay(day) }
     }
 }

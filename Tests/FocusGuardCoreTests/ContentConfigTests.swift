@@ -28,11 +28,36 @@ final class ContentConfigTests: XCTestCase {
         XCTAssertFalse(c.shouldRecordContent(url: "https://www.bilibili.com/"))
     }
 
+    func testSensitiveSitesAreNeverRecordedEvenWithScopeAll() {
+        var c = Config()
+        c.contentScope = .all
+        XCTAssertFalse(c.shouldRecordContent(url: "https://mybank.icbc.com.cn/icbc/perbank/index.jsp"))
+        XCTAssertFalse(c.shouldRecordContent(url: "https://mail.google.com/mail/u/0/#inbox"))
+        XCTAssertFalse(c.shouldRecordContent(url: "https://www.haodf.com/doctor/1.html"))
+        XCTAssertFalse(c.shouldRecordContent(url: "https://etax.chinatax.gov.cn/"))
+        XCTAssertTrue(c.shouldRecordContent(url: "https://www.google.com/search?q=swift"), "只排除邮箱，不排除 Google 搜索")
+        XCTAssertTrue(c.isSensitive(url: "https://www.alipay.com/"))
+    }
+
+    func testSensitiveBeatsJunkList() {
+        var c = Config()
+        c.sensitiveSites.append("bilibili.com")
+        XCTAssertFalse(c.shouldRecordContent(url: "https://www.bilibili.com/video/BV1"))
+    }
+
+    func testSensitiveSitesHiddenInUsageStats() {
+        var c = Config()
+        c.contentScope = .all
+        let bank = Activity(appName: "Safari", bundleID: "com.apple.Safari", url: "https://www.cmbchina.com/personal")
+        XCTAssertEqual(UsageStats.key(for: bank, config: c), "site:" + UsageStats.sensitiveName)
+    }
+
     func testOldConfigFileWithoutNewFieldsStillLoads() throws {
         let c = try JSONDecoder().decode(Config.self, from: Data(#"{"daytimeLimitMinutes": 15}"#.utf8))
         XCTAssertEqual(c.daytimeLimitMinutes, 15)
         XCTAssertEqual(c.contentScope, .junk)
         XCTAssertEqual(c.llm, LLMConfig())
+        XCTAssertFalse(c.sensitiveSites.isEmpty)
     }
 
     func testLLMConfigRoundTrips() throws {

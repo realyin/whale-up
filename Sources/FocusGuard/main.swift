@@ -35,7 +35,35 @@ MainActor.assumeIsolated {
                 stats.add(key, seconds: m * 60, at: Calendar.current.date(byAdding: .day, value: i - 6, to: Date())!)
             }
         }
-        let model = StatsModel(stats: stats, config: Config())
+        var demoConfig = Config()
+        demoConfig.llm.enabled = true
+        let model = StatsModel(stats: stats, config: demoConfig)
+        // 时间线用临时数据库里的示例记录
+        let demoPath = NSTemporaryDirectory() + "fg-demo-\(UUID().uuidString).sqlite"
+        if let store = try? ContentStore(path: demoPath) {
+            let today = Calendar.current.startOfDay(for: Date())
+            let demo: [(Int, Int, String, String, Double, Bool, String)] = [
+                (9, 10, "bilibili.com", "Swift 并发编程入门", 18, false, "技术"),
+                (12, 30, "douyin.com", "这也太好笑了吧 #沙雕", 1, true, "搞笑"),
+                (12, 31, "douyin.com", "猫咪的迷惑行为 #萌宠", 1, true, "萌宠"),
+                (12, 33, "douyin.com", "第275集：#末日求生", 3, true, "影视"),
+                (20, 0, "youtube.com", "纪录片：人类的起源", 25, false, "知识科普"),
+                (23, 5, "douyin.com", "沙雕合集 #搞笑", 12, true, "搞笑"),
+                (23, 18, "douyin.com", "情侣吵架名场面", 8, true, "情感"),
+            ]
+            for (i, d) in demo.enumerated() {
+                let start = today.addingTimeInterval(Double(d.0 * 3600 + d.1 * 60)).timeIntervalSince1970
+                var v = ContentView(viewId: "demo\(i)", url: "https://www.\(d.2)/\(i)", title: d.3, kind: "video",
+                                    startedAt: start, endedAt: start + d.4 * 60, activeSeconds: d.4 * 60)
+                try? store.upsert(v)
+                v.label = ContentLabel(isJunk: d.5, nutrition: d.5 ? 1 : 4, category: d.6, reason: "", model: "m")
+                try? store.setLabel(viewId: v.viewId, label: v.label!)
+            }
+            model.contentStore = store
+            model.mode = .timeline
+            StatsWindow.renderPNG(model: model, junkOnly: true, to: URL(fileURLWithPath: dir).appendingPathComponent("stats-timeline.png"))
+            model.mode = .time
+        }
         StatsWindow.renderPNG(model: model, junkOnly: true, to: URL(fileURLWithPath: dir).appendingPathComponent("stats-junk.png"))
         StatsWindow.renderPNG(model: model, junkOnly: false, to: URL(fileURLWithPath: dir).appendingPathComponent("stats-all.png"))
         exit(0)

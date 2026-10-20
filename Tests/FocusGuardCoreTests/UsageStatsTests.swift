@@ -74,6 +74,17 @@ final class UsageStatsTests: XCTestCase {
         XCTAssertEqual(totals.map(\.seconds), [120, 0, 600])
     }
 
+    func testRemoveDayAndSite() {
+        var s = UsageStats()
+        s.add("site:bilibili.com", seconds: 60, at: date(day: 20), calendar: cal)
+        s.add("site:bilibili.com · 有营养", seconds: 60, at: date(day: 19), calendar: cal)
+        s.add("site:zhihu.com", seconds: 60, at: date(day: 19), calendar: cal)
+        s.removeDay(date(day: 20), calendar: cal)
+        XCTAssertTrue(s.items(on: date(day: 20), config: config, calendar: cal).isEmpty)
+        s.removeSite("bilibili.com")
+        XCTAssertEqual(s.items(on: date(day: 19), config: config, calendar: cal).map(\.name), ["zhihu.com"])
+    }
+
     func testPruneDropsOldDays() {
         var s = UsageStats()
         s.add("site:a.com", seconds: 1, at: date(day: 1), calendar: cal)

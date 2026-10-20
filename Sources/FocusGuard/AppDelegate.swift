@@ -481,6 +481,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         todayMinutes: Int(tracker.todaySeconds / 60) + 30, isNight: night, count: 1))
     }
 
+    private func deleteDay(_ day: Date) {
+        let start = Calendar.current.startOfDay(for: day)
+        let end = Calendar.current.date(byAdding: .day, value: 1, to: start)!
+        try? contentStore?.deleteDay(from: start, to: end, dayKey: DayKey.string(start))
+        stats.removeDay(start)
+        saveStats()
+        statsWindow?.model.contentVersion += 1
+    }
+
+    private func deleteSite(_ site: String) {
+        try? contentStore?.deleteSite(site)
+        stats.removeSite(site)
+        saveStats()
+        statsWindow?.model.contentVersion += 1
+    }
+
     @objc private func openDigest() {
         openStats()
         statsWindow?.model.mode = .digest
@@ -492,6 +508,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let model = StatsModel(stats: stats, config: config)
             model.contentStore = contentStore
             model.digestWriter = digestWriter
+            model.deleteDay = { [weak self] day in self?.deleteDay(day) }
+            model.deleteSite = { [weak self] site in self?.deleteSite(site) }
             statsWindow = StatsWindow(model: model)
         }
         statsWindow?.model.stats = stats

@@ -271,6 +271,22 @@ public final class ContentStore {
         }.first
     }
 
+    // MARK: - 删除
+
+    /// 删除某一天的全部记录：看过的内容、原因、劝导、小结
+    public func deleteDay(from: Date, to: Date, dayKey: String) throws {
+        let range: [Any?] = [from.timeIntervalSince1970, to.timeIntervalSince1970]
+        try run("DELETE FROM views WHERE started_at >= ? AND started_at < ?", range)
+        try run("DELETE FROM reasons WHERE at >= ? AND at < ?", range)
+        try run("DELETE FROM nudges WHERE at >= ? AND at < ?", range)
+        try run("DELETE FROM digests WHERE day = ?", [dayKey])
+    }
+
+    /// 删除某个网站的全部观看记录
+    public func deleteSite(_ site: String) throws {
+        try run("DELETE FROM views WHERE site = ?", [site])
+    }
+
     public func prune(before date: Date) throws {
         try run("DELETE FROM views WHERE started_at < ?", [date.timeIntervalSince1970])
         try run("DELETE FROM reasons WHERE at < ?", [date.timeIntervalSince1970])

@@ -173,6 +173,29 @@ final class ContentStoreTests: XCTestCase {
         XCTAssertNil(NudgeRecord.summary([]))
     }
 
+    func testDeleteDayRemovesEverythingFromThatDay() throws {
+        try store.upsert(view("a", at: 1000))
+        try store.upsert(view("b", at: 90_000))
+        try store.addReason(NudgeReason(at: Date(timeIntervalSince1970: 1500), reason: .bored, site: "x", sessionMinutes: 1))
+        try store.addNudge(NudgeRecord(at: Date(timeIntervalSince1970: 1500), site: "x", sessionMinutes: 1, isNight: false,
+                                       byAI: false, title: "t", body: "b"))
+        try store.saveDigest(Digest(day: "1970-01-01", text: "x", model: "m"))
+        try store.deleteDay(from: Date(timeIntervalSince1970: 0), to: Date(timeIntervalSince1970: 86_400), dayKey: "1970-01-01")
+        XCTAssertEqual(try store.views(from: .distantPast, to: .distantFuture).map(\.viewId), ["b"])
+        XCTAssertTrue(try store.reasons(from: .distantPast, to: .distantFuture).isEmpty)
+        XCTAssertTrue(try store.nudges(from: .distantPast, to: .distantFuture).isEmpty)
+        XCTAssertNil(try store.digest(day: "1970-01-01"))
+    }
+
+    func testDeleteSiteRemovesOnlyThatSite() throws {
+        try store.upsert(view("a", at: 1000))
+        var other = view("z", at: 2000)
+        other.url = "https://www.zhihu.com/question/1"
+        try store.upsert(other)
+        try store.deleteSite("bilibili.com")
+        XCTAssertEqual(try store.views(from: .distantPast, to: .distantFuture).map(\.viewId), ["z"])
+    }
+
     func testReasonsAreStored() throws {
         try store.addReason(NudgeReason(at: Date(timeIntervalSince1970: 1000), reason: .tired, site: "bilibili.com", sessionMinutes: 20))
         let r = try store.reasons(from: .distantPast, to: .distantFuture)

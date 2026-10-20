@@ -344,6 +344,14 @@ struct ContentSettings: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
 
+            Section("永不记录的网站") {
+                RuleListEditor(
+                    note: "银行、支付、邮箱、医疗、政务等网站：连标题都不记，时长统计里只显示为“🔒 隐私网站”。",
+                    placeholder: "输入网址或域名",
+                    rules: $model.config.sensitiveSites, browserURL: model.browserURL, isSite: true)
+                    .frame(height: 220)
+            }
+
             Section("Chrome 扩展") {
                 HStack(spacing: 6) {
                     Circle().fill(model.extensionLastSeen == nil ? Color.secondary : Color.green).frame(width: 8, height: 8)

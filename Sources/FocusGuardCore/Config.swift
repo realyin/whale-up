@@ -110,6 +110,16 @@ public struct Config: Codable, Equatable {
 
     /// 内容记录范围
     public var contentScope: ContentScope = .junk
+    /// 永不记录的敏感网站（银行、支付、邮箱、医疗、政务、密码管理）：连标题都不记，时长统计里也不显示网站名
+    public var sensitiveSites: [String] = [
+        "icbc.com.cn", "ccb.com", "abchina.com", "boc.cn", "bankcomm.com", "cmbchina.com", "psbc.com",
+        "citicbank.com", "spdb.com.cn", "cib.com.cn", "cebbank.com", "pingan.com", "webank.com",
+        "alipay.com", "paypal.com", "pay.weixin.qq.com",
+        "mail.google.com", "mail.qq.com", "exmail.qq.com", "mail.163.com", "mail.126.com",
+        "outlook.live.com", "outlook.office.com", "icloud.com",
+        "haodf.com", "guahao.com", "dxy.com", "chunyuyisheng.com",
+        "gov.cn", "1password.com", "bitwarden.com",
+    ]
     /// 大模型
     public var llm = LLMConfig()
     /// 每天几点自动写当天的小结（需要开启 AI 判断）
@@ -149,6 +159,7 @@ public struct Config: Codable, Equatable {
         forceCloseCooldownMinutes = try c.decodeIfPresent(Double.self, forKey: .forceCloseCooldownMinutes) ?? d.forceCloseCooldownMinutes
         forceCloseSites = try c.decodeIfPresent([String].self, forKey: .forceCloseSites) ?? d.forceCloseSites
         contentScope = try c.decodeIfPresent(ContentScope.self, forKey: .contentScope) ?? d.contentScope
+        sensitiveSites = try c.decodeIfPresent([String].self, forKey: .sensitiveSites) ?? d.sensitiveSites
         llm = try c.decodeIfPresent(LLMConfig.self, forKey: .llm) ?? d.llm
         digestHour = try c.decodeIfPresent(Int.self, forKey: .digestHour) ?? d.digestHour
         writeToObsidian = try c.decodeIfPresent(Bool.self, forKey: .writeToObsidian) ?? d.writeToObsidian
@@ -157,11 +168,16 @@ public struct Config: Codable, Equatable {
 
     /// 这个网页的内容要不要记录下来
     public func shouldRecordContent(url: String) -> Bool {
+        if isSensitive(url: url) { return false }
         switch contentScope {
         case .off: return false
         case .all: return Classifier.siteRule(from: url) != nil
         case .junk: return Classifier.matchSite(url, rules: junkSites + forceCloseSites) != nil
         }
+    }
+
+    public func isSensitive(url: String) -> Bool {
+        Classifier.matchSite(url, rules: sensitiveSites) != nil
     }
 
     public func isNight(_ date: Date, calendar: Calendar = .current) -> Bool {

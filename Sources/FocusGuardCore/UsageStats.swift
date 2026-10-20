@@ -30,8 +30,12 @@ public struct UsageStats: Codable, Equatable {
 
     /// 当前活动记在哪个名目下：浏览器记网站（命中规则时用规则本身，如 youtube.com/shorts），其他记 App 名。
     /// 开启 AI 判断时：名单内但被判有营养的记为“xx · 有营养”，名单外但被判没营养的记为“xx · 没营养”。
+    /// 敏感网站在时长统计里统一显示成这个名字
+    public static let sensitiveName = "🔒 隐私网站"
+
     public static func key(for activity: Activity, config: Config, label: ContentLabel? = nil) -> String {
         var key = "app:" + activity.appName
+        if let url = activity.url, config.isSensitive(url: url) { return "site:" + sensitiveName }
         if let url = activity.url {
             if let rule = Classifier.matchSite(url, rules: config.junkSites + config.forceCloseSites) {
                 key = "site:" + rule
@@ -71,6 +75,20 @@ public struct UsageStats: Codable, Equatable {
             let total = items(on: day, config: config, calendar: calendar)
                 .filter(\.isJunk).reduce(0) { $0 + $1.seconds }
             return DayTotal(day: day, seconds: total)
+        }
+    }
+
+    public mutating func removeDay(_ date: Date, calendar: Calendar = .current) {
+        days[Self.dayKey(date, calendar)] = nil
+    }
+
+    /// 删掉某个网站在所有日子里的时长（包括“· 有营养 / · 没营养”分开记的部分）
+    public mutating func removeSite(_ site: String) {
+        let base = "site:" + site
+        for (day, entries) in days {
+            days[day] = entries.filter { key, _ in
+                !(key == base || key == base + Self.nutritiousSuffix || key == base + Self.junkSuffix)
+            }
         }
     }
 
