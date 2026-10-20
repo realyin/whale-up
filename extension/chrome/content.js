@@ -273,7 +273,9 @@
       const sub = await bilibiliSubtitle();
       if (sub && sub.length > 50) return { ...base, text: sub.slice(0, MAX_TEXT), textKind: "subtitle" };
     }
-    if (!video) {
+    // 只有视频网站按视频处理（用简介）；其他网站即使有背景视频，也先读正文
+    const videoSite = /(^|\.)(bilibili|youtube|douyin|kuaishou|tiktok|ixigua|youku|iqiyi|v\.qq)\.com$/.test(location.hostname);
+    if (!videoSite || !video) {
       const text = mainText();
       if (text) return { ...base, text: text.slice(0, MAX_TEXT), textKind: "article" };
     }

@@ -19,7 +19,7 @@ const KINDS = { subtitle: "字幕", article: "正文", description: "简介", no
 const favButton = document.getElementById("fav");
 const favStatus = document.getElementById("favStatus");
 // 弹窗文件每次从磁盘读，后台脚本却要在扩展页点“刷新”才会更新：版本对不上时提示
-const EXPECTED_VERSION = "0.2.1";
+const EXPECTED_VERSION = "0.2.2";
 if (chrome.runtime.getManifest().version !== EXPECTED_VERSION) {
   favButton.disabled = true;
   favStatus.textContent = "扩展有更新：请打开 chrome://extensions，在“专注守护”上点刷新按钮。";
