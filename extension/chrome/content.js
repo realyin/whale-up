@@ -98,6 +98,9 @@
         d.title = nearText(video, ['[data-e2e="video-desc"]']);
         d.author = nearText(video, ['[data-e2e="feed-video-nickname"]', '[data-e2e="video-author-title"]']);
       }
+      // 去掉“展开 / 收起”按钮的文字和作者名前的 @
+      d.title = d.title.replace(/\s*(展开|收起)\s*$/, "");
+      d.author = d.author.replace(/^@/, "");
       d.tags = (d.title.match(/#[^\s#]+/g) || []).map((t) => t.slice(1));
     } else if (host.endsWith("youtube.com")) {
       d.title = text("ytd-reel-video-renderer[is-active] h2") || text("h1.ytd-watch-metadata");

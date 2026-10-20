@@ -63,7 +63,7 @@
 
 **Safari：** 运行 `./scripts/build_safari.sh`，然后在 Safari →设置→扩展 里勾选“FocusGuard Safari Extension”并允许访问网站。
 
-已实测：B 站、YouTube 视频页（标题、作者、标签、时长）。抖音用通用规则提取，需要在登录状态下实际验证。
+已实测：B 站、YouTube、抖音（标题、作者、标签、时长，抖音信息流里每个视频单独一条）。
 
 ## AI 判断有没有营养
 
@@ -131,6 +131,5 @@ FOCUSGUARD_WRITE_WEEKLY=1 build/FocusGuard.app/Contents/MacOS/FocusGuard  # 立�
 ## 已知限制
 
 - Firefox 不支持读取网址，只能按 App 判断
-- 抖音网页的提取规则还没在登录状态下实测
 - AI 判断、小结只覆盖装了扩展的浏览器；抖音等桌面 App 只按名字判断
 - 手机还没有，见 [路线图](docs/roadmap.md)
