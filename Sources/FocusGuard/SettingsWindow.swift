@@ -15,6 +15,8 @@ final class SettingsModel: ObservableObject {
     @Published var serverError: String?
     /// 大模型判断的最近状态
     @Published var labelerStatus: String?
+    /// 当前显示的设置分组
+    @Published var tab: SettingsTab = .sites
     private let onChange: (Config) -> Void
     private var replacing = false
 
@@ -36,32 +38,13 @@ enum SettingsTab: String, CaseIterable {
 }
 
 @MainActor
-final class SettingsWindow {
-    let model: SettingsModel
-    private var window: NSWindow?
-
-    init(model: SettingsModel) {
-        self.model = model
-    }
-
-    func show(tab: SettingsTab = .sites) {
-        if window == nil {
-            let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(model: model, tab: tab)))
-            window.title = "专注守护 设置"
-            window.styleMask = [.titled, .closable, .miniaturizable]
-            window.isReleasedWhenClosed = false
-            window.center()
-            self.window = window
-        }
-        NSApp.activate(ignoringOtherApps: true)
-        window?.makeKeyAndOrderFront(nil)
-    }
-
-    /// 开发用：把某个标签页画成 PNG
+enum SettingsWindow {
+    /// 开发用：把某个设置分组画成 PNG
     static func renderPNG(model: SettingsModel, tab: SettingsTab, to url: URL) {
-        let view = NSHostingView(rootView: SettingsView(model: model, tab: tab))
+        model.tab = tab
+        let view = NSHostingView(rootView: SettingsView(model: model, tab: tab).frame(width: 760, height: 680))
         // 列表是系统表格控件，要放进窗口并跑一下布局才画得出来
-        let window = NSWindow(contentRect: NSRect(origin: .zero, size: view.fittingSize),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 680),
                               styleMask: [.titled], backing: .buffered, defer: false)
         window.contentView = view
         RunLoop.main.run(until: Date().addingTimeInterval(0.5))
@@ -74,20 +57,27 @@ final class SettingsWindow {
 
 struct SettingsView: View {
     @ObservedObject var model: SettingsModel
-    @State var tab: SettingsTab
+    var tab: SettingsTab = .sites
+    var embedded = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            Picker("", selection: $tab) {
-                ForEach(SettingsTab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("设置").font(.system(size: 22, weight: .semibold))
+                Spacer()
+                Picker("", selection: $model.tab) {
+                    ForEach(SettingsTab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 520)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding([.horizontal, .top], 20)
+            .padding(.horizontal, 32)
+            .padding(.top, 20)
             .padding(.bottom, 12)
 
             Group {
-                switch tab {
+                switch model.tab {
                 case .sites:
                     RuleListEditor(
                         note: "在这些网站上连续刷太久，会弹窗劝你休息。",
@@ -108,7 +98,8 @@ struct SettingsView: View {
                     AISettings(model: model)
                 }
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, 32)
+            .frame(maxWidth: 840, alignment: .leading)
 
             HStack {
                 Text("改动会立即生效").font(.caption).foregroundStyle(.secondary)
@@ -121,9 +112,10 @@ struct SettingsView: View {
                 .buttonStyle(.link)
                 .font(.caption)
             }
-            .padding(20)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 14)
         }
-        .frame(width: 560, height: 560)
+        .onAppear { if !embedded { model.tab = tab } }
     }
 }
 

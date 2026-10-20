@@ -155,6 +155,15 @@ public struct WeeklyReport: Codable, Equatable {
     public var alternative: String
     public var commitment: String
 
+    public init(headline: String, patterns: [String], cause: String, actions: [String], alternative: String, commitment: String) {
+        self.headline = headline
+        self.patterns = patterns
+        self.cause = cause
+        self.actions = actions
+        self.alternative = alternative
+        self.commitment = commitment
+    }
+
     public static let schema: [String: Any] = [
         "type": "object",
         "properties": [

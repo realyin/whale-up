@@ -56,6 +56,16 @@ final class DigestTests: XCTestCase {
         XCTAssertEqual(try store.digest(day: "2026-10-20")?.text, "重写版")
     }
 
+    func testListsAllReportsNewestFirst() throws {
+        let path = NSTemporaryDirectory() + "fg-list-\(UUID().uuidString).sqlite"
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let store = try ContentStore(path: path)
+        try store.saveDigest(Digest(day: "2026-10-19", text: "a", model: "m", createdAt: 1))
+        try store.saveDigest(Digest(day: "2026-W43", text: "b", model: "m", createdAt: 3))
+        try store.saveDigest(Digest(day: "2026-10-20", text: "c", model: "m", createdAt: 2))
+        XCTAssertEqual(try store.allDigests().map(\.day), ["2026-W43", "2026-10-20", "2026-10-19"])
+    }
+
     func testReportRequestForOpusUsesFallbacksAndTextOutput() throws {
         let llm = LLMConfig()
         let spec = ChatSpec(system: "s", user: "u", model: "claude-opus-5-5", maxTokens: 16000, effort: "medium")

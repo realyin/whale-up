@@ -10,8 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let pausePanel = PausePanel()
     private var wasJunk = false
     private var lastPauseAt: Date?
-    private var settings: SettingsWindow?
-    private var statsWindow: StatsWindow?
+    private var main: MainWindow?
     private var stats = UsageStats.load()
     private var lastStatsSave = Date()
     /// 看过的内容和劝导原因（本地 SQLite）
@@ -36,7 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private lazy var digestWriter: DigestWriter? = contentStore.map { store in
         let w = DigestWriter(store: store)
         w.onWritten = { [weak self] digest, automatic in
-            self?.statsWindow?.model.contentVersion += 1
+            self?.main?.model.version += 1
             if automatic {
                 let what = digest.day.contains("W") ? "\(digest.day) 的每周复盘"
                     : "\(digest.day == DayKey.string(Date()) ? "今天" : digest.day) 的小结"
@@ -48,8 +47,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private lazy var labeler: Labeler? = contentStore.map { store in
         let l = Labeler(store: store)
         l.onChange = { [weak self] in
-            self?.statsWindow?.model.contentVersion += 1
-            self?.settings?.model.labelerStatus = self?.labelerStatus
+            self?.main?.model.version += 1
+            self?.main?.model.settings.labelerStatus = self?.labelerStatus
         }
         return l
     }
@@ -102,8 +101,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 for v in views where self.config.shouldRecordContent(url: v.url) {
                     try? store.upsert(v)
                 }
-                self.settings?.model.extensionLastSeen = Date()
-                self.statsWindow?.model.contentVersion += 1
+                self.main?.model.settings.extensionLastSeen = Date()
+                self.main?.model.version += 1
                 self.labeler?.kick(config: self.config)
             },
             status: { [weak self] in
@@ -114,6 +113,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             })
         server?.start()
         labeler?.kick(config: config)  // 处理上次没判断完的
+    }
+
+    /// 在“应用程序”或启动台里再次打开时，显示主窗口
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showMain(nil)
+        return true
     }
 
     // MARK: - 检测循环
@@ -144,7 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             : nil
         if let url = current?.url, Classifier.siteRule(from: url) != nil, url != lastBrowserURL {
             lastBrowserURL = url
-            settings?.model.browserURL = url
+            main?.model.settings.browserURL = url
         }
         let idle = monitor.idleSeconds() > config.idleSeconds
         recordUsage(idle: idle, now: now, elapsed: elapsed)
@@ -201,7 +206,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         stats.prune(keepingDays: 30, now: Date())
         stats.save()
         lastStatsSave = Date()
-        statsWindow?.model.stats = stats
+        main?.model.stats = stats
+        main?.model.version += 1
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -326,8 +332,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         (config, configError) = Config.load()
         configModifiedAt = modificationDate(of: Config.fileURL)
         if timer != nil, config.checkIntervalSeconds != oldInterval { scheduleTimer() }
-        settings?.model.replace(with: config)
-        statsWindow?.model.config = config
+        main?.model.settings.replace(with: config)
+        main?.model.config = config
     }
 
     private var labelerStatus: String? {
@@ -345,8 +351,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         config.save()
         configModifiedAt = modificationDate(of: Config.fileURL)
         if config.checkIntervalSeconds != oldInterval { scheduleTimer() }
-        settings?.model.replace(with: config)
-        statsWindow?.model.config = config
+        main?.model.settings.replace(with: config)
+        main?.model.config = config
         labeler?.kick(config: config)
     }
 
@@ -362,6 +368,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - 菜单栏
 
     private func updateStatusTitle() {
+        main?.model.todayJunkSeconds = tracker.todaySeconds
+        main?.model.pausedUntil = pausedUntil
         let minutes = Int(todayJunkSeconds / 60)
         let icon: String
         if pausedUntil != nil { icon = "⏸" }
@@ -385,58 +393,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return item
         }
 
-        info("今天刷了 \(formatDuration(todayJunkSeconds))没营养的内容")
-        if let remaining = config.budgetRemainingSeconds(usedToday: tracker.todaySeconds) {
-            info(remaining > 0 ? "    今日额度还剩 \(formatDuration(remaining))（共 \(Int(config.dailyBudgetMinutes)) 分钟）"
-                               : "    ⛽️ 今日 \(Int(config.dailyBudgetMinutes)) 分钟额度已用完")
+        // 一句话概况
+        var status = "今天没营养 \(formatDuration(tracker.todaySeconds))"
+        if let left = config.budgetRemainingSeconds(usedToday: tracker.todaySeconds) {
+            status += left > 0 ? "，额度还剩 \(formatDuration(left))" : "，额度已用完"
         }
-        if config.isWorkTime(Date()) { info("    💼 工作时段：连续 \(Int(config.workLimitMinutes)) 分钟就提醒") }
-        for item in todayJunkItems.prefix(3) {
-            info("    \(item.name)  \(formatDuration(item.seconds))")
-        }
-        _ = action("查看统计…", #selector(openStats))
-        if config.llm.enabled { _ = action("每日小结…", #selector(openDigest)) }
+        info(status)
         if let until = pausedUntil {
-            info("已暂停，\(until.formatted(date: .omitted, time: .shortened)) 恢复")
+            info("已暂停，\(clock(until.timeIntervalSince1970)) 恢复")
         } else if let reason = currentReason {
-            info("正在看：\(reason)（本次连续 \(Int(tracker.sessionSeconds / 60)) 分钟）")
-        } else {
-            info("状态良好 👍")
+            info("正在看 \(reason)，连续 \(formatDuration(tracker.sessionSeconds))")
         }
-        let nightNote = config.isNight(Date()) ? "（夜间模式）" : ""
-        info("连续 \(Int(config.limitSeconds(at: Date()) / 60)) 分钟提醒\(nightNote)")
+        if config.forceCloseEnabled, let until = forceCloser.blockedUntil, until > Date() {
+            info("强制关闭冷却中，\(clock(until.timeIntervalSince1970)) 前打开会被关掉")
+        }
         if !monitor.deniedBrowsers.isEmpty {
-            info("⚠️ 无法读取 \(monitor.deniedBrowsers.sorted().joined(separator: "、")) 的网址")
-            _ = action("去系统设置授权…", #selector(openAutomationSettings))
+            _ = action("⚠️ 读不到 \(monitor.deniedBrowsers.sorted().joined(separator: "、")) 的网址，去授权…", #selector(openAutomationSettings))
         }
         if let configError { info("⚠️ \(configError)") }
 
         menu.addItem(.separator())
-        let force = action("强制关闭模式（连续 \(Int(config.forceCloseMinutes)) 分钟自动关网页）", #selector(toggleForceClose))
-        force.state = config.forceCloseEnabled ? .on : .off
-        if config.forceCloseEnabled {
-            if let until = forceCloser.blockedUntil, until > Date() {
-                info("    冷却中：\(until.formatted(date: .omitted, time: .shortened)) 前打开会被直接关掉")
-            } else if current?.url.flatMap({ Classifier.matchSite($0, rules: config.forceCloseSites) }) != nil {
-                info("    当前网页还能看 \(Int(forceCloser.remainingSeconds(config: config) / 60)) 分钟")
-            }
-        }
-
-        menu.addItem(.separator())
-        if pausedUntil != nil {
-            _ = action("恢复监测", #selector(resume))
-        } else {
-            _ = action("暂停 1 小时", #selector(pauseOneHour))
-        }
-        _ = action("预览提醒效果", #selector(previewNudge))
-
-        menu.addItem(.separator())
+        _ = action("打开专注守护", #selector(openMain), key: "o")
         if let url = lastBrowserURL, let rule = Classifier.siteRule(from: url) {
             let add = NSMenuItem(title: "把 \(rule) 加入…", action: nil, keyEquivalent: "")
             let sub = NSMenu()
             for (title, inList, selector) in [
                 ("没营养网站（超时提醒）", config.junkSites.contains(rule), #selector(addToJunkSites(_:))),
                 ("强制关闭网站", config.forceCloseSites.contains(rule), #selector(addToForceSites(_:))),
+                ("永不记录的网站", config.sensitiveSites.contains(rule), #selector(addToSensitiveSites(_:))),
             ] {
                 let item = NSMenuItem(title: title, action: inList ? nil : selector, keyEquivalent: "")
                 item.target = self
@@ -447,12 +431,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             add.submenu = sub
             menu.addItem(add)
         }
-        _ = action("设置…", #selector(openSettings), key: ",")
-        let login = action("开机自动启动", #selector(toggleLaunchAtLogin))
-        login.state = SMAppService.mainApp.status == .enabled ? .on : .off
 
         menu.addItem(.separator())
+        _ = pausedUntil != nil ? action("恢复监测", #selector(resume)) : action("暂停 1 小时", #selector(pauseOneHour))
+        let force = action("强制关闭模式", #selector(toggleForceClose))
+        force.state = config.forceCloseEnabled ? .on : .off
+
+        menu.addItem(.separator())
+        _ = action("设置…", #selector(openSettings), key: ",")
         _ = action("退出", #selector(quit), key: "q")
+    }
+
+    @objc private func addToSensitiveSites(_ sender: NSMenuItem) {
+        guard let rule = sender.representedObject as? String else { return }
+        var new = config
+        new.sensitiveSites.append(rule)
+        applyConfig(new)
+        toast.show("🔒 以后不再记录 \(rule)")
     }
 
     @objc private func toggleForceClose() {
@@ -474,12 +469,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         tick()
     }
 
-    @objc private func previewNudge() {
-        let night = config.isNight(Date())
-        nudgedBundleID = nil
-        showNudge(Nudge(reason: "douyin.com", appName: "预览", sessionMinutes: Int(config.limitSeconds(at: Date()) / 60),
-                        todayMinutes: Int(tracker.todaySeconds / 60) + 30, isNight: night, count: 1))
-    }
 
     private func deleteDay(_ day: Date) {
         let start = Calendar.current.startOfDay(for: day)
@@ -487,45 +476,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         try? contentStore?.deleteDay(from: start, to: end, dayKey: DayKey.string(start))
         stats.removeDay(start)
         saveStats()
-        statsWindow?.model.contentVersion += 1
+        main?.model.version += 1
     }
 
     private func deleteSite(_ site: String) {
         try? contentStore?.deleteSite(site)
         stats.removeSite(site)
         saveStats()
-        statsWindow?.model.contentVersion += 1
+        main?.model.version += 1
     }
 
-    @objc private func openDigest() {
-        openStats()
-        statsWindow?.model.mode = .digest
+    @objc private func openMain() {
+        showMain(nil)
     }
 
-    @objc private func openStats() {
+    @objc private func openSettings() {
+        showMain(.settings)
+    }
+
+    private func showMain(_ page: Page?) {
         saveStats()
-        if statsWindow == nil {
-            let model = StatsModel(stats: stats, config: config)
+        if main == nil {
+            let settings = SettingsModel(config: config) { [weak self] in self?.applyConfig($0) }
+            settings.browserURL = lastBrowserURL
+            settings.extensionLastSeen = server?.lastReportAt
+            settings.serverError = server?.error ?? (contentStore == nil ? "内容数据库打开失败" : nil)
+            settings.labelerStatus = labelerStatus
+            let model = MainModel(stats: stats, config: config, settings: settings)
             model.contentStore = contentStore
             model.digestWriter = digestWriter
             model.deleteDay = { [weak self] day in self?.deleteDay(day) }
             model.deleteSite = { [weak self] site in self?.deleteSite(site) }
-            statsWindow = StatsWindow(model: model)
+            model.togglePause = { [weak self] in
+                guard let self else { return }
+                if self.pausedUntil == nil { self.pauseOneHour() } else { self.resume() }
+            }
+            main = MainWindow(model: model)
         }
-        statsWindow?.model.stats = stats
-        statsWindow?.show()
-    }
-
-    @objc private func openSettings() {
-        if settings == nil {
-            let model = SettingsModel(config: config) { [weak self] in self?.applyConfig($0) }
-            model.browserURL = lastBrowserURL
-            model.extensionLastSeen = server?.lastReportAt
-            model.serverError = server?.error ?? (contentStore == nil ? "内容数据库打开失败" : nil)
-            model.labelerStatus = labelerStatus
-            settings = SettingsWindow(model: model)
-        }
-        settings?.show()
+        main?.model.stats = stats
+        main?.model.todayJunkSeconds = tracker.todaySeconds
+        main?.model.pausedUntil = pausedUntil
+        main?.show(page)
     }
 
     @objc private func addToJunkSites(_ sender: NSMenuItem) {

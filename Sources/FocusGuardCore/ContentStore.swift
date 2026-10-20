@@ -264,6 +264,14 @@ public final class ContentStore {
                 [d.day, d.text, d.model, d.createdAt])
     }
 
+    /// 所有小结和周复盘，最近写的在前
+    public func allDigests() throws -> [Digest] {
+        try query("SELECT day, text, model, created_at FROM digests ORDER BY created_at DESC", []) { s in
+            Digest(day: Self.text(s, 0)!, text: Self.text(s, 1)!, model: Self.text(s, 2)!,
+                   createdAt: sqlite3_column_double(s, 3))
+        }
+    }
+
     public func digest(day: String) throws -> Digest? {
         try query("SELECT day, text, model, created_at FROM digests WHERE day = ?", [day]) { s in
             Digest(day: Self.text(s, 0)!, text: Self.text(s, 1)!, model: Self.text(s, 2)!,
