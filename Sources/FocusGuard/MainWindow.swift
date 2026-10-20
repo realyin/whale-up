@@ -6,13 +6,14 @@ import FocusGuardCore
 // MARK: - 模型
 
 enum Page: String, CaseIterable, Identifiable {
-    case today = "今天", timeline = "时间线", content = "内容", trends = "趋势", reports = "报告", settings = "设置"
+    case today = "今天", timeline = "时间线", content = "内容", favorites = "收藏", trends = "趋势", reports = "报告", settings = "设置"
     var id: String { rawValue }
     var icon: String {
         switch self {
         case .today: return "sun.max"
         case .timeline: return "clock"
         case .content: return "list.bullet.rectangle"
+        case .favorites: return "star"
         case .trends: return "chart.bar.xaxis"
         case .reports: return "doc.text"
         case .settings: return "gearshape"
@@ -32,6 +33,7 @@ final class MainModel: ObservableObject {
     @Published var todayJunkSeconds: Double = 0
     var contentStore: ContentStore?
     var digestWriter: DigestWriter?
+    var favorites: FavoriteExtractor?
     let settings: SettingsModel
 
     var deleteDay: (Date) -> Void = { _ in }
@@ -151,6 +153,7 @@ struct MainView: View {
                 case .today: TodayPage(model: model)
                 case .timeline: TimelinePage(model: model)
                 case .content: ContentPage(model: model)
+                case .favorites: FavoritesPage(model: model)
                 case .trends: TrendsPage(model: model)
                 case .reports: ReportsPage(model: model)
                 case .settings: SettingsView(model: model.settings, tab: .sites, embedded: true)
@@ -428,6 +431,16 @@ struct TimelinePage: View {
                             Section("\(hour):00") {
                                 ForEach(sessions) { s in
                                     row(s).contextMenu {
+                                        ForEach(s.items.suffix(5), id: \.viewId) { v in
+                                            Button("收藏「\(v.title.prefix(24))」") {
+                                                if let favorites = model.favorites {
+                                                    let config = model.config
+                                                    Task { await favorites.saveFromHistory(v, config: config) }
+                                                    model.page = .favorites
+                                                }
+                                            }
+                                        }
+                                        Divider()
                                         Button("删除 \(s.site) 的所有记录…") { confirmDeleteSite(s.site, model: model) }
                                     }
                                 }
@@ -532,7 +545,10 @@ struct ContentPage: View {
                         .monospacedDigit().foregroundStyle(.secondary)
                 }
                 .width(min: 50, ideal: range == 1 ? 50 : 110, max: 130)
-                TableColumn("") { r in Text(r.view.isJunk(config: model.config) ? "🍟" : "🥦") }.width(22)
+                TableColumn("") { r in
+                    Text(favoriteURLs.contains(r.view.url) ? "⭐" : (r.view.isJunk(config: model.config) ? "🍟" : "🥦"))
+                }
+                .width(22)
                 TableColumn("标题") { r in
                     VStack(alignment: .leading, spacing: 2) {
                         Text(r.view.title.isEmpty ? r.view.url : r.view.title).lineLimit(1)
@@ -560,6 +576,7 @@ struct ContentPage: View {
             }
             .contextMenu(forSelectionType: String.self) { ids in
                 if let id = ids.first, let v = rows.first(where: { $0.id == id })?.view {
+                    Button("收藏并提取要点") { favorite(v) }
                     Button("在浏览器中打开") { if let u = URL(string: v.url) { NSWorkspace.shared.open(u) } }
                     Button("删除 \(v.site) 的所有记录…") { confirmDeleteSite(v.site, model: model) }
                 }
@@ -570,6 +587,15 @@ struct ContentPage: View {
             }
             .searchable(text: $search, placement: .toolbar, prompt: "搜索标题、网站、作者")
         }
+    }
+
+    private var favoriteURLs: Set<String> { (try? model.contentStore?.favoriteURLs()) ?? [] }
+
+    private func favorite(_ v: ContentView) {
+        guard let favorites = model.favorites else { return }
+        let config = model.config
+        Task { await favorites.saveFromHistory(v, config: config) }
+        model.page = .favorites
     }
 
     private func load() -> [ContentRow] {
@@ -914,6 +940,103 @@ struct SuggestionButton: View {
                 suggestion.apply(to: &config)
                 model.settings.config = config  // 触发保存并立即生效
                 applied = title
+            }
+            .controlSize(.small)
+        }
+    }
+}
+
+// MARK: - 收藏
+
+struct FavoritesPage: View {
+    @ObservedObject var model: MainModel
+    @State private var selected: Int64?
+
+    var body: some View {
+        let _ = model.version
+        let items = (try? model.contentStore?.favorites()) ?? []
+        let current = items.first { $0.id == selected } ?? items.first
+
+        PageScaffold(title: "收藏", subtitle: items.isEmpty ? nil : "\(items.count) 条") {
+            EmptyView()
+        } content: {
+            if items.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("还没有收藏").font(.system(size: 15))
+                    Text("在浏览器里点扩展图标选“收藏这一页并提取要点”，或按 ⌥⇧S；也可以在“内容”页右键收藏看过的内容。")
+                        .font(.system(size: 13)).foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 32)
+            } else {
+                HStack(alignment: .top, spacing: 0) {
+                    List(items, selection: Binding(get: { current?.id }, set: { selected = $0 })) { f in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(f.title).font(.system(size: 13, weight: .medium)).lineLimit(2)
+                            HStack(spacing: 6) {
+                                Text(f.site)
+                                switch f.status {
+                                case .pending: Text("正在提取…")
+                                case .failed: Text("提取失败").foregroundStyle(.orange)
+                                case .done: EmptyView()
+                                }
+                            }
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 3)
+                        .tag(f.id)
+                    }
+                    .listStyle(.sidebar)
+                    .frame(width: 260)
+                    Divider()
+                    ScrollView {
+                        if let current { detail(current).padding(32).frame(maxWidth: 680, alignment: .leading) }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func detail(_ f: Favorite) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(f.title).font(.system(size: 20, weight: .semibold)).textSelection(.enabled)
+                Text([f.site, f.author ?? "", "收藏于 \(Date(timeIntervalSince1970: f.savedAt).formatted(date: .abbreviated, time: .shortened))",
+                      "根据\(f.textKind.label)提取"].filter { !$0.isEmpty }.joined(separator: "，"))
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+            switch f.status {
+            case .pending:
+                HStack(spacing: 8) { ProgressView().controlSize(.small); Text("正在提取要点…").foregroundStyle(.secondary) }
+            case .failed:
+                Text(f.error ?? "提取失败").font(.system(size: 13)).foregroundStyle(.orange)
+            case .done:
+                if let k = f.points {
+                    Text(k.summary).font(.coachSmall).fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(Array(k.points.enumerated()), id: \.offset) { _, p in
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Circle().fill(.secondary).frame(width: 4, height: 4).offset(y: -3)
+                                Text(p).font(.system(size: 14)).fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                    .textSelection(.enabled)
+                }
+            }
+            if f.textKind == .none || f.textKind == .description {
+                Text("只拿到了\(f.textKind == .none ? "标题" : "简介")，要点可能不完整。在浏览器打开这一页后用扩展收藏，能读到字幕或正文。")
+                    .font(.system(size: 12)).foregroundStyle(.tertiary)
+            }
+            HStack(spacing: 10) {
+                Button("在浏览器中打开") { if let u = URL(string: f.url) { NSWorkspace.shared.open(u) } }
+                Button("重新提取") { model.favorites?.retry(f, config: model.config) }.disabled(f.status == .pending)
+                Button("删除") {
+                    try? model.contentStore?.deleteFavorite(id: f.id)
+                    selected = nil
+                    model.version += 1
+                }
             }
             .controlSize(.small)
         }

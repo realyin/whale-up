@@ -1,16 +1,37 @@
 {
   "manifest_version": 3,
   "name": "专注守护 FocusGuard",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "把看过的视频和网页（标题、作者、标签、观看时长）发给本机的专注守护 App。数据只发到 127.0.0.1，不上传。",
-  "host_permissions": ["http://127.0.0.1:47621/*"],
-  "background": { "service_worker": "background.js" },
+  "host_permissions": [
+    "http://127.0.0.1:47621/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["content.js"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
-  "action": { "default_popup": "popup.html", "default_title": "专注守护" }
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "专注守护"
+  },
+  "commands": {
+    "favorite": {
+      "suggested_key": {
+        "default": "Alt+Shift+S",
+        "mac": "Alt+Shift+S"
+      },
+      "description": "收藏当前页面并提取要点"
+    }
+  }
 }

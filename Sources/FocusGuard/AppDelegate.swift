@@ -44,6 +44,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         return w
     }
+    private lazy var favorites: FavoriteExtractor? = contentStore.map { store in
+        let f = FavoriteExtractor(store: store)
+        f.onChange = { [weak self] done in
+            self?.main?.model.version += 1
+            if let done { self?.toast.show("⭐ 要点提取好了：\(done.title)") }
+        }
+        return f
+    }
     private lazy var labeler: Labeler? = contentStore.map { store in
         let l = Labeler(store: store)
         l.onChange = { [weak self] in
@@ -111,7 +119,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 let count = (try? self.contentStore?.views(from: today, to: today.addingTimeInterval(86400)))??.count ?? 0
                 return ["ok": true, "scope": self.config.contentScope.rawValue, "todayViews": count]
             })
+        server?.onFavorite = { [weak self] input in
+            guard let self, let favorites = self.favorites else { return false }
+            let kind = Favorite.TextKind(rawValue: input.textKind ?? "") ?? .none
+            let ok = favorites.save(Favorite(url: input.url, title: input.title ?? input.url, author: input.author,
+                                             text: input.text ?? "", textKind: kind), config: self.config)
+            if ok { self.toast.show("⭐ 已收藏，正在提取要点") }
+            return ok
+        }
         server?.start()
+        favorites?.kick(config: config)  // 处理上次没提取完的
         labeler?.kick(config: config)  // 处理上次没判断完的
     }
 
@@ -505,6 +522,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let model = MainModel(stats: stats, config: config, settings: settings)
             model.contentStore = contentStore
             model.digestWriter = digestWriter
+            model.favorites = favorites
             model.deleteDay = { [weak self] day in self?.deleteDay(day) }
             model.deleteSite = { [weak self] site in self?.deleteSite(site) }
             model.togglePause = { [weak self] in

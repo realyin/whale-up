@@ -77,6 +77,24 @@ MainActor.assumeIsolated {
         }
         RunLoop.main.run()
     }
+    if let url = ProcessInfo.processInfo.environment["FOCUSGUARD_TEST_FAVORITE"] {
+        // 开发用：在临时数据库里，按“从看过的内容收藏”的流程抓网页、提炼要点并打印
+        let store = try! ContentStore(path: NSTemporaryDirectory() + "fg-favtest-\(UUID().uuidString).sqlite")
+        let extractor = FavoriteExtractor(store: store)
+        extractor.onChange = { done in
+            guard let done else { return }
+            print("根据\(done.textKind.label)（\(done.text.count) 字）：\(done.points?.markdown ?? "")")
+            exit(0)
+        }
+        Task {
+            let v = ContentView(viewId: "t", url: url, title: url, kind: "page", startedAt: 0, endedAt: 0, activeSeconds: 0)
+            await extractor.saveFromHistory(v, config: Config.load().0)
+            try? await Task.sleep(nanoseconds: 120_000_000_000)
+            print("失败：", (try? store.favorites().first?.error) ?? "超时")
+            exit(1)
+        }
+        RunLoop.main.run()
+    }
     if let id = ProcessInfo.processInfo.environment["FOCUSGUARD_CLOSE_JUNK"] {
         print("closed:", ActivityMonitor().closeJunk(bundleID: id, nudgedURL: nil, rules: Config.load().0.junkSites))
         exit(0)
@@ -146,6 +164,18 @@ func renderMainDemo(to dir: String) {
         alternative: "爱看搞笑 → 脱口秀专场", commitment: "下周 23 点后抖音不超过 10 分钟").json,
         model: "deepseek-v4-pro", createdAt: Date().timeIntervalSince1970 - 100))
 
+    _ = try? store.saveFavorite(Favorite(url: "https://www.bilibili.com/video/BV1demo", title: "Swift 并发编程入门：async/await 实战",
+                                         author: "程序员小李", text: "", textKind: .none, savedAt: Date().timeIntervalSince1970 - 60))
+    let favID = try? store.saveFavorite(Favorite(url: "https://www.ruanyifeng.com/blog/2024/10/weekly-issue-321.html",
+                                                 title: "科技爱好者周刊（第 321 期）：傅盛回忆录", author: "阮一峰",
+                                                 text: "……", textKind: .article))
+    if let favID {
+        try? store.setFavoriteResult(id: favID, points: KeyPoints(
+            summary: "本期周刊以傅盛回忆录为主线，记录猎豹多次转型求生",
+            points: ["金山毒霸 2010 年改免费、靠流量广告，止住收入下滑并活下来", "正面对抗 360 无效：新功能两周被复制，小公司难在大公司主战场取胜",
+                     "避开 PC 安全，专攻海外移动清理工具 Clean Master，集中资源做到日活过亿",
+                     "上市后多元投资移动广告和 Musical.ly；工具流量随系统权限收紧而衰退"]), error: nil)
+    }
     let settings = SettingsModel(config: config) { _ in }
     let model = MainModel(stats: stats, config: config, settings: settings)
     model.contentStore = store

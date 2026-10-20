@@ -9,6 +9,7 @@ final class LocalServer {
 
     private var listener: NWListener?
     private let onViews: ([ContentView]) -> Void
+    var onFavorite: (FavoriteInput) -> Bool = { _ in false }
     private let status: () -> [String: Any]
     private(set) var lastReportAt: Date?
     private(set) var error: String?
@@ -73,6 +74,13 @@ final class LocalServer {
             Self.log("  收到 \(views.count) 条：" + views.map { "\($0.site) \(Int($0.activeSeconds))s" }.joined(separator: ", "))
             onViews(views)
             send(conn, status: 200, json: ["ok": true])
+        case ("POST", "/favorites"):
+            guard let input = try? JSONDecoder().decode(FavoriteInput.self, from: req.body) else {
+                return send(conn, status: 400, json: ["error": "invalid json"])
+            }
+            Self.log("  收藏：\(input.url) \(input.textKind ?? "") \(input.text?.count ?? 0) 字")
+            let ok = onFavorite(input)
+            send(conn, status: ok ? 200 : 403, json: ["ok": ok])
         default:
             send(conn, status: 404, json: ["error": "not found"])
         }

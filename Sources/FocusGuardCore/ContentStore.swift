@@ -141,6 +141,7 @@ public final class ContentStore {
                 day TEXT PRIMARY KEY, text TEXT NOT NULL, model TEXT NOT NULL, created_at REAL NOT NULL
             );
             """)
+        try exec(Self.favoritesSchema)
         // 升级旧数据库：补上后来加的列
         let columns = try query("PRAGMA table_info(views)", []) { Self.text($0, 1) ?? "" }
         for (name, type) in [("background_seconds", "REAL NOT NULL DEFAULT 0"), ("label", "TEXT"),

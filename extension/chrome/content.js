@@ -216,6 +216,73 @@
     if (lastSentActive < 0 ? item.activeSeconds >= FIRST_SEND_SECONDS : now - lastSendAt >= SEND_EVERY_MS) send();
   }
 
+  // ---- 收藏：提取这一页的字幕 / 正文 ----
+
+  const MAX_TEXT = 20000;
+
+  /** B 站字幕（需要登录；拿不到返回 null） */
+  async function bilibiliSubtitle() {
+    const bvid = location.pathname.match(/BV\w+/)?.[0];
+    if (!bvid) return null;
+    try {
+      const view = await fetch(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`, { credentials: "include" }).then((r) => r.json());
+      const cid = view?.data?.cid;
+      if (!cid) return null;
+      const player = await fetch(`https://api.bilibili.com/x/player/wbi/v2?bvid=${bvid}&cid=${cid}`, { credentials: "include" }).then((r) => r.json());
+      const subs = player?.data?.subtitle?.subtitles || [];
+      const sub = subs.find((s) => /zh/.test(s.lan)) || subs[0];
+      if (!sub?.subtitle_url) return null;
+      const url = sub.subtitle_url.startsWith("//") ? "https:" + sub.subtitle_url : sub.subtitle_url;
+      const body = await fetch(url).then((r) => r.json());
+      return (body?.body || []).map((x) => x.content).join(" ");
+    } catch {
+      return null;
+    }
+  }
+
+  /** 网页正文：在常见的正文容器里找段落文字最多的那个 */
+  function mainText() {
+    const selectors = "article, main, [role=main], .article, .post, .content, #content, .entry-content, .Post-RichText, .article-content";
+    let best = null;
+    let bestLen = 0;
+    const consider = (el) => {
+      const len = [...el.querySelectorAll("p")].reduce((n, p) => n + p.innerText.length, 0);
+      if (len > bestLen) {
+        best = el;
+        bestLen = len;
+      }
+    };
+    document.querySelectorAll(selectors).forEach(consider);
+    if (bestLen < 200) {
+      const parents = new Set([...document.querySelectorAll("p")].map((p) => p.parentElement));
+      parents.forEach(consider);
+    }
+    return bestLen < 200 ? "" : best.innerText.replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  async function extractForFavorite() {
+    const video = playingVideo() || largestVideo();
+    const meta = extract(playingVideo() || video);
+    const base = { url: location.href.split("#")[0], title: meta.title, author: meta.author };
+    const descText = [meta.description, meta.tags.length ? "标签：" + meta.tags.join("、") : ""].filter(Boolean).join("\n");
+
+    if (location.hostname.endsWith("bilibili.com")) {
+      const sub = await bilibiliSubtitle();
+      if (sub && sub.length > 50) return { ...base, text: sub.slice(0, MAX_TEXT), textKind: "subtitle" };
+    }
+    if (!video) {
+      const text = mainText();
+      if (text) return { ...base, text: text.slice(0, MAX_TEXT), textKind: "article" };
+    }
+    return { ...base, text: descText.slice(0, MAX_TEXT), textKind: descText ? "description" : "none" };
+  }
+
+  chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
+    if (msg?.type !== "extract") return;
+    extractForFavorite().then(reply);
+    return true; // 异步回复
+  });
+
   setInterval(tick, 1000);
   addEventListener("pagehide", send);
   document.addEventListener("visibilitychange", () => {
