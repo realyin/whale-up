@@ -41,7 +41,7 @@ final class DigestTests: XCTestCase {
         XCTAssertTrue(p.user.contains("🥦"))
         XCTAssertTrue(p.user.contains("后台播放 5 分钟"))
         XCTAssertTrue(p.user.contains("😴 累了"))
-        XCTAssertTrue(p.system.contains("往脑子里装了什么"))
+        XCTAssertTrue(p.system.contains("headline"))
         // 按时间先后排列
         XCTAssertLessThan(p.user.range(of: "英语听力")!.lowerBound, p.user.range(of: "搞笑合集")!.lowerBound)
     }

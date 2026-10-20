@@ -72,7 +72,7 @@ MainActor.assumeIsolated {
         // 开发用：立刻写今天的小结并打印
         let writer = DigestWriter(store: store)
         Task {
-            do { print(try await writer.write(day: Date(), config: Config.load().0).text) } catch { print("失败：\(error)") }
+            do { print(try await writer.write(day: Date(), config: Config.load().0).daily?.markdown ?? "解析失败") } catch { print("失败：\(error)") }
             exit(0)
         }
         RunLoop.main.run()
@@ -112,7 +112,7 @@ MainActor.assumeIsolated {
         Task {
             do {
                 let config = Config.load().0
-                print(try await writer.writeWeekly(week: Week(containing: Date()), config: config).text)
+                print(try await writer.writeWeekly(week: Week(containing: Date()), config: config).weekly?.markdown ?? "解析失败")
                 print("Obsidian：", DigestWriter.obsidianRoot(config)?.path ?? "未写入", writer.obsidianError ?? "")
             } catch { print("失败：\(error)") }
             exit(0)

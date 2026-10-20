@@ -37,14 +37,14 @@ final class DigestWriter {
         let prompt = DigestPrompt.make(day: day, views: views, reasons: reasons, nudges: nudges, config: config)
 
         let llm = config.llm
-        let spec = ChatSpec(system: prompt.system, user: prompt.user, model: llm.reportModel,
-                            maxTokens: 16000, effort: "medium")
+        let spec = ChatSpec(system: prompt.system, user: prompt.user, model: llm.reportModel, maxTokens: 8000,
+                            effort: "medium", jsonSchema: DailyReport.schema, jsonExample: DailyReport.example)
         let request = try LLMRequest.chat(spec, llm: llm, apiKey: APIKeyStore.get(llm.provider), timeout: 300)
         let (data, _) = try await URLSession.shared.data(for: request)
-        let text = try LLMResponse.text(data, provider: llm.provider)
-        let digest = Digest(day: key, text: text.trimmingCharacters(in: .whitespacesAndNewlines), model: llm.reportModel)
+        let report = try DailyReport.parse(try LLMResponse.text(data, provider: llm.provider))
+        let digest = Digest(day: key, text: report.json, model: llm.reportModel)
         try store.saveDigest(digest)
-        writeObsidian(folder: "每日小结", name: key, title: "\(key) 专注小结", kind: "每日小结", body: digest.text, config: config)
+        writeObsidian(folder: "每日小结", name: key, title: "\(key) 专注小结", kind: "每日小结", body: report.markdown, config: config)
         onWritten(digest, automatic)
         return digest
     }
@@ -67,17 +67,18 @@ final class DigestWriter {
             days.append(WeekDay(day: day, views: try store.views(from: start, to: end),
                                 reasons: try store.reasons(from: start, to: end).map(\.reason),
                                 nudges: try store.nudges(from: start, to: end),
-                                digest: try store.digest(day: DayKey.string(day))?.text))
+                                digest: try store.digest(day: DayKey.string(day)).map { $0.daily?.markdown ?? $0.text }))
         }
         let prompt = WeeklyPrompt.make(week: week, days: days, config: config)
         let llm = config.llm
-        let spec = ChatSpec(system: prompt.system, user: prompt.user, model: llm.reportModel, maxTokens: 16000, effort: "high")
+        let spec = ChatSpec(system: prompt.system, user: prompt.user, model: llm.reportModel, maxTokens: 8000,
+                            effort: "high", jsonSchema: WeeklyReport.schema, jsonExample: WeeklyReport.example)
         let request = try LLMRequest.chat(spec, llm: llm, apiKey: APIKeyStore.get(llm.provider), timeout: 300)
         let (data, _) = try await URLSession.shared.data(for: request)
-        let text = try LLMResponse.text(data, provider: llm.provider).trimmingCharacters(in: .whitespacesAndNewlines)
-        let digest = Digest(day: week.key, text: text, model: llm.reportModel)
+        let report = try WeeklyReport.parse(try LLMResponse.text(data, provider: llm.provider))
+        let digest = Digest(day: week.key, text: report.json, model: llm.reportModel)
         try store.saveDigest(digest)
-        writeObsidian(folder: "每周复盘", name: week.key, title: "\(week.key) 专注复盘", kind: "每周复盘", body: text, config: config)
+        writeObsidian(folder: "每周复盘", name: week.key, title: "\(week.key) 专注复盘", kind: "每周复盘", body: report.markdown, config: config)
         onWritten(digest, automatic)
         return digest
     }

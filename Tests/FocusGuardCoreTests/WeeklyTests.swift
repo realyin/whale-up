@@ -41,7 +41,7 @@ final class WeeklyTests: XCTestCase {
         XCTAssertTrue(p.user.contains("😴 累了×2"))
         XCTAssertTrue(p.user.contains("周二深夜刷了一小时搞笑视频"))
         XCTAssertTrue(p.user.contains("Swift 并发入门"))
-        XCTAssertTrue(p.system.contains("需要加强"))
+        XCTAssertTrue(p.system.contains("commitment"))
     }
 
     func testObsidianNoteHasFrontmatter() {

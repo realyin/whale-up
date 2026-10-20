@@ -50,23 +50,17 @@ public enum WeeklyPrompt {
     public static func make(week: Week, days: [WeekDay], config: Config,
                             calendar: Calendar = .current) -> (system: String, user: String) {
         let system = """
-            你是用户自己请来的注意力教练。下面是用户一周里在电脑上看视频、刷网页的记录汇总，以及每天的小结。
-            请写一份每周复盘，帮他看清自己的模式，并给出真正可执行的改变。语气像了解他、说话直接的朋友，不说教，用记录里的具体内容说话。
+            你是用户的注意力教练。下面是用户一周看视频、刷网页的汇总和每天的小结。界面上已经显示了时长图表，你只负责给出洞察和行动。
 
-            用 Markdown，按下面的小标题写，总共不超过 800 字：
-            ## 本周概况
-            ## 模式
-            哪些时间段、哪些情绪或场景最容易刷；和有营养内容的时间对比；本周比上周的趋势（如果看得出来）。
-            ## 背后的原因
-            结合他自己说的原因和内容的“钩子”（猎奇、搞笑、焦虑……），推断他真正在满足什么需求（休息、逃避压力、社交、刺激……）。
-            ## 需要加强什么
-            针对原因给出两三条具体建议，不要泛泛的“少刷点”。
-            ## 有营养的替代
-            根据他爱看的主题，推荐对应的有营养内容方向（比如爱看历史八卦 → 好读的历史书或纪录片）。
-            ## 下周的一个承诺
-            一个具体、可检查的小目标。
+            输出要求：
+            - headline：一句话结论，不超过 20 字。
+            - patterns：最多 3 条规律（什么时间、什么情况、什么内容最容易刷），每条不超过 30 字，是归纳出的判断而不是流水账，必须有记录支撑。
+            - cause：背后的原因，不超过 40 字。只引用用户自己说过的原因和内容的“钩子”，不要猜测心理动机；没有依据就写空字符串。
+            - actions：最多 2 条具体行动，每条不超过 30 字。
+            - alternative：根据他爱看的主题推荐一个有营养的替代方向，不超过 30 字；没有合适的就写空字符串。
+            - commitment：下周一个可检查的承诺，不超过 25 字。
 
-            记录很少时就简短地写，不要编造。
+            不要复述总时长；不要客套、鼓励、感叹号；不要编造记录里没有的内容；记录少就少写。
             """
         let all = days.flatMap(\.views)
         let junk = all.filter { $0.isJunk(config: config) }
@@ -149,5 +143,52 @@ public enum ObsidianNote {
         let url = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/obsidian/obsidian.json")
         return (try? Data(contentsOf: url)).flatMap(openVault(fromConfig:))
+    }
+}
+
+/// 每周复盘的结构化内容
+public struct WeeklyReport: Codable, Equatable {
+    public var headline: String
+    public var patterns: [String]
+    public var cause: String
+    public var actions: [String]
+    public var alternative: String
+    public var commitment: String
+
+    public static let schema: [String: Any] = [
+        "type": "object",
+        "properties": [
+            "headline": ["type": "string"],
+            "patterns": ["type": "array", "items": ["type": "string"]],
+            "cause": ["type": "string"],
+            "actions": ["type": "array", "items": ["type": "string"]],
+            "alternative": ["type": "string"],
+            "commitment": ["type": "string"],
+        ],
+        "required": ["headline", "patterns", "cause", "actions", "alternative", "commitment"],
+        "additionalProperties": false,
+    ]
+    public static let example = #"{"headline": "一周只在深夜失守", "patterns": ["失守都在 0 点后"], "cause": "你两次说是“累了”", "actions": ["23:50 设闹钟，手机放客厅"], "alternative": "怀旧港片 → 纪录片《龙虎武师》", "commitment": "0 点后不打开 B 站"}"#
+
+    public static func parse(_ text: String) throws -> WeeklyReport {
+        var r = try LLMResponse.jsonObject(WeeklyReport.self, from: text)
+        let clean = { (xs: [String], n: Int) in Array(xs.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.prefix(n)) }
+        r.patterns = clean(r.patterns, 3)
+        r.actions = clean(r.actions, 2)
+        return r
+    }
+
+    public var markdown: String {
+        var parts = ["**\(headline)**"]
+        if !patterns.isEmpty { parts.append("规律：\n" + patterns.map { "- \($0)" }.joined(separator: "\n")) }
+        if !cause.isEmpty { parts.append("原因：\(cause)") }
+        if !actions.isEmpty { parts.append("行动：\n" + actions.map { "- \($0)" }.joined(separator: "\n")) }
+        if !alternative.isEmpty { parts.append("有营养的替代：\(alternative)") }
+        parts.append("下周承诺：\(commitment)")
+        return parts.joined(separator: "\n\n")
+    }
+
+    public var json: String {
+        (try? String(data: JSONEncoder().encode(self), encoding: .utf8)) ?? ""
     }
 }

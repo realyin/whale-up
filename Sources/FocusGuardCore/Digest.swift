@@ -35,20 +35,14 @@ public enum DigestPrompt {
     public static func make(day: Date, views: [ContentView], reasons: [NudgeReason], nudges: [NudgeRecord] = [],
                             config: Config, calendar: Calendar = .current) -> (system: String, user: String) {
         let system = """
-            你是用户的个人注意力教练。下面是用户某一天在电脑上看视频、刷网页的记录（由浏览器扩展和一个小助手自动记录）。
-            请用中文写一份简短的每日小结，语气像一个关心他、但说话直接的朋友：不说教，不空泛，用记录里的具体内容说话。
+            你是用户的注意力教练。下面是用户某一天看视频、刷网页的记录。界面上已经用图表显示了时长和分布，你只负责给出洞察。
 
-            用 Markdown，按下面的小标题写，总共不超过 400 字：
-            ## 今天概况
-            两三句话：刷了多久、和有营养的内容比起来怎么样。
-            ## 往脑子里装了什么
-            诚实地概括今天看的没营养内容主要是什么（主题、风格、吸引人的点），以及有营养的内容学到了什么。
-            ## 什么时候最容易刷
-            结合时间分布和用户自己说的原因，指出触发场景（比如深夜、累了、在逃避某件事）。
-            ## 明天试试
-            一个具体、容易做到的小建议，针对今天发现的模式。
+            输出要求：
+            - headline：一句话结论，不超过 20 字，点出今天最值得注意的一件事。
+            - findings：最多 3 条发现，每条不超过 30 字。每条是一个判断（规律、对比、触发场景），用记录里的具体内容或用户自己说的原因作依据；不要只罗列时间和事件。没有值得说的就少写，可以是空数组。
+            - tomorrow：明天的一个具体行动，不超过 25 字，针对今天的发现。
 
-            如果记录很少，就简短地写，不要编造记录里没有的内容。
+            不要复述总时长等界面已有的数字；不要猜测心理动机，除非用户自己说过原因；不要客套、鼓励、感叹号；不要编造记录里没有的内容。
             """
 
         let byTime = views.sorted { $0.startedAt < $1.startedAt }
@@ -101,4 +95,52 @@ public enum DigestPrompt {
         let c = calendar.dateComponents([.hour, .minute], from: Date(timeIntervalSince1970: t))
         return String(format: "%02d:%02d", c.hour!, c.minute!)
     }
+}
+
+/// 每日小结的结构化内容（界面按卡片展示，Obsidian 里写成简短 Markdown）
+public struct DailyReport: Codable, Equatable {
+    public var headline: String
+    public var findings: [String]
+    public var tomorrow: String
+
+    public init(headline: String, findings: [String], tomorrow: String) {
+        self.headline = headline
+        self.findings = findings
+        self.tomorrow = tomorrow
+    }
+
+    public static let schema: [String: Any] = [
+        "type": "object",
+        "properties": [
+            "headline": ["type": "string"],
+            "findings": ["type": "array", "items": ["type": "string"]],
+            "tomorrow": ["type": "string"],
+        ],
+        "required": ["headline", "findings", "tomorrow"],
+        "additionalProperties": false,
+    ]
+    public static let example = #"{"headline": "深夜刷抖音是今天唯一的失守", "findings": ["23 点后连看 8 个搞笑视频", "Swift 教程看了 18 分钟"], "tomorrow": "23:30 把手机放到客厅充电"}"#
+
+    public static func parse(_ text: String) throws -> DailyReport {
+        var r = try LLMResponse.jsonObject(DailyReport.self, from: text)
+        r.findings = Array(r.findings.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.prefix(3))
+        return r
+    }
+
+    public var markdown: String {
+        var parts = ["**\(headline)**"]
+        if !findings.isEmpty { parts.append(findings.map { "- \($0)" }.joined(separator: "\n")) }
+        parts.append("明天：\(tomorrow)")
+        return parts.joined(separator: "\n\n")
+    }
+
+    public var json: String {
+        (try? String(data: JSONEncoder().encode(self), encoding: .utf8)) ?? ""
+    }
+}
+
+extension Digest {
+    /// 新格式的每日小结；旧的 Markdown 格式返回 nil
+    public var daily: DailyReport? { try? DailyReport.parse(text) }
+    public var weekly: WeeklyReport? { day.contains("W") ? try? WeeklyReport.parse(text) : nil }
 }
