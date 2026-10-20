@@ -43,6 +43,8 @@ public enum DigestPrompt {
             - tomorrow：明天的一个具体行动，不超过 25 字，针对今天的发现。
 
             不要复述总时长等界面已有的数字；不要猜测心理动机，除非用户自己说过原因；不要客套、鼓励、感叹号；不要编造记录里没有的内容。
+
+            \(Suggestion.guide(for: config))
             """
 
         let byTime = views.sorted { $0.startedAt < $1.startedAt }
@@ -102,11 +104,14 @@ public struct DailyReport: Codable, Equatable {
     public var headline: String
     public var findings: [String]
     public var tomorrow: String
+    /// 可以一键生效的设置（没有为 nil）
+    public var setting: Suggestion?
 
-    public init(headline: String, findings: [String], tomorrow: String) {
+    public init(headline: String, findings: [String], tomorrow: String, setting: Suggestion? = nil) {
         self.headline = headline
         self.findings = findings
         self.tomorrow = tomorrow
+        self.setting = setting
     }
 
     public static let schema: [String: Any] = [
@@ -115,11 +120,12 @@ public struct DailyReport: Codable, Equatable {
             "headline": ["type": "string"],
             "findings": ["type": "array", "items": ["type": "string"]],
             "tomorrow": ["type": "string"],
+            "setting": Suggestion.schema,
         ],
-        "required": ["headline", "findings", "tomorrow"],
+        "required": ["headline", "findings", "tomorrow", "setting"],
         "additionalProperties": false,
     ]
-    public static let example = #"{"headline": "深夜刷抖音是今天唯一的失守", "findings": ["23 点后连看 8 个搞笑视频", "Swift 教程看了 18 分钟"], "tomorrow": "23:30 把手机放到客厅充电"}"#
+    public static let example = #"{"headline": "深夜刷抖音是今天唯一的失守", "findings": ["23 点后连看 8 个搞笑视频", "Swift 教程看了 18 分钟"], "tomorrow": "23:00 后抖音每次只给 10 分钟", "setting": {"kind": "nightLimit", "site": "", "minutes": 10}}"#
 
     public static func parse(_ text: String) throws -> DailyReport {
         var r = try LLMResponse.jsonObject(DailyReport.self, from: text)

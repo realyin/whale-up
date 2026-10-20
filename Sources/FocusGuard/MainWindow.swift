@@ -329,7 +329,10 @@ struct TodayPage: View {
                         Text(f).font(.system(size: 14)).foregroundStyle(.secondary)
                     }
                 }
-                Text("明天：\(report.tomorrow)").font(.system(size: 14, weight: .medium))
+                HStack(spacing: 12) {
+                    Text("明天：\(report.tomorrow)").font(.system(size: 14, weight: .medium))
+                    SuggestionButton(suggestion: report.setting, model: model)
+                }
                 HStack(spacing: 12) {
                     Text("\(digest!.model) 写于 \(clock(digest!.createdAt))").font(.system(size: 11)).foregroundStyle(.tertiary)
                     writeButton("重新写")
@@ -776,6 +779,7 @@ struct ReportsPage: View {
                 Text(r.headline).font(.coach)
                 bullets(r.findings)
                 labeled("明天", r.tomorrow)
+                SuggestionButton(suggestion: r.setting, model: model)
             } else if let r = d.weekly {
                 Text(r.headline).font(.coach)
                 if !r.patterns.isEmpty { section("规律") { bullets(r.patterns) } }
@@ -783,6 +787,7 @@ struct ReportsPage: View {
                 if !r.actions.isEmpty { section("行动") { bullets(r.actions) } }
                 if !r.alternative.isEmpty { labeled("有营养的替代", r.alternative) }
                 labeled("下周承诺", r.commitment)
+                SuggestionButton(suggestion: r.setting, model: model)
             } else {
                 MarkdownBlock(text: d.text)
             }
@@ -892,4 +897,25 @@ func confirmDeleteDay(_ day: Date, model: MainModel) {
     alert.addButton(withTitle: "取消")
     alert.buttons.first?.hasDestructiveAction = true
     if alert.runModal() == .alertFirstButtonReturn { model.deleteDay(day) }
+}
+
+/// 报告里的建议如果能用某个设置做到，就显示一个按钮，点一下生效
+struct SuggestionButton: View {
+    let suggestion: Suggestion?
+    @ObservedObject var model: MainModel
+    @State private var applied: String?
+
+    var body: some View {
+        if let applied {
+            Label("已设置：\(applied)", systemImage: "checkmark").font(.system(size: 12)).foregroundStyle(.secondary)
+        } else if let suggestion, let title = suggestion.title(for: model.config) {
+            Button(title) {
+                var config = model.settings.config
+                suggestion.apply(to: &config)
+                model.settings.config = config  // 触发保存并立即生效
+                applied = title
+            }
+            .controlSize(.small)
+        }
+    }
 }

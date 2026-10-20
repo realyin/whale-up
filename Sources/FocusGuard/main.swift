@@ -138,7 +138,8 @@ func renderMainDemo(to dir: String) {
     try? store.saveDigest(Digest(day: DayKey.string(Date()), text: DailyReport(
         headline: "深夜的抖音是今天唯一的失守",
         findings: ["23 点后连看搞笑和吵架视频 20 分钟，你点的原因是“累了”", "白天 Swift 教程和纪录片都看完了，学习时段很完整", "中午只刷了 5 分钟就停下，提醒起了作用"],
-        tomorrow: "23:00 把手机放到客厅充电").json, model: "deepseek-v4-pro"))
+        tomorrow: "23:00 后打开抖音先停 10 秒再决定",
+        setting: Suggestion(kind: .pauseBeforeJunk, site: "", minutes: 0)).json, model: "deepseek-v4-pro"))
     try? store.saveDigest(Digest(day: Week(containing: Date()).key, text: WeeklyReport(
         headline: "一周的失守都在 23 点以后", patterns: ["5 个晚上在 23 点后刷抖音，白天几乎不刷", "被吸引的主要是搞笑和情感吵架"],
         cause: "四次提醒里三次你说“累了”", actions: ["23:00 后开启“打开前先停一下”", "睡前用 10 分钟纪录片替代短视频"],

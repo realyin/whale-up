@@ -61,6 +61,8 @@ public enum WeeklyPrompt {
             - commitment：下周一个可检查的承诺，不超过 25 字。
 
             不要复述总时长；不要客套、鼓励、感叹号；不要编造记录里没有的内容；记录少就少写。
+
+            \(Suggestion.guide(for: config))
             """
         let all = days.flatMap(\.views)
         let junk = all.filter { $0.isJunk(config: config) }
@@ -154,14 +156,17 @@ public struct WeeklyReport: Codable, Equatable {
     public var actions: [String]
     public var alternative: String
     public var commitment: String
+    public var setting: Suggestion?
 
-    public init(headline: String, patterns: [String], cause: String, actions: [String], alternative: String, commitment: String) {
+    public init(headline: String, patterns: [String], cause: String, actions: [String], alternative: String, commitment: String,
+                setting: Suggestion? = nil) {
         self.headline = headline
         self.patterns = patterns
         self.cause = cause
         self.actions = actions
         self.alternative = alternative
         self.commitment = commitment
+        self.setting = setting
     }
 
     public static let schema: [String: Any] = [
@@ -173,11 +178,12 @@ public struct WeeklyReport: Codable, Equatable {
             "actions": ["type": "array", "items": ["type": "string"]],
             "alternative": ["type": "string"],
             "commitment": ["type": "string"],
+            "setting": Suggestion.schema,
         ],
-        "required": ["headline", "patterns", "cause", "actions", "alternative", "commitment"],
+        "required": ["headline", "patterns", "cause", "actions", "alternative", "commitment", "setting"],
         "additionalProperties": false,
     ]
-    public static let example = #"{"headline": "一周只在深夜失守", "patterns": ["失守都在 0 点后"], "cause": "你两次说是“累了”", "actions": ["23:50 设闹钟，手机放客厅"], "alternative": "怀旧港片 → 纪录片《龙虎武师》", "commitment": "0 点后不打开 B 站"}"#
+    public static let example = #"{"headline": "一周只在深夜失守", "patterns": ["失守都在 0 点后"], "cause": "你两次说是“累了”", "actions": ["0 点后打开 B 站先停 10 秒再决定"], "alternative": "怀旧港片 → 纪录片《龙虎武师》", "commitment": "0 点后不打开 B 站", "setting": {"kind": "pauseBeforeJunk", "site": "", "minutes": 0}}"#
 
     public static func parse(_ text: String) throws -> WeeklyReport {
         var r = try LLMResponse.jsonObject(WeeklyReport.self, from: text)

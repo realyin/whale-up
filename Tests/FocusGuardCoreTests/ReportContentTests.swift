@@ -8,11 +8,11 @@ final class ReportContentTests: XCTestCase {
         XCTAssertTrue(p.system.contains("20 字"))
         XCTAssertTrue(p.system.contains("最多 3 条"))
         XCTAssertFalse(p.system.contains("## "), "不再要求 Markdown 长文")
-        XCTAssertEqual((DailyReport.schema["required"] as! [String]).sorted(), ["findings", "headline", "tomorrow"])
+        XCTAssertEqual((DailyReport.schema["required"] as! [String]).sorted(), ["findings", "headline", "setting", "tomorrow"])
     }
 
     func testDailyReportParsesAndTrims() throws {
-        let raw = #"{"headline":"深夜刷抖音是今天唯一的失守","findings":["23 点后连看 8 个搞笑视频","学习视频只看了开头","a","b"],"tomorrow":"23:30 把手机放客厅"}"#
+        let raw = #"{"headline":"深夜刷抖音是今天唯一的失守","findings":["23 点后连看 8 个搞笑视频","学习视频只看了开头","a","b"],"tomorrow":"23:30 后开启打开前先停一下"}"#
         let r = try DailyReport.parse(raw)
         XCTAssertEqual(r.findings.count, 3, "最多 3 条")
         XCTAssertEqual(r.headline, "深夜刷抖音是今天唯一的失守")
