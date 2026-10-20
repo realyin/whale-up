@@ -432,13 +432,7 @@ struct TimelinePage: View {
                                 ForEach(sessions) { s in
                                     row(s).contextMenu {
                                         ForEach(s.items.suffix(5), id: \.viewId) { v in
-                                            Button("收藏「\(v.title.prefix(24))」") {
-                                                if let favorites = model.favorites {
-                                                    let config = model.config
-                                                    Task { await favorites.saveFromHistory(v, config: config) }
-                                                    model.page = .favorites
-                                                }
-                                            }
+                                            Button("收藏「\(v.title.prefix(24))」") { favoriteFromHistory(v, model: model) }
                                         }
                                         Divider()
                                         Button("删除 \(s.site) 的所有记录…") { confirmDeleteSite(s.site, model: model) }
@@ -592,10 +586,7 @@ struct ContentPage: View {
     private var favoriteURLs: Set<String> { (try? model.contentStore?.favoriteURLs()) ?? [] }
 
     private func favorite(_ v: ContentView) {
-        guard let favorites = model.favorites else { return }
-        let config = model.config
-        Task { await favorites.saveFromHistory(v, config: config) }
-        model.page = .favorites
+        favoriteFromHistory(v, model: model)
     }
 
     private func load() -> [ContentRow] {
@@ -977,7 +968,7 @@ struct FavoritesPage: View {
                                 switch f.status {
                                 case .pending: Text("正在提取…")
                                 case .failed: Text("提取失败").foregroundStyle(.orange)
-                                case .done: EmptyView()
+                                case .done: if f.points?.worth == false { Text("不值得提炼") }
                                 }
                             }
                             .font(.system(size: 11)).foregroundStyle(.secondary)
@@ -1012,7 +1003,12 @@ struct FavoritesPage: View {
             case .failed:
                 Text(f.error ?? "提取失败").font(.system(size: 13)).foregroundStyle(.orange)
             case .done:
-                if let k = f.points {
+                if let k = f.points, !k.worth {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("这一页没有值得留下的内容").font(.coachSmall)
+                        Text(k.summary).font(.system(size: 13)).foregroundStyle(.secondary)
+                    }
+                } else if let k = f.points {
                     Text(k.summary).font(.coachSmall).fixedSize(horizontal: false, vertical: true)
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(Array(k.points.enumerated()), id: \.offset) { _, p in
@@ -1039,6 +1035,23 @@ struct FavoritesPage: View {
                 }
             }
             .controlSize(.small)
+        }
+    }
+}
+
+/// 收藏看过的内容；不能收藏（比如首页）时弹窗说明原因
+@MainActor
+func favoriteFromHistory(_ v: ContentView, model: MainModel) {
+    guard let favorites = model.favorites else { return }
+    let config = model.config
+    Task {
+        if let reason = await favorites.saveFromHistory(v, config: config) {
+            let alert = NSAlert()
+            alert.messageText = "不能收藏"
+            alert.informativeText = reason
+            alert.runModal()
+        } else {
+            model.page = .favorites
         }
     }
 }

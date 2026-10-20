@@ -60,7 +60,29 @@ final class FavoriteTests: XCTestCase {
         XCTAssertTrue(p.system.contains("3–5"))
         let parsed = try KeyPoints.parse(#"{"summary":"s","points":["1","2","3","4","5","6"]}"#)
         XCTAssertEqual(parsed.points.count, 5)
-        XCTAssertEqual((KeyPoints.schema["required"] as! [String]).sorted(), ["points", "summary"])
+        XCTAssertEqual((KeyPoints.schema["required"] as! [String]).sorted(), ["points", "summary", "worth"])
+    }
+
+    func testHomepagesAreRejected() {
+        XCTAssertNotNil(fav("https://www.bilibili.com/").rejectionReason)
+        XCTAssertNotNil(fav("https://www.deepseek.com").rejectionReason)
+        XCTAssertNotNil(fav("https://www.douyin.com/?recommend=1", kind: .none).rejectionReason, "首页带参数也算")
+        XCTAssertNil(fav("https://www.douyin.com/?modal_id=7696030767268252966", kind: .description).rejectionReason,
+                     "抖音信息流里具体的视频不算首页")
+        XCTAssertNil(fav("https://www.bilibili.com/video/BV1GJ411x7h7").rejectionReason)
+        XCTAssertNil(fav("https://www.ruanyifeng.com/blog/2024/10/weekly-issue-321.html").rejectionReason)
+    }
+
+    func testPromptAsksForTakeawaysAndAllowsNotWorthIt() throws {
+        let p = KeyPointsPrompt.make(for: fav("https://www.bilibili.com/video/BV1"))
+        XCTAssertTrue(p.system.contains("不要介绍网站"))
+        XCTAssertTrue(p.system.contains("worth"))
+        XCTAssertTrue((KeyPoints.schema["required"] as! [String]).contains("worth"))
+        let notWorth = try KeyPoints.parse(#"{"worth":false,"summary":"只是网站首页","points":["a"]}"#)
+        XCTAssertFalse(notWorth.worth)
+        XCTAssertTrue(notWorth.points.isEmpty, "不值得的就不留要点")
+        let old = try JSONDecoder().decode(KeyPoints.self, from: Data(#"{"summary":"s","points":["p"]}"#.utf8))
+        XCTAssertTrue(old.worth, "旧数据默认值得")
     }
 
     func testHTMLTextPrefersArticleAndDropsScripts() {

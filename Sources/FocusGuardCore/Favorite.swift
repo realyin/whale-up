@@ -38,6 +38,16 @@ public struct Favorite: Equatable, Identifiable {
 
     public var site: String { Classifier.siteRule(from: url) ?? "" }
 
+    /// 不能收藏的原因：网站首页、列表页没有具体内容。nil 表示可以收藏
+    public var rejectionReason: String? {
+        guard let comps = URLComponents(string: url) else { return "这不是一个网页" }
+        let rootPath = comps.path.isEmpty || comps.path == "/"
+        // 抖音信息流 ?modal_id=7696… 这类带长 id 的参数说明在看具体内容
+        let identifiesContent = (comps.queryItems ?? []).contains { ($0.value ?? "").count >= 6 }
+        if rootPath && !identifiesContent { return "这是网站首页，没有具体内容。打开一篇文章或一个视频再收藏。" }
+        return nil
+    }
+
     public init(url: String, title: String, author: String? = nil, text: String, textKind: TextKind,
                 savedAt: Double = Date().timeIntervalSince1970) {
         self.url = url
@@ -49,27 +59,37 @@ public struct Favorite: Equatable, Identifiable {
     }
 }
 
-/// 一句话概括 + 3–5 个要点
+/// 一句话概括 + 3–5 个要点；不值得提炼时 worth 为 false
 public struct KeyPoints: Codable, Equatable {
+    public var worth: Bool
     public var summary: String
     public var points: [String]
 
-    public init(summary: String, points: [String]) {
+    public init(summary: String, points: [String], worth: Bool = true) {
+        self.worth = worth
         self.summary = summary
         self.points = points
     }
 
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        worth = try c.decodeIfPresent(Bool.self, forKey: .worth) ?? true
+        summary = try c.decode(String.self, forKey: .summary)
+        points = try c.decodeIfPresent([String].self, forKey: .points) ?? []
+    }
+
     public static let schema: [String: Any] = [
         "type": "object",
-        "properties": ["summary": ["type": "string"], "points": ["type": "array", "items": ["type": "string"]]],
-        "required": ["summary", "points"],
+        "properties": ["worth": ["type": "boolean"], "summary": ["type": "string"],
+                       "points": ["type": "array", "items": ["type": "string"]]],
+        "required": ["worth", "summary", "points"],
         "additionalProperties": false,
     ]
-    public static let example = #"{"summary": "用一个例子讲清 async/await 怎样替代回调", "points": ["……", "……", "……"]}"#
+    public static let example = #"{"worth": true, "summary": "用一个下载图片的例子讲清 async/await 怎样替代回调", "points": ["……", "……", "……"]}"#
 
     public static func parse(_ text: String) throws -> KeyPoints {
         var k = try LLMResponse.jsonObject(KeyPoints.self, from: text)
-        k.points = Array(k.points.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.prefix(5))
+        k.points = k.worth ? Array(k.points.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.prefix(5)) : []
         return k
     }
 
@@ -83,10 +103,11 @@ public enum KeyPointsPrompt {
 
     public static func make(for f: Favorite) -> (system: String, user: String) {
         let system = """
-            用户收藏了一条网页或视频，想留下它的要点。请根据给出的内容提炼：
-            - summary：一句话说清这条内容讲了什么，不超过 40 字。
-            - points：3–5 个要点，每条不超过 50 字，写具体的观点、方法、数据或结论，不要写“本文介绍了……”这类空话。
-            内容只有标题或简介时，就根据现有信息尽量写，不要编造细节；能写几条写几条。
+            用户收藏了一条网页或视频，想留下自己能带走的东西。请先判断，再提炼：
+            - worth：这条内容有没有值得留下的知识、观点、方法或数据。网站首页、导航页、产品介绍、广告、纯娱乐，或者给出的信息太少（只有标题、一两句简介），都填 false。
+            - summary：worth 为 true 时，一句话说清这条内容讲了什么，不超过 40 字；为 false 时，一句话说明为什么不值得提炼。
+            - points：worth 为 true 时写 3–5 条，每条不超过 50 字，是读者能带走的具体观点、方法、数据或结论；为 false 时留空数组。
+            不要介绍网站、平台或作者本身是什么；不要写“本文介绍了……”这类空话；不要编造给出内容里没有的细节。
             """
         var lines = ["网站：\(f.site)", "标题：\(f.title)"]
         if let a = f.author, !a.isEmpty { lines.append("作者：\(a)") }

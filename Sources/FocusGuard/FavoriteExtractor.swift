@@ -21,17 +21,21 @@ final class FavoriteExtractor {
         self.store = store
     }
 
-    /// 保存收藏并开始提炼；敏感网站不收
+    /// 保存收藏并开始提炼。不能收藏时返回原因（敏感网站、网站首页）
     @discardableResult
-    func save(_ f: Favorite, config: Config) -> Bool {
-        guard !config.isSensitive(url: f.url), (try? store.saveFavorite(f)) != nil else { return false }
+    func save(_ f: Favorite, config: Config) -> String? {
+        if config.isSensitive(url: f.url) { return "这个网站在“永不记录”名单里，不能收藏" }
+        if let reason = f.rejectionReason { return reason }
+        guard (try? store.saveFavorite(f)) != nil else { return "保存失败" }
         onChange(nil)
         kick(config: config)
-        return true
+        return nil
     }
 
     /// 从看过的内容收藏：App 自己抓网页正文，抓不到就用记录里的简介和标签
-    func saveFromHistory(_ v: ContentView, config: Config) async {
+    @discardableResult
+    func saveFromHistory(_ v: ContentView, config: Config) async -> String? {
+        if let reason = Favorite(url: v.url, title: v.title, text: "", textKind: .none).rejectionReason { return reason }
         var text = ""
         var kind = Favorite.TextKind.none
         if v.kind != "video", let url = URL(string: v.url) {
@@ -50,7 +54,7 @@ final class FavoriteExtractor {
             text = desc
             kind = desc.isEmpty ? .none : .description
         }
-        save(Favorite(url: v.url, title: v.title, author: v.author, text: text, textKind: kind), config: config)
+        return save(Favorite(url: v.url, title: v.title, author: v.author, text: text, textKind: kind), config: config)
     }
 
     func retry(_ f: Favorite, config: Config) {

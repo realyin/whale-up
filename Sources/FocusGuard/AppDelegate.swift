@@ -48,7 +48,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let f = FavoriteExtractor(store: store)
         f.onChange = { [weak self] done in
             self?.main?.model.version += 1
-            if let done { self?.toast.show("⭐ 要点提取好了：\(done.title)") }
+            if let done {
+                self?.toast.show(done.points?.worth == false ? "⭐ \(done.title)：没有值得留下的内容" : "⭐ 要点提取好了：\(done.title)")
+            }
         }
         return f
     }
@@ -120,12 +122,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 return ["ok": true, "scope": self.config.contentScope.rawValue, "todayViews": count]
             })
         server?.onFavorite = { [weak self] input in
-            guard let self, let favorites = self.favorites else { return false }
+            guard let self, let favorites = self.favorites else { return "专注守护还没准备好" }
             let kind = Favorite.TextKind(rawValue: input.textKind ?? "") ?? .none
-            let ok = favorites.save(Favorite(url: input.url, title: input.title ?? input.url, author: input.author,
-                                             text: input.text ?? "", textKind: kind), config: self.config)
-            if ok { self.toast.show("⭐ 已收藏，正在提取要点") }
-            return ok
+            let reason = favorites.save(Favorite(url: input.url, title: input.title ?? input.url, author: input.author,
+                                                 text: input.text ?? "", textKind: kind), config: self.config)
+            if reason == nil { self.toast.show("⭐ 已收藏，正在提取要点") }
+            return reason
         }
         server?.start()
         favorites?.kick(config: config)  // 处理上次没提取完的

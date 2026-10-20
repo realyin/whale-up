@@ -43,7 +43,9 @@ async function favoriteActiveTab() {
       headers: { "Content-Type": "application/json", "X-FocusGuard": "1" },
       body: JSON.stringify(page),
     });
-    return r.ok ? { ok: true, kind: page.textKind } : { ok: false, error: "App 没有接收，请检查专注守护是否在运行" };
+    if (r.ok) return { ok: true, kind: page.textKind };
+    const body = await r.json().catch(() => ({}));
+    return { ok: false, error: body.error || "App 没有接收，请检查专注守护是否在运行" };
   } catch {
     return { ok: false, error: "连不上本机 App，请先打开专注守护" };
   }

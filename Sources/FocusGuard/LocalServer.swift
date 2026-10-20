@@ -9,7 +9,8 @@ final class LocalServer {
 
     private var listener: NWListener?
     private let onViews: ([ContentView]) -> Void
-    var onFavorite: (FavoriteInput) -> Bool = { _ in false }
+    /// 返回 nil 表示收下了，否则是不能收藏的原因
+    var onFavorite: (FavoriteInput) -> String? = { _ in "未就绪" }
     private let status: () -> [String: Any]
     private(set) var lastReportAt: Date?
     private(set) var error: String?
@@ -79,8 +80,11 @@ final class LocalServer {
                 return send(conn, status: 400, json: ["error": "invalid json"])
             }
             Self.log("  收藏：\(input.url) \(input.textKind ?? "") \(input.text?.count ?? 0) 字")
-            let ok = onFavorite(input)
-            send(conn, status: ok ? 200 : 403, json: ["ok": ok])
+            if let reason = onFavorite(input) {
+                send(conn, status: 422, json: ["ok": false, "error": reason])
+            } else {
+                send(conn, status: 200, json: ["ok": true])
+            }
         default:
             send(conn, status: 404, json: ["error": "not found"])
         }
