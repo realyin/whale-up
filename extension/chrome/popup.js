@@ -18,10 +18,23 @@ fetch("http://127.0.0.1:47621/status", { headers: { "X-FocusGuard": "1" } })
 const KINDS = { subtitle: "字幕", article: "正文", description: "简介", none: "标题" };
 const favButton = document.getElementById("fav");
 const favStatus = document.getElementById("favStatus");
+// 弹窗文件每次从磁盘读，后台脚本却要在扩展页点“刷新”才会更新：版本对不上时提示
+const EXPECTED_VERSION = "0.2.1";
+if (chrome.runtime.getManifest().version !== EXPECTED_VERSION) {
+  favButton.disabled = true;
+  favStatus.textContent = "扩展有更新：请打开 chrome://extensions，在“专注守护”上点刷新按钮。";
+}
+
 favButton.addEventListener("click", async () => {
   favButton.disabled = true;
   favStatus.textContent = "正在读取这一页…";
-  const r = await chrome.runtime.sendMessage({ type: "favorite" });
+  let r;
+  try {
+    r = await chrome.runtime.sendMessage({ type: "favorite" });
+  } catch {
+    r = undefined;
+  }
+  if (r === undefined) r = { ok: false, error: "扩展后台没有响应：请在 chrome://extensions 里刷新“专注守护”" };
   favStatus.textContent = r?.ok
     ? `已收藏（读到了${KINDS[r.kind] ?? "内容"}），正在提取要点。`
     : r?.error ?? "收藏失败";

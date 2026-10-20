@@ -1,6 +1,9 @@
 // 专注守护：记录正在看的视频 / 网页，经后台转发给本机 App（只发到 127.0.0.1）。
 // 是否保存由 App 按“内容记录范围”决定，范围外的记录 App 直接丢弃。
 (() => {
+  // 同一个页面只运行一份（收藏时可能会被再注入一次）
+  if (window.__focusGuardLoaded) return;
+  window.__focusGuardLoaded = true;
   const SEND_EVERY_MS = 15000;
   const FIRST_SEND_SECONDS = 5; // 新内容尽快上报一次，好让 App 尽早判断有没有营养
   // 后台标签页的定时器会被 Chrome 限流（最慢约一分钟一次），所以按真实经过的时间计，而不是按次数

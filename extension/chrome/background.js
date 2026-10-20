@@ -13,16 +13,30 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   return true; // 异步回复
 });
 
+async function askPage(tabId) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, { type: "extract" });
+  } catch {
+    return null;
+  }
+}
+
 // 收藏当前页面：让页面脚本提取字幕 / 正文，再交给本机 App 提炼要点
 async function favoriteActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return { ok: false, error: "没有可以收藏的页面" };
-  let page;
-  try {
-    page = await chrome.tabs.sendMessage(tab.id, { type: "extract" });
-  } catch {
-    return { ok: false, error: "这个页面读不到内容，刷新页面后再试" };
+  if (!/^https?:/.test(tab.url || "https:")) return { ok: false, error: "这个页面不能收藏（只支持网页）" };
+  let page = await askPage(tab.id);
+  if (!page) {
+    // 扩展更新前就打开的页面里没有新版脚本：注入一份再试
+    try {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
+      page = await askPage(tab.id);
+    } catch {
+      // 浏览器内部页面、应用商店等不允许注入
+    }
   }
+  if (!page) return { ok: false, error: "读不到这个页面的内容，刷新页面后再试" };
   try {
     const r = await fetch(`${ENDPOINT}/favorites`, {
       method: "POST",
