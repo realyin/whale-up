@@ -53,7 +53,7 @@ button:disabled { opacity: .5; cursor: default; box-shadow: 0 2px 0 rgba(0, 0, 0
 body.ring-open #bubble { opacity: 0; pointer-events: none; }
 .ri { --size: 52px; position: absolute; width: var(--size); height: var(--size); margin: calc(var(--size) / -2) 0 0 calc(var(--size) / -2);
   padding: 0; border-radius: 50%; background: var(--paper); border: 2px solid var(--ink); box-shadow: 0 3px 0 var(--ink);
-  pointer-events: auto; display: flex; align-items: center; justify-content: center;
+  pointer-events: auto; display: flex; align-items: center; justify-content: center; border-width: 1.5px;
   transform: scale(.2); opacity: 0;
   transition: left .34s cubic-bezier(.3, 1.45, .5, 1), top .34s cubic-bezier(.3, 1.45, .5, 1),
               transform .26s cubic-bezier(.3, 1.6, .5, 1), opacity .16s, background .12s; }
@@ -62,9 +62,9 @@ body.ring-open #bubble { opacity: 0; pointer-events: none; }
 .ri .ic { font-size: calc(var(--size) * .44); line-height: 1; transition: transform .2s; display: flex; }
 .ri .ic img { width: calc(var(--size) * .84); height: calc(var(--size) * .84); object-fit: contain; }
 .ri .lb { position: absolute; top: calc(100% + 2px); left: 50%; transform: translateX(-50%); white-space: nowrap;
-  background: var(--ink); color: var(--paper); font-size: 10.5px; font-weight: 700; padding: 1px 6px 2px; border-radius: 6px; }
-.ri.group::after { content: "›"; position: absolute; right: -3px; top: -4px; width: 15px; height: 15px; border-radius: 50%;
-  background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 700; line-height: 13px; border: 1.5px solid var(--ink); }
+  background: var(--ink); color: var(--paper); font-size: 9.5px; font-weight: 700; padding: 0 5px 1px; border-radius: 5px; }
+.ri.group::after { content: "›"; position: absolute; right: -4px; top: -4px; width: 13px; height: 13px; border-radius: 50%;
+  background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 700; line-height: 11px; border: 1.5px solid var(--ink); }
 .ri.on { background: var(--soft); }
 .ri.on .lb::before { content: "✓ "; }
 .ri.out:hover:not(:disabled) { transform: scale(1.16); background: var(--soft); border-color: var(--accent); box-shadow: 0 3px 0 var(--accent); z-index: 1; }
@@ -73,5 +73,5 @@ body.ring-open #bubble { opacity: 0; pointer-events: none; }
 .ri:disabled { cursor: default; }
 .ri.out:disabled { opacity: .45; }
 .ring-status { position: absolute; transform: translateX(-50%); white-space: nowrap; pointer-events: none;
-  background: var(--paper); color: var(--ink); border: 2px solid var(--ink); border-radius: 999px; padding: 3px 12px;
-  font-size: 11.5px; font-weight: 600; box-shadow: 0 3px 0 rgba(0, 0, 0, .1); animation: pop .3s cubic-bezier(.3, 1.5, .5, 1); }
+  background: var(--paper); color: var(--ink); border: 1.5px solid var(--ink); border-radius: 999px; padding: 1px 9px 2px;
+  font-size: 10px; font-weight: 600; box-shadow: 0 3px 0 rgba(0, 0, 0, .1); animation: pop .3s cubic-bezier(.3, 1.5, .5, 1); }

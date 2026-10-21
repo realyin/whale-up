@@ -550,9 +550,9 @@
     const v = ring.spec.visible || { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight };
     const box = { x0: Math.max(0, v.x), y0: Math.max(0, v.y),
                   x1: Math.min(window.innerWidth, v.x + v.w), y1: Math.min(window.innerHeight, v.y + v.h) };
-    const size = items.length > 7 ? 50 : 56;
+    const size = items.length > 7 ? 36 : 40;
     const measure = document.createElement("canvas").getContext("2d");
-    measure.font = "700 10.5px -apple-system, 'PingFang SC', sans-serif";
+    measure.font = "700 9.5px -apple-system, 'PingFang SC', sans-serif";
     const labelWidth = Math.max(...items.map((it) => measure.measureText((it.on ? "✓ " : "") + it.title).width + 14));
     const pos = ringPositions(items.length, c, box, size, labelWidth);
 
@@ -590,7 +590,7 @@
     pill.className = "ring-status";
     pill.textContent = back ? `${back} · 点她返回` : ring.spec.status || "";
     pill.style.left = `${c.x}px`;
-    pill.style.top = top - 34 > box.y0 ? `${top - 34}px` : `${Math.min(bottom + 6, box.y1 - 30)}px`;
+    pill.style.top = top - 26 > box.y0 ? `${top - 26}px` : `${Math.min(bottom + 4, box.y1 - 22)}px`;
     if (pill.textContent) ringEl.appendChild(pill);
   }
 
