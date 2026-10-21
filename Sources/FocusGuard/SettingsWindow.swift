@@ -17,6 +17,8 @@ final class SettingsModel: ObservableObject {
     @Published var labelerStatus: String?
     /// 当前显示的设置分组
     @Published var tab: SettingsTab = .sites
+    /// 让桌宠演示一次施法（不会真的关网页）
+    var previewMascot: () -> Void = {}
     private let onChange: (Config) -> Void
     private var replacing = false
 
@@ -91,7 +93,7 @@ struct SettingsView: View {
                 case .force:
                     ForceSettings(config: $model.config, browserURL: model.browserURL)
                 case .reminders:
-                    ReminderSettings(config: $model.config)
+                    ReminderSettings(config: $model.config, previewMascot: model.previewMascot)
                 case .content:
                     ContentSettings(model: model)
                 case .ai:
@@ -221,6 +223,7 @@ struct ForceSettings: View {
 
 struct ReminderSettings: View {
     @Binding var config: Config
+    var previewMascot: () -> Void = {}
 
     var body: some View {
         Form {
@@ -271,6 +274,18 @@ struct ReminderSettings: View {
                         .labelsHidden().frame(width: 90)
                     }
                     MinutesStepper(title: "工作时段连续刷", value: $config.workLimitMinutes, range: 1...60, suffix: "分钟就提醒")
+                }
+            }
+            Section("桌宠") {
+                Toggle("显示桌宠：用她代替弹窗提醒，时间到了会飞过去用法术关网页", isOn: $config.mascotEnabled)
+                Toggle("说话时读出来", isOn: $config.mascotVoice).disabled(!config.mascotEnabled)
+                if Mascot.assetsDir == nil {
+                    Text("没有找到桌宠模型。在项目目录运行 scripts/fetch_mascot.sh 下载后重新安装。")
+                        .font(.caption).foregroundStyle(.orange)
+                } else {
+                    Text("可以拖动她换位置；戳她一下会告诉你今天刷了多久。角色为 Live2D 官方示例模型 Mao。")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("演示一次施法（不会真的关网页）") { previewMascot() }.disabled(!config.mascotEnabled)
                 }
             }
             Section("逐级加强") {

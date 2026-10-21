@@ -57,6 +57,25 @@
 - 按时间排列的浏览段落：连续在同一网站上刷的多条（比如连划 20 个抖音）合成一段，显示“几条 · 多久”，可以展开看每条标题
 - 想看到全天所有网页（不只是没营养的），在“设置… → 内容记录”里选“记录所有网页”
 
+## 桌宠
+
+屏幕右下角站着一个魔法少女（Live2D 官方示例模型 Mao），代替弹窗做提醒：
+
+- **表情跟着你变**：看学习内容时开心，刷没营养的内容时嘟嘴盯着你，快到时限时皱眉
+- **提醒**：在她头顶的气泡里说，并用系统中文语音读出来；“关掉它 / 再刷 5 分钟 / 为什么在刷”都在气泡里。需要写理由的那一级仍用弹窗
+- **用法术关网页**：你点“关掉它”、强制关闭到时间、或额度用完时，她会飞到浏览器窗口右上角，挥魔杖放出星星，网页“砰”地关掉，再飞回来
+- 可以拖动她换位置；戳她一下会告诉你今天刷了多久
+- 在“设置 → 提醒 → 桌宠”里开关、关闭语音，或点“演示一次施法”
+
+**第一次需要下载模型**（约 5 MB，不提交进仓库）：
+
+```bash
+./scripts/fetch_mascot.sh   # 下载 Live2D Cubism Core、pixi.js、pixi-live2d-display 和示例模型 Mao
+./scripts/install.sh
+```
+
+许可：Mao 属于 Live2D 免费素材许可，Cubism Core 属于 Live2D 专有软件许可，本项目只在本机个人使用。要把 App 分享给别人之前，请先阅读 Live2D 的许可条款（年收入超过 1000 万日元的企业需要另行授权）。
+
 ## 收藏与要点
 
 看到值得留下的内容，收藏它，大模型会提炼一句话概括和 3–5 个要点（用“写报告用的模型”）：
@@ -158,6 +177,7 @@ FOCUSGUARD_TEST_NUDGE=1 build/FocusGuard.app/Contents/MacOS/FocusGuard    # 按�
 FOCUSGUARD_WRITE_DIGEST=1 build/FocusGuard.app/Contents/MacOS/FocusGuard  # 立刻写今天的小结（会调用大模型）
 FOCUSGUARD_WRITE_WEEKLY=1 build/FocusGuard.app/Contents/MacOS/FocusGuard  # 立刻写本周复盘（会调用大模型并写入 Obsidian）
 FOCUSGUARD_TEST_FAVORITE=<网址> build/FocusGuard.app/Contents/MacOS/FocusGuard  # 抓网页并提炼要点（临时数据库，会调用大模型）
+FOCUSGUARD_MASCOT_DEMO=/tmp build/FocusGuard.app/Contents/MacOS/FocusGuard  # 单独显示桌宠，截图各表情、气泡、施法
 ```
 
 代码结构：`Sources/FocusGuardCore` 是纯逻辑（分类、计时、文案），`Sources/FocusGuard` 是菜单栏 App（系统监测、弹窗）。

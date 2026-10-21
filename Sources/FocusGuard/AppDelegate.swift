@@ -8,6 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let nudgeWindow = NudgeWindow()
     private let toast = Toast()
     private let pausePanel = PausePanel()
+    /// 桌宠（开启且模型文件在时才有）
+    private var mascot: Mascot?
     private var wasJunk = false
     private var lastPauseAt: Date?
     private var main: MainWindow?
@@ -86,6 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.menu = menu
 
         ExtensionFiles.install()
+        updateMascot()
         enableLaunchAtLoginOnFirstInstall()
         startServer()
         try? contentStore?.prune(before: Date().addingTimeInterval(-90 * 86400))
@@ -247,7 +250,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             toast.show("⏳ 还有 1 分钟，\(rule ?? "") 将被自动关闭")
         case .close:
             if let id = current?.bundleID {
-                monitor.closeJunk(bundleID: id, nudgedURL: current?.url, rules: config.forceCloseSites)
+                let url = current?.url
+                closeWithMagic(line: "看了这么久了还不关！", bundleID: id) { [weak self] in
+                    guard let self else { return }
+                    self.monitor.closeJunk(bundleID: id, nudgedURL: url, rules: self.config.forceCloseSites)
+                }
             }
             nudgeWindow.close()
             tracker.acceptRest()
@@ -262,9 +269,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
            config.budgetRemainingSeconds(usedToday: tracker.todaySeconds) == 0,
            now.timeIntervalSince(lastBudgetCloseAt) > 10, let id = activity.bundleID {
             lastBudgetCloseAt = now
-            if monitor.closeJunk(bundleID: id, nudgedURL: activity.url, rules: config.junkSites + config.forceCloseSites) {
-                nudgeWindow.close()
-                toast.show("⛽️ 今天 \(Int(config.dailyBudgetMinutes)) 分钟的额度用完了，已关掉 \(currentReason ?? "这个网页")")
+            let site = currentReason ?? "这个网页"
+            closeWithMagic(line: "今天的额度用完啦！", bundleID: id) { [weak self] in
+                guard let self else { return }
+                if self.monitor.closeJunk(bundleID: id, nudgedURL: activity.url, rules: self.config.junkSites + self.config.forceCloseSites) {
+                    self.nudgeWindow.close()
+                    self.toast.show("⛽️ 今天 \(Int(self.config.dailyBudgetMinutes)) 分钟的额度用完了，已关掉 \(site)")
+                }
             }
         }
     }
@@ -315,8 +326,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let record: (NudgeRecord.Outcome, String?) -> Void = { [weak self] outcome, note in
             if let id { try? self?.contentStore?.setNudgeOutcome(id: id, outcome: outcome, note: note) }
         }
+        let friction = Friction.level(for: nudge, config: config)
+        if let mascot, mascot.isShown, friction != .writeReason(waitSeconds: config.frictionWaitSeconds) {
+            // 桌宠在头顶气泡里提醒，并读出来；要写理由的那一级仍用弹窗（需要打字）
+            var wait = 0
+            if case .wait(let s) = friction { wait = s }
+            mascot.say(text.body, speak: text.body, buttons: [
+                Mascot.BubbleButton(id: "rest", title: nudge.isNight ? "好，关掉去睡觉" : "好，关掉它", primary: true),
+                Mascot.BubbleButton(id: "snooze", title: "再刷 \(Int(config.snoozeMinutes)) 分钟", waitSeconds: wait),
+            ], reasons: ReasonKind.allCases, onButton: { [weak self] id in
+                self?.mascot?.hideBubble()
+                if id == "rest" { record(.accepted, nil); self?.acceptRest() } else { record(.snoozed, nil) }
+            }, onReason: { [weak self] kind in
+                try? self?.contentStore?.addReason(
+                    NudgeReason(at: Date(), reason: kind, site: nudge.reason, sessionMinutes: nudge.sessionMinutes))
+            })
+            return
+        }
         nudgeWindow.show(text, isNight: nudge.isNight, snoozeMinutes: Int(config.snoozeMinutes),
-                         friction: Friction.level(for: nudge, config: config),
+                         friction: friction,
                          onRest: { [weak self] in record(.accepted, nil); self?.acceptRest() },
                          onSnooze: { note in record(.snoozed, note) },
                          onReason: { [weak self] kind in
@@ -330,9 +358,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         tracker.acceptRest()
         saveTracker()
         if let id = nudgedBundleID {
-            monitor.closeJunk(bundleID: id, nudgedURL: nudgedURL, rules: config.junkSites)
+            let url = nudgedURL
+            closeWithMagic(line: "好，交给我吧！", bundleID: id) { [weak self] in
+                guard let self else { return }
+                self.monitor.closeJunk(bundleID: id, nudgedURL: url, rules: self.config.junkSites)
+            }
         }
         updateStatusTitle()
+    }
+
+    /// 有桌宠时让她飞过去施法关掉；没有就直接关
+    private func closeWithMagic(line: String, bundleID: String, close: @escaping () -> Void) {
+        guard let mascot, mascot.isShown else { return close() }
+        mascot.castAndClose(line: line, browserBundleID: bundleID, close: close)
+    }
+
+    /// 桌宠此刻的表情
+    private var mascotMood: Mascot.Mood {
+        if pausedUntil != nil { return .idle }
+        if currentReason != nil {
+            let limit = config.limitSeconds(at: Date())
+            return tracker.sessionSeconds >= limit * 0.7 ? .angry : .watching
+        }
+        if let label = currentLabel, !label.isJunk { return .happy }
+        return .idle
+    }
+
+    /// 按设置显示或收起桌宠
+    private func updateMascot() {
+        if config.mascotEnabled, Mascot.assetsDir != nil {
+            if mascot == nil {
+                let m = Mascot()
+                m.onTapped = { [weak self] in
+                    guard let self, let m = self.mascot else { return }
+                    let used = self.tracker.todaySeconds
+                    let line: String
+                    if used < 60 { line = "今天表现不错哦，继续保持～" }
+                    else if let left = self.config.budgetRemainingSeconds(usedToday: used) {
+                        line = left > 0 ? "今天已经刷了 \(formatDuration(used))，额度还剩 \(formatDuration(left))。"
+                                        : "今天的额度已经用完了，别再刷啦！"
+                    } else { line = "今天已经刷了 \(formatDuration(used)) 没营养的内容了哦。" }
+                    m.remark(line)
+                }
+                m.onError = { [weak self] in self?.toast.show("桌宠加载失败：\($0)") }
+                m.show()
+                mascot = m
+            }
+            mascot?.voiceEnabled = config.mascotVoice
+        } else {
+            mascot?.hide()
+            mascot = nil
+        }
     }
 
     private func saveTracker() {
@@ -373,6 +449,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         main?.model.settings.replace(with: config)
         main?.model.config = config
         labeler?.kick(config: config)
+        updateMascot()
     }
 
     /// 用户保存配置文件后自动生效，无需重启
@@ -387,6 +464,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - 菜单栏
 
     private func updateStatusTitle() {
+        mascot?.setMood(mascotMood)
         main?.model.todayJunkSeconds = tracker.todaySeconds
         main?.model.pausedUntil = pausedUntil
         let minutes = Int(todayJunkSeconds / 60)
@@ -521,6 +599,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             settings.extensionLastSeen = server?.lastReportAt
             settings.serverError = server?.error ?? (contentStore == nil ? "内容数据库打开失败" : nil)
             settings.labelerStatus = labelerStatus
+            settings.previewMascot = { [weak self] in
+                guard let mascot = self?.mascot else { return }
+                let browser = ["com.google.Chrome", "com.apple.Safari", "com.microsoft.edgemac"].first {
+                    !NSRunningApplication.runningApplications(withBundleIdentifier: $0).isEmpty
+                }
+                mascot.castAndClose(line: "看了这么久了还不关！", browserBundleID: browser) {}
+            }
             let model = MainModel(stats: stats, config: config, settings: settings)
             model.contentStore = contentStore
             model.digestWriter = digestWriter

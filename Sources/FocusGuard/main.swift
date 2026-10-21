@@ -95,6 +95,10 @@ MainActor.assumeIsolated {
         }
         RunLoop.main.run()
     }
+    if let dir = ProcessInfo.processInfo.environment["FOCUSGUARD_MASCOT_DEMO"] {
+        runMascotDemo(to: dir)
+        NSApplication.shared.run()
+    }
     if let id = ProcessInfo.processInfo.environment["FOCUSGUARD_CLOSE_JUNK"] {
         print("closed:", ActivityMonitor().closeJunk(bundleID: id, nudgedURL: nil, rules: Config.load().0.junkSites))
         exit(0)
@@ -184,4 +188,50 @@ func renderMainDemo(to dir: String) {
     for page in Page.allCases {
         MainWindow.renderPNG(model: model, page: page, to: URL(fileURLWithPath: dir).appendingPathComponent("main-\(page).png"))
     }
+}
+
+/// 开发用：单独显示桌宠，按顺序切换表情、说话、施法，并截图
+@MainActor
+func runMascotDemo(to dir: String) {
+    NSApplication.shared.setActivationPolicy(.accessory)
+    let mascot = Mascot()
+    mascot.voiceEnabled = false
+    mascot.onError = { print("桌宠出错：", $0) }
+    mascot.show()
+    let out = URL(fileURLWithPath: dir)
+    var steps: [(String, @MainActor () -> Void)] = (1...8).map { i in
+        ("exp_0\(i)", { mascot.js("mascot.expr('exp_0\(i)')") })
+    }
+    steps.append(("bubble", {
+        mascot.js("mascot.setMood('angry')")
+        mascot.say("看了这么久了还不关！再刷就要被我施魔法了哦。",
+                   buttons: [Mascot.BubbleButton(id: "rest", title: "好，关掉它", primary: true),
+                             Mascot.BubbleButton(id: "snooze", title: "再刷 5 分钟", waitSeconds: 10)],
+                   reasons: ReasonKind.allCases)
+    }))
+    steps.append(("cast", { mascot.hideBubble(); mascot.js("mascot.setMood('angry'); mascot.cast(-1, -0.7)") }))
+    steps.append(("burst", { mascot.js("mascot.burst(75, 85)") }))
+
+    @MainActor func run(_ i: Int) {
+        guard i < steps.count else { exit(0) }
+        steps[i].1()
+        DispatchQueue.main.asyncAfter(deadline: .now() + (steps[i].0 == "cast" ? 1.0 : steps[i].0 == "burst" ? 0.35 : 1.6)) {
+            MainActor.assumeIsolated {
+                mascot.snapshot(to: out.appendingPathComponent("mascot-\(steps[i].0).png")) {
+                    MainActor.assumeIsolated { run(i + 1) }
+                }
+            }
+        }
+    }
+    @MainActor func waitReady(_ tries: Int) {
+        if mascot.isReady {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { MainActor.assumeIsolated { run(0) } }
+        } else if tries > 100 {
+            print("桌宠 10 秒内没有加载完成")
+            exit(1)
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { MainActor.assumeIsolated { waitReady(tries + 1) } }
+        }
+    }
+    waitReady(0)
 }

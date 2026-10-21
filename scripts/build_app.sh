@@ -12,6 +12,12 @@ mkdir -p "$APP/Contents/MacOS"
 cp "$BIN" "$APP/Contents/MacOS/FocusGuard"
 mkdir -p "$APP/Contents/Resources"
 cp -R extension/chrome "$APP/Contents/Resources/ChromeExtension"
+# 桌宠（需要先运行 scripts/fetch_mascot.sh 下载模型）
+if [ -f mascot/vendor/Mao/Mao.model3.json ]; then
+    cp -R mascot "$APP/Contents/Resources/Mascot"
+else
+    echo "提示：没有桌宠模型，桌宠不可用。运行 scripts/fetch_mascot.sh 下载。"
+fi
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
