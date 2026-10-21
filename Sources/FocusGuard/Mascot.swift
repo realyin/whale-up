@@ -10,7 +10,7 @@ private final class MascotPanel: NSPanel {
 
 /// 桌宠：屏幕上的 Live2D 角色。会换表情、说话、在气泡里提醒，还会飞去浏览器用法术关网页。
 @MainActor
-final class Mascot: NSObject, WKScriptMessageHandler, AVSpeechSynthesizerDelegate {
+final class Mascot: NSObject, WKScriptMessageHandler {
     enum Mood: String { case idle, happy, excited, watching, angry, shy }
 
     struct BubbleButton {
@@ -78,7 +78,7 @@ final class Mascot: NSObject, WKScriptMessageHandler, AVSpeechSynthesizerDelegat
     private var dragging = false
     private var busy = false
     private var mood: Mood = .idle
-    private let synth = AVSpeechSynthesizer()
+    let voice = Voice()
     private var onButton: ((String) -> Void)?
     private var onReason: ((ReasonKind) -> Void)?
     var onError: (String) -> Void = { _ in }
@@ -124,7 +124,8 @@ final class Mascot: NSObject, WKScriptMessageHandler, AVSpeechSynthesizerDelegat
         panel.contentView = web
         panel.orderFrontRegardless()
         self.panel = panel
-        synth.delegate = self
+        voice.onStart = { [weak self] in self?.js("mascot.setSpeaking(true)") }
+        voice.onFinish = { [weak self] in self?.js("mascot.setSpeaking(false)") }
 
         // 鼠标在角色或气泡上才接收点击，其余地方点穿到下面的窗口
         mouseTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
@@ -135,7 +136,7 @@ final class Mascot: NSObject, WKScriptMessageHandler, AVSpeechSynthesizerDelegat
     func hide() {
         mouseTimer?.invalidate()
         mouseTimer = nil
-        synth.stopSpeaking(at: .immediate)
+        voice.stop()
         web?.configuration.userContentController.removeScriptMessageHandler(forName: "mascot")
         panel?.close()
         panel = nil
@@ -179,19 +180,40 @@ final class Mascot: NSObject, WKScriptMessageHandler, AVSpeechSynthesizerDelegat
         js("mascot.hideBubble()")
     }
 
-    /// 播放一个小动作（打哈欠、睡觉、伸懒腰、吃饭）
-    func play(_ action: MascotBehavior.Action) {
+    /// 角色会的动作（角色加载后由网页告诉我们）
+    private(set) var actions: [String] = []
+    /// 现在在做的动作（睡觉会一直做到被叫醒）
+    private(set) var playing: String?
+
+    /// 动作的中文名和做的时候说的话
+    static let actionInfo: [String: (title: String, line: String?)] = [
+        "eat": ("吃大米饭", "开饭啦！大米饭最好吃了～"),
+        "sleep": ("睡觉", "那我先睡一会儿……"),
+        "yawn": ("打哈欠", "哈啊——好困"),
+        "stretch": ("伸懒腰", "嗯——伸个懒腰～"),
+        "swim": ("游泳", "在屏幕里游泳～"),
+        "dance": ("跳舞", "跳个舞给你看！"),
+        "work": ("陪你工作", "我陪你一起认真工作！"),
+        "heart": ("比心", "比心～最喜欢你啦"),
+        "milktea": ("喝奶茶", "奶茶时间到～"),
+        "read": ("看书", "我也来看会儿书。"),
+    ]
+
+    /// 播放一个动作；特效写在角色包里，老角色包按动作名给默认特效
+    func play(_ name: String) {
         guard !busy else { return }
-        let effect: String
-        switch action {
-        case .sleep: effect = "'zzz'"
-        case .eat: effect = "'rice'"
-        default: effect = "null"
-        }
-        js("mascot.play('\(action.rawValue)', \(effect))")
+        let fallback = ["sleep": "'zzz'", "eat": "'rice'"][name] ?? "null"
+        playing = name
+        js("mascot.play('\(name)', \(fallback))")
     }
 
+    func play(_ action: MascotBehavior.Action) { play(action.rawValue) }
+
+    /// 右键点她
+    var onMenu: () -> Void = {}
+
     func stopAction() {
+        playing = nil
         js("mascot.stop()")
     }
 
@@ -210,24 +232,7 @@ final class Mascot: NSObject, WKScriptMessageHandler, AVSpeechSynthesizerDelegat
 
     private func speak(_ text: String) {
         guard voiceEnabled else { return }
-        synth.stopSpeaking(at: .immediate)
-        let u = AVSpeechUtterance(string: text)
-        u.voice = AVSpeechSynthesisVoice(language: "zh-CN")
-        u.pitchMultiplier = 1.4
-        u.rate = 0.52
-        synth.speak(u)
-    }
-
-    nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didStart u: AVSpeechUtterance) {
-        Task { @MainActor in self.js("mascot.setSpeaking(true)") }
-    }
-
-    nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) {
-        Task { @MainActor in self.js("mascot.setSpeaking(false)") }
-    }
-
-    nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) {
-        Task { @MainActor in self.js("mascot.setSpeaking(false)") }
+        voice.speak(text)
     }
 
     // MARK: 施法关网页
@@ -324,10 +329,12 @@ final class Mascot: NSObject, WKScriptMessageHandler, AVSpeechSynthesizerDelegat
             CGRect(x: $0["x"] ?? 0, y: $0["y"] ?? 0, width: $0["w"] ?? 0, height: $0["h"] ?? 0)
         }
         let error = body["message"] as? String
+        let actionList = body["actions"] as? [String] ?? []
         Task { @MainActor in
             switch type {
             case "ready":
                 self.ready = true
+                self.actions = actionList
                 let queued = self.pendingJS
                 self.pendingJS = []
                 queued.forEach { self.js($0) }
@@ -345,6 +352,14 @@ final class Mascot: NSObject, WKScriptMessageHandler, AVSpeechSynthesizerDelegat
                 if let id, let kind = ReasonKind(rawValue: id) { self.onReason?(kind) }
             case "tapped":
                 self.onTapped()
+            case "menu":
+                self.onMenu()
+            case "woke":
+                self.playing = nil
+                self.play("yawn")
+                self.remark("唔……被你叫醒了", seconds: 3)
+            case "actionEnded":
+                self.playing = nil
             case "error":
                 self.onError(error ?? "桌宠加载失败")
             default:

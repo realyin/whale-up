@@ -81,6 +81,10 @@ public struct Config: Codable, Equatable {
     public var mascotEnabled = true
     /// 桌宠说话时读出来（系统中文语音）
     public var mascotVoice = true
+    /// 桌宠的声音（微软在线语音的名字，system 为系统语音）
+    public var mascotVoiceName = "zh-CN-XiaoyiNeural"
+    /// 桌宠自己按时做小动作（饭点吃饭、离开时睡觉、坐久了伸懒腰、偶尔打哈欠）
+    public var mascotAutoActions = true
     /// 桌宠角色（Application Support/FocusGuard/Mascot/characters 下的文件夹名）
     public var mascotCharacter = "mao"
     /// 逐级加强：第二次提醒起“再刷”要等倒计时，第三次起还要写理由
@@ -158,6 +162,8 @@ public struct Config: Codable, Equatable {
         mascotEnabled = try c.decodeIfPresent(Bool.self, forKey: .mascotEnabled) ?? d.mascotEnabled
         mascotVoice = try c.decodeIfPresent(Bool.self, forKey: .mascotVoice) ?? d.mascotVoice
         mascotCharacter = try c.decodeIfPresent(String.self, forKey: .mascotCharacter) ?? d.mascotCharacter
+        mascotAutoActions = try c.decodeIfPresent(Bool.self, forKey: .mascotAutoActions) ?? d.mascotAutoActions
+        mascotVoiceName = try c.decodeIfPresent(String.self, forKey: .mascotVoiceName) ?? d.mascotVoiceName
         frictionEnabled = try c.decodeIfPresent(Bool.self, forKey: .frictionEnabled) ?? d.frictionEnabled
         frictionWaitSeconds = try c.decodeIfPresent(Int.self, forKey: .frictionWaitSeconds) ?? d.frictionWaitSeconds
         pauseBeforeJunk = try c.decodeIfPresent(Bool.self, forKey: .pauseBeforeJunk) ?? d.pauseBeforeJunk

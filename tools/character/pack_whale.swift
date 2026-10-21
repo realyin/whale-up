@@ -157,13 +157,65 @@ var spec: [String: Any] = [
     "headAt": [0.22, 0.08], "castFrom": [0.5, 0.62], "castFromCast": [0.05, 0.37],
 ]
 if frames.contains(where: { $0.0 == "blink" }) { spec["blink"] = "blink.png" }
-// 小动作：打哈欠、睡觉、伸懒腰、吃大米饭（两帧交替）
-var actions: [String: Any] = [:]
+// ---- 新姿势：每组单独抠图，按组内各帧的公共外框裁剪（同组帧相对位置不变，播放时按脚底中心对齐）----
+func bbox(_ b: Bitmap) -> CGRect? {
+    var minX = W, minY = H, maxX = -1, maxY = -1
+    for y in 0..<H { for x in 0..<W where b.px[i4(x, y) + 3] > 20 {
+        minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
+    } }
+    return maxX < 0 ? nil : CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
+}
+/// 返回保存的文件名；素材不全就返回 nil
+func packPose(_ files: [String]) -> [String]? {
+    var bitmaps: [(String, Bitmap)] = []
+    for f in files {
+        guard var b = load("\(src)/\(f).png") else { return nil }
+        cutout(&b, rects: [])
+        bitmaps.append((f, b))
+    }
+    var union: CGRect?
+    for (_, b) in bitmaps { if let r = bbox(b) { union = union.map { $0.union(r) } ?? r } }
+    guard let union else { return nil }
+    let crop = union.insetBy(dx: -4, dy: -4).intersection(CGRect(x: 0, y: 0, width: W, height: H))
+    return bitmaps.map { (f, b) in
+        save(b, crop: crop, to: "\(dst)/pose-\(f).png")
+        print("已生成 pose-\(f).png")
+        return "pose-\(f).png"
+    }
+}
+
+// 小动作：同一个动作可以有几种姿势，每次随机挑一种
 let have = Set(frames.map(\.0))
-if have.contains("yawn") { actions["yawn"] = ["frames": ["yawn.png"], "seconds": 2.8] }
-if have.contains("sleep") { actions["sleep"] = ["frames": ["sleep.png"], "loop": true] }
-if have.contains("stretch") { actions["stretch"] = ["frames": ["stretch.png"], "seconds": 3.5] }
-if have.contains("eat1") && have.contains("eat2") { actions["eat"] = ["frames": ["eat1.png", "eat2.png"], "fps": 1.2, "seconds": 8] }
+var actions: [String: Any] = [:]
+func add(_ name: String, _ variant: [String: Any]) {
+    var list = (actions[name] as? [String: Any])?["variants"] as? [[String: Any]] ?? []
+    list.append(variant)
+    actions[name] = ["variants": list]
+}
+if have.contains("yawn") { add("yawn", ["frames": ["yawn.png"], "seconds": 2.8]) }
+if have.contains("sleep") { add("sleep", ["frames": ["sleep.png"], "loop": true, "effect": "zzz"]) }
+if have.contains("stretch") { add("stretch", ["frames": ["stretch.png"], "seconds": 3.5]) }
+if have.contains("eat1") && have.contains("eat2") {
+    add("eat", ["frames": ["eat1.png", "eat2.png"], "fps": 1.2, "seconds": 8, "effect": "rice"])
+}
+let poses: [(String, [String], [String: Any])] = [
+    ("eat", ["eat_sit1", "eat_sit2"], ["fps": 1.2, "seconds": 8, "effect": "rice"]),
+    ("sleep", ["sleep_curl"], ["loop": true, "effect": "zzz"]),
+    ("stretch", ["stretch_stand"], ["seconds": 3.5]),
+    ("swim", ["swim1", "swim2"], ["fps": 1.6, "seconds": 7, "effect": "bubbles"]),
+    ("dance", ["dance1", "dance2"], ["fps": 2.2, "seconds": 7, "effect": "notes"]),
+    ("work", ["work"], ["seconds": 10]),
+    ("heart", ["heart"], ["seconds": 3.5, "effect": "hearts"]),
+    ("milktea", ["milktea"], ["seconds": 6]),
+    ("read", ["read"], ["seconds": 10]),
+]
+for (name, files, options) in poses {
+    guard let saved = packPose(files) else { continue }
+    var v = options
+    v["frames"] = saved
+    v["ownPose"] = true
+    add(name, v)
+}
 spec["actions"] = actions
 let json = try! JSONSerialization.data(withJSONObject: spec, options: [.prettyPrinted, .sortedKeys])
 try! json.write(to: URL(fileURLWithPath: "\(dst)/character.json"))

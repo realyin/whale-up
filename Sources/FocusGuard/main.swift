@@ -212,16 +212,16 @@ func runMascotDemo(to dir: String) {
     }))
     steps.append(("cast", { mascot.hideBubble(); mascot.js("mascot.setMood('angry'); mascot.cast(-1, -0.7)") }))
     steps.append(("burst", { mascot.js("mascot.burst()") }))
-    steps.append(("yawn", { mascot.js("mascot.setMood('idle'); mascot.play('yawn')") }))
-    steps.append(("sleep", { mascot.js("mascot.play('sleep', 'zzz')") }))
-    steps.append(("stretch", { mascot.js("mascot.stop(); mascot.play('stretch')") }))
-    steps.append(("eat-a", { mascot.js("mascot.play('eat', 'rice')") }))
-    steps.append(("eat-b", {}))
+    for (shot, name, index) in [("eat-sit", "eat", 1), ("sleep-curl", "sleep", 1), ("stretch-stand", "stretch", 1),
+                                ("swim", "swim", 0), ("dance", "dance", 0), ("work", "work", 0), ("heart", "heart", 0),
+                                ("milktea", "milktea", 0), ("read", "read", 0)] {
+        steps.append((shot, { mascot.js("mascot.stop(); mascot.setMood('idle'); mascot.play('\(name)', null, \(index))") }))
+    }
 
     @MainActor func run(_ i: Int) {
         guard i < steps.count else { exit(0) }
         steps[i].1()
-        DispatchQueue.main.asyncAfter(deadline: .now() + (steps[i].0 == "cast" ? 1.0 : steps[i].0 == "burst" ? 0.35 : steps[i].0 == "eat-a" ? 0.3 : steps[i].0 == "eat-b" ? 0.8 : 1.6)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + (steps[i].0 == "cast" ? 1.0 : steps[i].0 == "burst" ? 0.35 : 1.6)) {
             MainActor.assumeIsolated {
                 mascot.snapshot(to: out.appendingPathComponent("mascot-\(steps[i].0).png")) {
                     MainActor.assumeIsolated { run(i + 1) }

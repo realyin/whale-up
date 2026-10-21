@@ -19,6 +19,8 @@ final class SettingsModel: ObservableObject {
     @Published var tab: SettingsTab = .sites
     /// 让桌宠演示一次施法（不会真的关网页）
     var previewMascot: () -> Void = {}
+    /// 让桌宠用当前选的声音说一句
+    var previewVoice: () -> Void = {}
     private let onChange: (Config) -> Void
     private var replacing = false
 
@@ -93,7 +95,7 @@ struct SettingsView: View {
                 case .force:
                     ForceSettings(config: $model.config, browserURL: model.browserURL)
                 case .reminders:
-                    ReminderSettings(config: $model.config, previewMascot: model.previewMascot)
+                    ReminderSettings(config: $model.config, previewMascot: model.previewMascot, previewVoice: model.previewVoice)
                 case .content:
                     ContentSettings(model: model)
                 case .ai:
@@ -224,6 +226,7 @@ struct ForceSettings: View {
 struct ReminderSettings: View {
     @Binding var config: Config
     var previewMascot: () -> Void = {}
+    var previewVoice: () -> Void = {}
 
     var body: some View {
         Form {
@@ -279,6 +282,19 @@ struct ReminderSettings: View {
             Section("桌宠") {
                 Toggle("显示桌宠：用她代替弹窗提醒，时间到了会飞过去用法术关网页", isOn: $config.mascotEnabled)
                 Toggle("说话时读出来", isOn: $config.mascotVoice).disabled(!config.mascotEnabled)
+                HStack {
+                    Picker("声音", selection: $config.mascotVoiceName) {
+                        ForEach(Voice.choices, id: \.id) { Text($0.name).tag($0.id) }
+                    }
+                    Button("试听") { previewVoice() }
+                }
+                .disabled(!config.mascotEnabled || !config.mascotVoice)
+                if config.mascotVoiceName != "system" && !Voice.onlineAvailable {
+                    Text("在线语音还没装：在项目目录运行 scripts/setup_voice.sh。没装时用系统语音。")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+                Toggle("自己按时做小动作（饭点吃饭、离开时睡觉、坐久了伸懒腰）", isOn: $config.mascotAutoActions)
+                    .disabled(!config.mascotEnabled)
                 Picker("角色", selection: $config.mascotCharacter) {
                     ForEach(Mascot.characters(), id: \.id) { Text($0.name).tag($0.id) }
                 }
@@ -291,7 +307,7 @@ struct ReminderSettings: View {
                     Text("没有找到桌宠模型。在项目目录运行 scripts/fetch_mascot.sh 下载后重新安装。")
                         .font(.caption).foregroundStyle(.orange)
                 } else {
-                    Text("可以拖动她换位置；戳她一下会告诉你今天刷了多久。角色为 Live2D 官方示例模型 Mao。")
+                    Text("可以拖动她换位置；戳她一下会告诉你今天刷了多久；右键点她可以让她做动作，菜单栏里的功能也都在右键菜单里。")
                         .font(.caption).foregroundStyle(.secondary)
                     Button("演示一次施法（不会真的关网页）") { previewMascot() }.disabled(!config.mascotEnabled)
                 }

@@ -195,7 +195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         wasJunk = isJunk
 
         // 桌宠的小动作：离开时睡觉、饭点吃饭、坐久了伸懒腰、偶尔打哈欠
-        if let mascot, mascot.isShown {
+        if let mascot, mascot.isShown, config.mascotAutoActions, mascot.playing == nil || mascot.playing == "sleep" {
             for event in mascotBehavior.update(now: now, idleSeconds: monitor.idleSeconds(),
                                                isJunk: currentReason != nil, config: config) {
                 switch event {
@@ -421,10 +421,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     m.remark(line)
                 }
                 m.onError = { [weak self] in self?.toast.show("桌宠加载失败：\($0)") }
+                m.onMenu = { [weak self] in self?.showMascotMenu() }
                 m.show()
                 mascot = m
             }
             mascot?.voiceEnabled = config.mascotVoice
+            mascot?.voice.voiceID = config.mascotVoiceName
         } else {
             mascot?.hide()
             mascot = nil
@@ -499,6 +501,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        fillMenu(menu)
+    }
+
+    /// 右键点桌宠：先是她的动作，再是和菜单栏一样的功能
+    private func showMascotMenu() {
+        guard let mascot else { return }
+        let menu = NSMenu()
+        let actionsItem = NSMenuItem(title: "动作", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        for name in mascot.actions {
+            let item = NSMenuItem(title: Mascot.actionInfo[name]?.title ?? name, action: #selector(mascotAction(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = name
+            item.state = mascot.playing == name ? .on : .off
+            sub.addItem(item)
+        }
+        let cast = NSMenuItem(title: "施魔法", action: #selector(mascotCast), keyEquivalent: "")
+        cast.target = self
+        sub.addItem(.separator())
+        sub.addItem(cast)
+        actionsItem.submenu = sub
+        menu.addItem(actionsItem)
+        if mascot.playing == "sleep" {
+            let wake = NSMenuItem(title: "叫醒她", action: #selector(mascotWake), keyEquivalent: "")
+            wake.target = self
+            menu.addItem(wake)
+        }
+        let hide = NSMenuItem(title: "暂时隐藏桌宠", action: #selector(hideMascot), keyEquivalent: "")
+        hide.target = self
+        menu.addItem(hide)
+        menu.addItem(.separator())
+        fillMenu(menu)
+        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+    }
+
+    @objc private func mascotAction(_ sender: NSMenuItem) {
+        guard let name = sender.representedObject as? String, let mascot else { return }
+        mascot.play(name)
+        if let line = Mascot.actionInfo[name]?.line { mascot.remark(line, seconds: 3) }
+    }
+
+    @objc private func mascotCast() {
+        guard let mascot else { return }
+        let browser = ["com.google.Chrome", "com.apple.Safari", "com.microsoft.edgemac"].first {
+            !NSRunningApplication.runningApplications(withBundleIdentifier: $0).isEmpty
+        }
+        mascot.castAndClose(line: "看我的魔法！", browserBundleID: browser) {}
+    }
+
+    @objc private func mascotWake() {
+        mascot?.stopAction()
+        mascot?.play("yawn")
+    }
+
+    @objc private func hideMascot() {
+        var new = config
+        new.mascotEnabled = false
+        applyConfig(new)
+        toast.show("桌宠已隐藏，可以在“设置 → 提醒 → 桌宠”里重新打开")
+    }
+
+    private func fillMenu(_ menu: NSMenu) {
         func info(_ title: String) {
             let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
             item.isEnabled = false
@@ -620,6 +684,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             settings.extensionLastSeen = server?.lastReportAt
             settings.serverError = server?.error ?? (contentStore == nil ? "内容数据库打开失败" : nil)
             settings.labelerStatus = labelerStatus
+            settings.previewVoice = { [weak self] in
+                guard let self, let mascot = self.mascot else { return }
+                mascot.voice.voiceID = self.config.mascotVoiceName
+                mascot.remark("主人好呀～我是你的专注小助手，今天也要好好加油哦！", seconds: 5)
+            }
             settings.previewMascot = { [weak self] in
                 guard let mascot = self?.mascot else { return }
                 let browser = ["com.google.Chrome", "com.apple.Safari", "com.microsoft.edgemac"].first {

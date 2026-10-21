@@ -8,6 +8,7 @@
   const effects = new PIXI.Container();
   const characterId = new URLSearchParams(location.search).get("character") || "mao";
   let actor = null; // 当前角色驱动（Live2D 或图片）
+  let characterSpec = null;
   let currentMood = "idle";
 
   /** file:// 下用 XHR 读 JSON（fetch 不支持本地文件） */
@@ -54,10 +55,12 @@
       // Live2D 角色没有动作帧：睡觉时用闭眼的表情，其他动作不做
       play(name) {
         const exp = (spec.actionExpressions || {})[name];
-        if (exp) { model.expression(exp); return true; }
-        return false;
+        if (exp) { model.expression(exp); return {}; }
+        return null;
       },
       stop() { this.setMood(currentMood); },
+      actions: () => Object.keys(spec.actionExpressions || {}),
+      isPlaying: () => false,
       castPoint() {
         const [fx, fy] = spec.castFrom || [0.15, 0.07];
         return { x: model.x + model.width * fx, y: model.y + model.height * fy };
@@ -74,10 +77,11 @@
     const textures = {};
     for (const [mood, file] of Object.entries(spec.images || {})) textures[mood] = PIXI.Texture.from(base + file);
     const blinkTexture = spec.blink ? PIXI.Texture.from(base + spec.blink) : null;
-    // 动作：{ frames: [...], fps, seconds, loop }
+    // 动作：{ frames: [...], fps, seconds, loop, effect, ownPose }，或者 { variants: [同样的写法…] } 每次随机挑一种
     const actions = {};
     for (const [name, a] of Object.entries(spec.actions || {})) {
-      actions[name] = { ...a, textures: a.frames.map((f) => PIXI.Texture.from(base + f)) };
+      const variants = a.variants || [a];
+      actions[name] = variants.map((v) => ({ ...v, textures: v.frames.map((f) => PIXI.Texture.from(base + f)) }));
     }
     let action = null; // { name, def, started }
     const loaded = (tex) => new Promise((r) => (tex.baseTexture.valid ? r() : tex.baseTexture.once("loaded", r)));
@@ -86,6 +90,9 @@
     // 整个角色放在一个容器里，呼吸缩放时部件一起动
     const rig = new PIXI.Container();
     const body = new PIXI.Sprite(textures.idle);
+    // 所有帧按底部中心对齐：同画布的表情帧位置不变，新姿势的帧站在同一个地面上
+    body.anchor.set(0.5, 1);
+    body.position.set(textures.idle.width / 2, textures.idle.height);
     rig.addChild(body);
     const parts = [];
     for (const p of spec.parts || []) {
@@ -145,10 +152,14 @@
           if (!action.def.loop && elapsed > (action.def.seconds || 3)) {
             const ended = action.name;
             action = null;
+            stopEffect();
             post({ type: "actionEnded", name: ended });
           }
           if (!casting) body.texture = faceTexture();
         }
+        // 新姿势的图自带尾巴，这时把单独摆动的尾巴藏起来
+        const ownPose = action && action.def.ownPose;
+        for (const p of parts) p.sprite.visible = !ownPose;
 
         // 眨眼：只在用平时那张脸时眨
         if (blinkTexture && !casting && faceTexture() === textures.idle) {
@@ -171,13 +182,16 @@
         body.texture = faceTexture();
         badge.text = textures[m] || action ? "" : BADGES[m] || "";
       },
-      play(name) {
-        const def = actions[name];
-        if (!def) return false;
+      actions: () => Object.keys(actions),
+      isPlaying: (name) => action?.name === name,
+      play(name, index) {
+        const variants = actions[name];
+        if (!variants) return null;
+        const def = variants[index ?? Math.floor(Math.random() * variants.length)] || variants[0];
         action = { name, def, started: performance.now() };
         badge.text = "";
         body.texture = faceTexture();
-        return true;
+        return def;
       },
       stop() {
         action = null;
@@ -204,13 +218,14 @@
   async function load() {
     const base = `characters/${characterId}/`;
     const spec = await loadJSON(base + "character.json");
+    characterSpec = spec;
     actor = spec.kind === "live2d" ? await live2dActor(base, spec) : await spriteActor(base, spec);
     app.stage.addChild(effects);
     layout();
     window.addEventListener("resize", layout);
     app.ticker.add(tick);
     setMood(currentMood);
-    post({ type: "ready", name: spec.name || characterId });
+    post({ type: "ready", name: spec.name || characterId, actions: actor.actions() });
   }
 
   function layout() {
@@ -338,6 +353,11 @@
   let tapTimer = null;
   function tap() {
     if (!actor) return;
+    if (playingName === "sleep") {
+      stop();
+      post({ type: "woke" });
+      return;
+    }
     actor.tap();
     actor.setMood("shy");
     post({ type: "tapped" });
@@ -347,8 +367,17 @@
 
   // ---- 鼠标：拖动窗口、点角色、告诉 Swift 哪里可以点穿 ----
 
+  stage.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    drag = null;
+    post({ type: "menu" });
+  });
+
   let drag = null;
-  stage.addEventListener("mousedown", (e) => { drag = { x: e.screenX, y: e.screenY, moved: false }; });
+  stage.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    drag = { x: e.screenX, y: e.screenY, moved: false };
+  });
   window.addEventListener("mousemove", (e) => {
     if (!drag) return;
     const dx = e.screenX - drag.x;
@@ -384,19 +413,50 @@
   // ---- 动作：打哈欠、睡觉、伸懒腰、吃饭 ----
 
   let effectTimer = null;
-  /** 播放动作；effect: "zzz" 头顶飘 z，"rice" 偶尔蹦出米粒 */
-  function play(name, effect) {
+  let playingName = null;
+  const EFFECTS = { zzz: [zzz, 1100], rice: [rice, 700], bubbles: [bubble, 500], notes: [note, 600], hearts: [heart, 450] };
+  /** 播放动作；特效优先用角色包里写的，其次用传进来的 */
+  function play(name, effect, index) {
     if (!actor) return;
-    actor.play(name);
+    const def = actor.play(name, index) || {};
+    playingName = name;
+    stopEffect();
+    const e = EFFECTS[def.effect || effect];
+    if (e) effectTimer = setInterval(e[0], e[1]);
+  }
+
+  function stopEffect() {
     clearInterval(effectTimer);
-    if (effect === "zzz") effectTimer = setInterval(zzz, 1100);
-    if (effect === "rice") effectTimer = setInterval(rice, 700);
+    effectTimer = null;
   }
 
   function stop() {
-    clearInterval(effectTimer);
-    effectTimer = null;
+    stopEffect();
+    playingName = null;
     actor?.stop();
+  }
+
+  function floatText(text, color, size, dx) {
+    const b = actor.bounds();
+    const t = new PIXI.Text(text, { fontSize: size, fill: color, fontWeight: "700" });
+    Object.assign(t, { x: b.x + b.width * (0.3 + Math.random() * 0.4), y: b.y + b.height * 0.2,
+                       vx: dx + (Math.random() - 0.5) * 0.4, vy: -0.7, life: 90, maxLife: 90 });
+    effects.addChild(t);
+  }
+  function note() { floatText(Math.random() < 0.5 ? "♪" : "♫", 0xff6fa8, 18 + Math.random() * 6, 0.3); }
+  function heart() { floatText("❤", 0xff4f8b, 14 + Math.random() * 10, 0); }
+
+  function bubble() {
+    const b = actor.bounds();
+    const g = new PIXI.Graphics();
+    const r = 3 + Math.random() * 5;
+    g.lineStyle(1.5, 0x8fd3ff, 0.9);
+    g.beginFill(0xd8f1ff, 0.35);
+    g.drawCircle(0, 0, r);
+    g.endFill();
+    Object.assign(g, { x: b.x + b.width * (0.2 + Math.random() * 0.6), y: b.y + b.height * 0.5,
+                       vx: (Math.random() - 0.5) * 0.4, vy: -0.8 - Math.random() * 0.5, life: 100, maxLife: 100 });
+    effects.addChild(g);
   }
 
   function zzz() {
