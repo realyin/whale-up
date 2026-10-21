@@ -233,8 +233,10 @@
     report();
   }
 
+  let lastRects = "";
   function tick(delta) {
     actor?.tick(delta);
+    report();
     for (const p of [...effects.children]) {
       if (p.life === undefined) continue;
       p.life -= delta;
@@ -407,6 +409,10 @@
       const r = bubble.getBoundingClientRect();
       rects.push({ x: r.x, y: r.y, w: r.width, h: r.height + 10 });
     }
+    // 每帧算一次，变了才告诉 Swift（加载、换姿势、施法飞行时角色大小位置都会变）
+    const key = JSON.stringify(rects.map((r) => [r.x, r.y, r.w, r.h].map((v) => Math.round(v / 8))));
+    if (key === lastRects) return;
+    lastRects = key;
     post({ type: "hitRects", rects });
   }
 
