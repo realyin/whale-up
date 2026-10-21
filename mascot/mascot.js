@@ -59,63 +59,100 @@
     };
   }
 
-  // ---- 图片角色：呼吸、蹦跳、抖动和头顶的情绪符号都由代码做 ----
+  // ---- 图片角色：呼吸、蹦跳、抖动、眨眼、部件摆动和头顶的情绪符号都由代码做 ----
+  // character.json：images（各表情整张图，同一画布大小）、blink（闭眼帧）、
+  // parts（单独摆动的部件：image、at=在画布上的左上角、pivot=部件内的旋转中心、swing=摆动角度、period=周期秒）
 
   async function spriteActor(base, spec) {
-    const images = spec.images || {};
     const textures = {};
-    for (const [mood, file] of Object.entries(images)) textures[mood] = PIXI.Texture.from(base + file);
-    await new Promise((r) => (textures.idle.baseTexture.valid ? r() : textures.idle.baseTexture.once("loaded", r)));
-    const sprite = new PIXI.Sprite(textures.idle);
-    sprite.anchor.set(0.5, 1);
-    app.stage.addChild(sprite);
+    for (const [mood, file] of Object.entries(spec.images || {})) textures[mood] = PIXI.Texture.from(base + file);
+    const blinkTexture = spec.blink ? PIXI.Texture.from(base + spec.blink) : null;
+    const loaded = (tex) => new Promise((r) => (tex.baseTexture.valid ? r() : tex.baseTexture.once("loaded", r)));
+    await loaded(textures.idle);
+
+    // 整个角色放在一个容器里，呼吸缩放时部件一起动
+    const rig = new PIXI.Container();
+    const body = new PIXI.Sprite(textures.idle);
+    rig.addChild(body);
+    const parts = [];
+    for (const p of spec.parts || []) {
+      const tex = PIXI.Texture.from(base + p.image);
+      await loaded(tex);
+      const sprite = new PIXI.Sprite(tex);
+      sprite.pivot.set(p.pivot[0], p.pivot[1]);
+      sprite.position.set(p.at[0] + p.pivot[0], p.at[1] + p.pivot[1]);
+      rig.addChildAt(sprite, 0); // 部件画在身体后面（尾巴从裙子下面伸出来）
+      parts.push({ sprite, swing: ((p.swing || 5) * Math.PI) / 180, period: p.period || 2.4, phase: Math.random() * 6 });
+    }
+    const W = textures.idle.width;
+    const H = textures.idle.height;
+    rig.pivot.set(W / 2, H);
+    app.stage.addChild(rig);
+
     const BADGES = { happy: "♪", excited: "✨", watching: "👀", angry: "💢", shy: "💗" };
     const badge = new PIXI.Text("", { fontSize: 22 });
     badge.anchor.set(0.5, 1);
     app.stage.addChild(badge);
+
     let mood = "idle";
     let t = 0;
-    let hop = 0; // 蹦一下的剩余时间
+    let hop = 0;
     let speaking = false;
     let baseScale = 1;
+    let casting = false;
+    let blinkLeft = 0;
+    let nextBlink = 180 + Math.random() * 200;
+    const faceTexture = () => (casting && textures.cast) || textures[mood] || textures.idle;
+
     return {
-      bounds: () => sprite.getBounds(),
-      layout() {
-        baseScale = spec.height / textures.idle.height;
-        sprite.x = window.innerWidth / 2;
-        sprite.y = window.innerHeight - 4;
-      },
+      bounds: () => rig.getBounds(),
+      layout() { baseScale = spec.height / H; },
       tick(delta) {
         t += delta;
         const breathe = 1 + 0.018 * Math.sin(t * 0.06) + (speaking ? 0.012 * Math.abs(Math.sin(t * 0.4)) : 0);
-        sprite.scale.set(baseScale * (1 + (breathe - 1) * 0.3), baseScale * breathe);
+        rig.scale.set(baseScale * (1 + (breathe - 1) * 0.3), baseScale * breathe);
         const hopY = hop > 0 ? -Math.sin((1 - hop / 30) * Math.PI) * 18 : 0;
         if (hop > 0) hop -= delta;
-        const shake = mood === "angry" ? Math.sin(t * 1.3) * 1.5 : 0;
-        sprite.x = window.innerWidth / 2 + shake;
-        sprite.y = window.innerHeight - 4 + hopY;
+        const shake = mood === "angry" && !textures.angry ? Math.sin(t * 1.3) * 1.5 : 0;
+        rig.position.set(window.innerWidth / 2 + shake, window.innerHeight - 4 + hopY);
+
+        // 部件摆动（生气时摆得更快）
+        const speed = mood === "angry" ? 2.2 : 1;
+        for (const p of parts) p.sprite.rotation = Math.sin((t / 60) * ((2 * Math.PI) / p.period) * speed + p.phase) * p.swing;
+
+        // 眨眼：只在用平时那张脸时眨
+        if (blinkTexture && !casting && faceTexture() === textures.idle) {
+          if (blinkLeft > 0) {
+            blinkLeft -= delta;
+            body.texture = blinkLeft > 0 ? blinkTexture : textures.idle;
+          } else if ((nextBlink -= delta) <= 0) {
+            blinkLeft = 8;
+            nextBlink = 180 + Math.random() * 200;
+          }
+        }
+
         const [hx, hy] = spec.headAt || [0.3, 0.1];
-        const b = sprite.getBounds();
+        const b = rig.getBounds();
         badge.x = b.x + b.width * hx + 24;
         badge.y = b.y + b.height * hy + Math.sin(t * 0.1) * 2;
       },
       setMood(m) {
         mood = m;
-        sprite.texture = textures[m] || textures.idle;
+        body.texture = faceTexture();
         badge.text = textures[m] ? "" : BADGES[m] || "";
       },
       setSpeaking(on) { speaking = on; },
       tap() { hop = 30; },
       cast() {
         hop = 30;
-        if (textures.cast) {
-          sprite.texture = textures.cast;
-          setTimeout(() => (sprite.texture = textures[mood] || textures.idle), 1600);
-        }
+        if (!textures.cast) return;
+        casting = true;
+        body.texture = faceTexture();
+        setTimeout(() => { casting = false; body.texture = faceTexture(); }, 1800);
       },
       castPoint() {
-        const [fx, fy] = spec.castFrom || [0.5, 0.5];
-        const b = sprite.getBounds();
+        const [fx, fy] = (textures.cast && spec.castFromCast) || spec.castFrom || [0.5, 0.5];
+        const b = rig.getBounds();
         return { x: b.x + b.width * fx, y: b.y + b.height * fy };
       },
       expr() {},
