@@ -412,9 +412,9 @@
     setTimeout(() => {
       const timer = setInterval(() => {
         // 星星喷出去后慢慢减速，像一道拖尾，在窗口里就散开淡掉
-        for (let i = 0; i < 6; i++) star(ox, oy, (dx / len) * (5 + Math.random() * 5) + (Math.random() - 0.5) * 3.5,
-                                       (dy / len) * (5 + Math.random() * 5) + (Math.random() - 0.5) * 3.5, 60, 0.975);
-        if (++n > 16) clearInterval(timer);
+        for (let i = 0; i < 8; i++) star(ox, oy, (dx / len) * (6 + Math.random() * 7) + (Math.random() - 0.5) * 5,
+                                       (dy / len) * (6 + Math.random() * 7) + (Math.random() - 0.5) * 5, 75, 0.982, 1.25);
+        if (++n > 20) clearInterval(timer);
       }, 45);
     }, 350);
   }
@@ -426,17 +426,17 @@
       x = b.x + b.width * 0.05;
       y = b.y - 30;
     }
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 70; i++) {
       const a = Math.random() * Math.PI * 2;
-      const v = 2 + Math.random() * 5;
-      star(x, y, Math.cos(a) * v * 1.3, Math.sin(a) * v * 1.3, 60, 0.97);
+      const v = 3 + Math.random() * 7;
+      star(x, y, Math.cos(a) * v, Math.sin(a) * v, 75, 0.975, 1.25);
     }
   }
 
   const COLORS = [0xff6fa8, 0xffd84d, 0x9be7ff, 0xc9a2ff, 0xffffff];
-  function star(x, y, vx, vy, life, drag) {
+  function star(x, y, vx, vy, life, drag, scale = 1) {
     const g = new PIXI.Graphics();
-    const outer = 4 + Math.random() * 6;
+    const outer = (4 + Math.random() * 6) * scale;
     const inner = outer * 0.45;
     const points = [];
     for (let i = 0; i < 10; i++) {
