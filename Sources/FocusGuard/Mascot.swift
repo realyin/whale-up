@@ -20,7 +20,8 @@ final class Mascot: NSObject, WKScriptMessageHandler, AVSpeechSynthesizerDelegat
         var waitSeconds = 0
     }
 
-    static let size = NSSize(width: 300, height: 470)
+    /// 窗口大小：下方 188 高是角色，上方留给对话气泡
+    static let size = NSSize(width: 280, height: 400)
 
     /// 桌宠用的网页和模型（模型由 scripts/fetch_mascot.sh 下载）
     static var assetsDir: URL? {
@@ -124,7 +125,8 @@ final class Mascot: NSObject, WKScriptMessageHandler, AVSpeechSynthesizerDelegat
         self.onReason = onReason
         let b = buttons.map { ["id": $0.id, "title": $0.title, "style": $0.primary ? "primary" : "secondary",
                                "waitSeconds": $0.waitSeconds] as [String: Any] }
-        let r = reasons.map { ["id": $0.rawValue, "title": $0.label] }
+        let short: [ReasonKind: String] = [.tired: "😴 累了", .bored: "😐 无聊", .avoiding: "😣 逃避", .relaxing: "😌 放松"]
+        let r = reasons.map { ["id": $0.rawValue, "title": short[$0] ?? $0.label] }
         js("mascot.say(\(json(text)), \(json(b)), \(json(r)))")
         if let speak { self.speak(speak) }
     }
@@ -184,8 +186,9 @@ final class Mascot: NSObject, WKScriptMessageHandler, AVSpeechSynthesizerDelegat
             ?? panel.frame
         var dest = panel.frame.origin
         if let t = target {
-            dest = NSPoint(x: min(t.maxX - Self.size.width * 0.55, visible.maxX - Self.size.width),
-                           y: max(visible.minY, min(t.maxY - Self.size.height * 0.95, visible.maxY - Self.size.height)))
+            // 让角色的头尽量靠近浏览器顶部的标签栏（角色在窗口下方 188 高的区域里）
+            dest = NSPoint(x: min(t.maxX - Self.size.width * 0.7, visible.maxX - Self.size.width),
+                           y: max(visible.minY, min(t.maxY - Self.size.height + 10, visible.maxY - Self.size.height)))
         }
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = target == nil ? 0 : 0.7
@@ -195,7 +198,7 @@ final class Mascot: NSObject, WKScriptMessageHandler, AVSpeechSynthesizerDelegat
         after(0.8) { self.js("mascot.cast(-1, -0.7)") }
         after(1.6) {
             close()
-            self.js("mascot.burst(\(Self.size.width * 0.25), \(Self.size.height * 0.18))")
+            self.js("mascot.burst()")
         }
         after(3.2) {
             self.hideBubble()

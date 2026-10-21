@@ -210,7 +210,7 @@ func runMascotDemo(to dir: String) {
                    reasons: ReasonKind.allCases)
     }))
     steps.append(("cast", { mascot.hideBubble(); mascot.js("mascot.setMood('angry'); mascot.cast(-1, -0.7)") }))
-    steps.append(("burst", { mascot.js("mascot.burst(75, 85)") }))
+    steps.append(("burst", { mascot.js("mascot.burst()") }))
 
     @MainActor func run(_ i: Int) {
         guard i < steps.count else { exit(0) }

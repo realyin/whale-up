@@ -6,6 +6,8 @@
   const app = new PIXI.Application({ view: stage, backgroundAlpha: 0, resizeTo: window, antialias: true, autoDensity: true,
                                      resolution: window.devicePixelRatio || 2 });
   let model = null;
+  /** 角色高度（像素）；窗口上方留给对话气泡 */
+  const CHARACTER_HEIGHT = 188;
   let speaking = false;
   const effects = new PIXI.Container();
 
@@ -24,7 +26,7 @@
 
   function layout() {
     if (!model) return;
-    const h = window.innerHeight * 0.80;
+    const h = CHARACTER_HEIGHT;
     const scale = h / model.internalModel.height;
     model.scale.set(scale);
     model.x = (window.innerWidth - model.width) / 2;
@@ -117,9 +119,9 @@
   function cast(dx = -1, dy = -1) {
     if (!model) return;
     model.motion("TapBody", 3, PIXI.live2d.MotionPriority.FORCE);
-    // 举起魔杖后，从杖头（画面左上方）朝 (dx, dy) 方向喷出星星
-    const ox = window.innerWidth * 0.17;
-    const oy = window.innerHeight * 0.27;
+    // 举起魔杖后，从杖头（角色左上方）朝 (dx, dy) 方向喷出星星
+    const ox = model.x + model.width * 0.15;
+    const oy = model.y + model.height * 0.07;
     const len = Math.hypot(dx, dy) || 1;
     let n = 0;
     setTimeout(() => {
@@ -132,7 +134,11 @@
   }
 
   /** 一团星星炸开（网页被关掉的那一下） */
-  function burst(x = window.innerWidth / 2, y = window.innerHeight * 0.25) {
+  function burst(x, y) {
+    if (x === undefined && model) {
+      x = model.x + model.width * 0.05;
+      y = model.y - 30;
+    }
     for (let i = 0; i < 40; i++) {
       const a = Math.random() * Math.PI * 2;
       const v = 2 + Math.random() * 5;
