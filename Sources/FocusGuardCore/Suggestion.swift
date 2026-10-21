@@ -85,7 +85,7 @@ public struct Suggestion: Codable, Equatable {
         let budget = c.dailyBudgetMinutes > 0
             ? "\(Int(c.dailyBudgetMinutes)) 分钟（用完后\(c.budgetCloses ? "直接关网页" : "提醒")）" : "未设置"
         let force = c.forceCloseEnabled
-            ? "开启，连续 \(Int(c.forceCloseMinutes)) 分钟关闭，网站：\(c.forceCloseSites.joined(separator: "、"))" : "关闭"
+            ? "开启，每天累计 \(Int(c.forceCloseMinutes)) 分钟后关闭、当天再打开也关，网站：\(c.forceCloseSites.joined(separator: "、"))" : "关闭"
         let work = c.workHoursEnabled
             ? "\(c.workStartHour):00–\(c.workEndHour):00 连续 \(Int(c.workLimitMinutes)) 分钟就提醒" : "未开启"
         return """

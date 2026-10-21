@@ -6,60 +6,63 @@ final class ForceCloserTests: XCTestCase {
         var c = Config()
         c.forceCloseEnabled = true
         c.forceCloseMinutes = 10
-        c.forceCloseCooldownMinutes = 10
         return c
     }()
-    let start = Date(timeIntervalSince1970: 1_800_000_000)
-
-    /// 每 30 秒记录一次，返回每次的动作
-    func run(_ f: inout ForceCloser, fromMinute: Double, minutes: Double, onSite: Bool = true) -> [ForceAction?] {
-        stride(from: 0.5, through: minutes, by: 0.5).map { m in
-            f.record(onSite: onSite, isIdle: false, now: start.addingTimeInterval((fromMinute + m) * 60),
-                     elapsed: 30, config: config)
-        }
+    var cal: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return c
+    }()
+    /// 某天的几点几分（上海时间）
+    func at(_ day: Int, _ hour: Int, _ minute: Int = 0) -> Date {
+        cal.date(from: DateComponents(year: 2026, month: 10, day: day, hour: hour, minute: minute))!
     }
 
     func testDisabledNeverActs() {
         config.forceCloseEnabled = false
         var f = ForceCloser()
-        XCTAssertTrue(run(&f, fromMinute: 0, minutes: 30).allSatisfy { $0 == nil })
+        XCTAssertNil(f.record(onSite: true, usedToday: 3600, now: at(20, 20), config: config, calendar: cal))
     }
 
     func testWarnsOneMinuteBeforeThenCloses() {
         var f = ForceCloser()
-        let actions = run(&f, fromMinute: 0, minutes: 10)
-        XCTAssertEqual(actions.compactMap { $0 }, [.warn, .close])
-        XCTAssertEqual(actions[17], .warn)   // 第 9 分钟
-        XCTAssertEqual(actions[19], .close)  // 第 10 分钟
+        XCTAssertNil(f.record(onSite: true, usedToday: 8 * 60, now: at(20, 20), config: config, calendar: cal))
+        XCTAssertEqual(f.record(onSite: true, usedToday: 9 * 60, now: at(20, 20, 1), config: config, calendar: cal), .warn)
+        XCTAssertNil(f.record(onSite: true, usedToday: 9.5 * 60, now: at(20, 20, 2), config: config, calendar: cal))
+        XCTAssertEqual(f.record(onSite: true, usedToday: 10 * 60, now: at(20, 20, 3), config: config, calendar: cal), .close)
     }
 
-    func testReopeningDuringCooldownClosesImmediately() {
+    /// 今天已经看够了：现在正在看就关，之后不管多久再打开都关（没有“过 15 分钟又能看”）
+    func testOverLimitClosesEveryTimeForRestOfDay() {
         var f = ForceCloser()
-        _ = run(&f, fromMinute: 0, minutes: 10)
-        // 关掉后 3 分钟又打开
-        XCTAssertEqual(f.record(onSite: true, isIdle: false, now: start.addingTimeInterval(13 * 60),
-                                elapsed: 30, config: config), .close)
-        XCTAssertNotNil(f.blockedUntil)
+        for (h, m) in [(20, 0), (20, 30), (22, 0), (23, 59), (2, 0), (3, 59)] {
+            let day = h < 4 ? 21 : 20
+            XCTAssertEqual(f.record(onSite: true, usedToday: 12 * 60, now: at(day, h, m), config: config, calendar: cal), .close)
+        }
     }
 
-    func testAfterCooldownCountsFromZeroAgain() {
+    func testOffSiteDoesNothing() {
         var f = ForceCloser()
-        _ = run(&f, fromMinute: 0, minutes: 10)
-        let later = run(&f, fromMinute: 25, minutes: 5)
-        XCTAssertTrue(later.allSatisfy { $0 == nil })
+        XCTAssertNil(f.record(onSite: false, usedToday: 3600, now: at(20, 20), config: config, calendar: cal))
     }
 
-    func testLeavingSiteForAWhileResetsTimer() {
-        config.sessionBreakMinutes = 5
+    func testGrantGivesExtraTimeOnlyForToday() {
         var f = ForceCloser()
-        _ = run(&f, fromMinute: 0, minutes: 8)
-        // 离开 6 分钟后回来，重新计时，8 分钟内不会关
-        let back = run(&f, fromMinute: 14, minutes: 8)
-        XCTAssertTrue(back.allSatisfy { $0 != .close })
+        XCTAssertEqual(f.record(onSite: true, usedToday: 12 * 60, now: at(20, 21), config: config, calendar: cal), .close)
+        f.grant(minutes: 10, now: at(20, 21), calendar: cal)
+        XCTAssertNil(f.record(onSite: true, usedToday: 12 * 60, now: at(20, 21, 1), config: config, calendar: cal))
+        XCTAssertEqual(f.record(onSite: true, usedToday: 20 * 60, now: at(20, 21, 9), config: config, calendar: cal), .close)
+        // 第二天（凌晨 4 点以后）加的时间清零
+        XCTAssertEqual(f.extraSeconds, 600)
+        _ = f.record(onSite: false, usedToday: 0, now: at(21, 4, 1), config: config, calendar: cal)
+        XCTAssertEqual(f.extraSeconds, 0)
     }
 
-    func testOffSiteDoesNotCount() {
+    /// 凌晨 4 点前还算前一天，加的时间还在
+    func testGrantSurvivesPastMidnightUntilDayStart() {
         var f = ForceCloser()
-        XCTAssertTrue(run(&f, fromMinute: 0, minutes: 30, onSite: false).allSatisfy { $0 == nil })
+        f.grant(minutes: 10, now: at(20, 23), calendar: cal)
+        XCTAssertNil(f.record(onSite: true, usedToday: 15 * 60, now: at(21, 1), config: config, calendar: cal))
+        XCTAssertEqual(f.extraSeconds, 600)
     }
 }

@@ -55,8 +55,11 @@ final class TimelineTests: XCTestCase {
                      v("2", "bilibili.com", t(9, 0), minutes: 10, junk: false)]
         let hours = Timeline.build(views: views, config: config, calendar: cal).hours
         XCTAssertEqual(hours.count, 24)
-        XCTAssertEqual(hours[23].junkSeconds, 300)
-        XCTAssertEqual(hours[9].goodSeconds, 600)
-        XCTAssertEqual(hours[12].junkSeconds + hours[12].goodSeconds, 0)
+        // 从一天开始的那个小时（默认凌晨 4 点）排起
+        XCTAssertEqual(hours.first?.hour, LogicalDay.startHour)
+        let at = { (h: Int) in hours.first { $0.hour == h }! }
+        XCTAssertEqual(at(23).junkSeconds, 300)
+        XCTAssertEqual(at(9).goodSeconds, 600)
+        XCTAssertEqual(at(12).junkSeconds + at(12).goodSeconds, 0)
     }
 }

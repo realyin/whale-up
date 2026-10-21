@@ -22,7 +22,7 @@ public struct HourBucket: Identifiable, Equatable {
 
 public struct TimelineDay: Equatable {
     public var sessions: [TimelineSession]
-    /// 0–23 点，每小时的有营养 / 没营养时长（按开始时间归入小时）
+    /// 一天的 24 个小时（从 LogicalDay.startHour 点排起），每小时的有营养 / 没营养时长（按开始时间归入小时）
     public var hours: [HourBucket]
 }
 
@@ -32,11 +32,13 @@ public enum Timeline {
 
     public static func build(views: [ContentView], config: Config, calendar: Calendar = .current) -> TimelineDay {
         var sessions: [TimelineSession] = []
-        var hours = (0..<24).map { HourBucket(hour: $0, junkSeconds: 0, goodSeconds: 0) }
+        // 从一天开始的那个小时排起（默认 4 点 … 第二天 3 点）
+        let first = LogicalDay.startHour
+        var hours = (0..<24).map { HourBucket(hour: (first + $0) % 24, junkSeconds: 0, goodSeconds: 0) }
 
         for v in views.sorted(by: { $0.startedAt < $1.startedAt }) {
             let junk = v.isJunk(config: config)
-            let hour = calendar.component(.hour, from: Date(timeIntervalSince1970: v.startedAt))
+            let hour = (calendar.component(.hour, from: Date(timeIntervalSince1970: v.startedAt)) - first + 24) % 24
             if junk { hours[hour].junkSeconds += v.activeSeconds } else { hours[hour].goodSeconds += v.activeSeconds }
 
             if var last = sessions.last, last.site == v.site, v.startedAt - last.end <= mergeGap {

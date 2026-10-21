@@ -50,6 +50,12 @@ public struct UsageStats: Codable, Equatable {
         return key
     }
 
+    /// 某天在这些网站规则上一共看了多久（只算按规则记的，“· 有营养”分开记的部分不算）
+    public func seconds(on date: Date, sites: [String], calendar: Calendar = .current) -> Double {
+        let entries = days[Self.dayKey(date, calendar)] ?? [:]
+        return Set(sites).reduce(0) { $0 + (entries["site:" + $1] ?? 0) }
+    }
+
     public mutating func add(_ key: String, seconds: Double, at date: Date, calendar: Calendar = .current) {
         days[Self.dayKey(date, calendar), default: [:]][key, default: 0] += seconds
     }
@@ -69,7 +75,7 @@ public struct UsageStats: Codable, Equatable {
     /// 最近 days 天每天的没营养总时长，从早到晚
     public func junkTotals(days count: Int, endingAt end: Date, config: Config,
                            calendar: Calendar = .current) -> [DayTotal] {
-        let today = calendar.startOfDay(for: end)
+        let today = LogicalDay.of(end, calendar: calendar)
         return (0..<count).reversed().map { offset in
             let day = calendar.date(byAdding: .day, value: -offset, to: today)!
             let total = items(on: day, config: config, calendar: calendar)
@@ -94,7 +100,7 @@ public struct UsageStats: Codable, Equatable {
 
     /// 只保留最近 keepingDays 天
     public mutating func prune(keepingDays: Int, now: Date, calendar: Calendar = .current) {
-        let start = calendar.date(byAdding: .day, value: -(keepingDays - 1), to: calendar.startOfDay(for: now))!
+        let start = calendar.date(byAdding: .day, value: -(keepingDays - 1), to: LogicalDay.of(now, calendar: calendar))!
         let keep = Set((0..<keepingDays).map {
             Self.dayKey(calendar.date(byAdding: .day, value: $0, to: start)!, calendar)
         })
@@ -111,8 +117,9 @@ public struct UsageStats: Codable, Equatable {
         return Classifier.junkReason(for: Activity(appName: name, bundleID: nil), config: config) != nil
     }
 
+    /// 某个时刻记在哪天（凌晨 dayStartHour 点以前算前一天）
     static func dayKey(_ date: Date, _ calendar: Calendar) -> String {
-        let c = calendar.dateComponents([.year, .month, .day], from: date)
+        let c = calendar.dateComponents([.year, .month, .day], from: LogicalDay.of(date, calendar: calendar))
         return String(format: "%04d-%02d-%02d", c.year!, c.month!, c.day!)
     }
 

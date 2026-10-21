@@ -56,7 +56,7 @@ public enum DigestPrompt {
         for v in junk {
             hours[calendar.component(.hour, from: Date(timeIntervalSince1970: v.startedAt)), default: 0] += v.activeSeconds
         }
-        let hourLine = hours.keys.sorted().map { "\($0) 点 \(minutes(hours[$0]!))" }.joined(separator: "，")
+        let hourLine = hours.keys.sorted { ($0 - LogicalDay.startHour + 24) % 24 < ($1 - LogicalDay.startHour + 24) % 24 }.map { "\($0) 点 \(minutes(hours[$0]!))" }.joined(separator: "，")
 
         var lines = [
             "日期：\(DayKey.string(day, calendar: calendar))",

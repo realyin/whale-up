@@ -29,8 +29,7 @@ final class DigestWriter {
         running.insert(key)
         defer { running.remove(key) }
 
-        let start = Calendar.current.startOfDay(for: day)
-        let end = Calendar.current.date(byAdding: .day, value: 1, to: start)!
+        let (start, end) = LogicalDay.range(day)
         let views = try store.views(from: start, to: end)
         let reasons = try store.reasons(from: start, to: end)
         let nudges = try store.nudges(from: start, to: end)
@@ -62,8 +61,7 @@ final class DigestWriter {
 
         var days: [WeekDay] = []
         for day in week.days {
-            let start = Calendar.current.startOfDay(for: day)
-            let end = Calendar.current.date(byAdding: .day, value: 1, to: start)!
+            let (start, end) = LogicalDay.range(day)
             days.append(WeekDay(day: day, views: try store.views(from: start, to: end),
                                 reasons: try store.reasons(from: start, to: end).map(\.reason),
                                 nudges: try store.nudges(from: start, to: end),
@@ -111,8 +109,11 @@ final class DigestWriter {
         lastAutoCheck = now
         let cal = Calendar.current
         var days: [Date] = []
-        if let yesterday = cal.date(byAdding: .day, value: -1, to: now) { days.append(yesterday) }
-        if cal.component(.hour, from: now) >= config.digestHour { days.append(now) }
+        days.append(LogicalDay.adding(-1, to: LogicalDay.of(now)))
+        // 到点写今天的；凌晨 4 点前还算前一天，那时“今天”就是前一天，早过了写小结的点
+        if cal.component(.hour, from: now) >= config.digestHour || LogicalDay.of(now) != cal.startOfDay(for: now) {
+            days.append(LogicalDay.of(now))
+        }
 
         // 上一周的复盘（周一起就可以写）
         let lastWeek = Week(containing: now).previous()
@@ -125,8 +126,8 @@ final class DigestWriter {
         for day in days {
             let key = DayKey.string(day)
             guard !autoAttempted.contains(key), digest(for: day) == nil else { continue }
-            let start = cal.startOfDay(for: day)
-            let hasData = !((try? store.views(from: start, to: cal.date(byAdding: .day, value: 1, to: start)!)) ?? []).isEmpty
+            let range = LogicalDay.range(day)
+            let hasData = !((try? store.views(from: range.start, to: range.end)) ?? []).isEmpty
             guard hasData else { continue }
             autoAttempted.insert(key)
             Task { try? await write(day: day, config: config, automatic: true) }

@@ -44,8 +44,7 @@ public struct Tracker: Codable, Equatable {
     public mutating func record(isJunk: Bool, isIdle: Bool, now: Date, elapsed: Double,
                                 config: Config, calendar: Calendar = .current,
                                 reason: String = "", appName: String = "") -> Nudge? {
-        let c = calendar.dateComponents([.year, .month, .day], from: now)
-        let key = "\(c.year!)-\(c.month!)-\(c.day!)"
+        let key = DayKey.string(now, calendar: calendar)
         if key != dayKey {
             dayKey = key
             todaySeconds = 0

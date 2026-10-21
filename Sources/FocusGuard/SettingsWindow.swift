@@ -21,6 +21,10 @@ final class SettingsModel: ObservableObject {
     var previewMascot: () -> Void = {}
     /// 让桌宠用当前选的声音说一句
     var previewVoice: () -> Void = {}
+    /// 强制关闭：今天已经看了多久、今天一共能看多久（秒）
+    @Published var forceToday: (used: Double, limit: Double) = (0, 0)
+    /// 给今天多加几分钟
+    var grantForce: (Double) -> Void = { _ in }
     private let onChange: (Config) -> Void
     private var replacing = false
 
@@ -93,7 +97,8 @@ struct SettingsView: View {
                         placeholder: "输入 App 名称，如 抖音",
                         rules: $model.config.junkApps, browserURL: nil, isSite: false)
                 case .force:
-                    ForceSettings(config: $model.config, browserURL: model.browserURL)
+                    ForceSettings(config: $model.config, browserURL: model.browserURL,
+                                  today: model.forceToday, grant: model.grantForce)
                 case .reminders:
                     ReminderSettings(config: $model.config, previewMascot: model.previewMascot, previewVoice: model.previewVoice)
                 case .content:
@@ -202,6 +207,8 @@ struct RuleListEditor: View {
 struct ForceSettings: View {
     @Binding var config: Config
     let browserURL: String?
+    var today: (used: Double, limit: Double) = (0, 0)
+    var grant: (Double) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -209,11 +216,24 @@ struct ForceSettings: View {
                 Text("开启强制关闭").font(.headline)
             }
             .toggleStyle(.switch)
-            HStack(spacing: 24) {
-                MinutesStepper(title: "连续看", value: $config.forceCloseMinutes, range: 1...240, suffix: "分钟后关闭")
-                MinutesStepper(title: "之后", value: $config.forceCloseCooldownMinutes, range: 1...240, suffix: "分钟内禁止打开")
+            MinutesStepper(title: "每天在这些网站上累计看", value: $config.forceCloseMinutes, range: 1...240, suffix: "分钟后关闭")
+                .disabled(!config.forceCloseEnabled)
+            Text("看满后马上关掉当前网页，当天不管什么时候再打开都会被关掉。新的一天从凌晨 \(config.dayStartHour) 点开始算。")
+                .font(.callout).foregroundStyle(.secondary)
+            if config.forceCloseEnabled {
+                HStack(spacing: 10) {
+                    let over = today.used >= today.limit
+                    Text("今天已看 \(formatDuration(today.used)) / \(formatDuration(today.limit))")
+                        .foregroundStyle(over ? Color.orange : Color.secondary)
+                    Spacer()
+                    // 真的要多看，只能在这里手动加，而且只管今天
+                    Text("今天再多看").foregroundStyle(.secondary)
+                    ForEach([5.0, 10, 30], id: \.self) { m in
+                        Button("\(Int(m)) 分钟") { grant(m) }
+                    }
+                }
+                .font(.callout)
             }
-            .disabled(!config.forceCloseEnabled)
             Divider()
             RuleListEditor(
                 note: "只对下面这些网站强制关闭（只关当前网页，不关浏览器）。",
@@ -250,6 +270,11 @@ struct ReminderSettings: View {
                 MinutesStepper(title: "每天没营养的内容最多", value: $config.dailyBudgetMinutes, range: 0...600, suffix: "分钟（0 = 不限）")
                 Toggle("额度用完后直接关掉没营养的网页（否则只提醒）", isOn: $config.budgetCloses)
                     .disabled(config.dailyBudgetMinutes == 0)
+                Picker("每天从几点开始算", selection: $config.dayStartHour) {
+                    ForEach(0..<7, id: \.self) { Text($0 == 0 ? "0:00（零点）" : "凌晨 \($0):00").tag($0) }
+                }
+                Text("这之前的都算前一天：晚上刷到凌晨，统计、额度、强制关闭和小结都还算在当天。")
+                    .font(.callout).foregroundStyle(.secondary)
             }
             Section("工作时段") {
                 Toggle("工作时段更严格", isOn: $config.workHoursEnabled)

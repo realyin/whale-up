@@ -16,6 +16,8 @@ MainActor.assumeIsolated {
     if let dir = ProcessInfo.processInfo.environment["FOCUSGUARD_RENDER_SETTINGS"] {
         let model = SettingsModel(config: Config.load().0) { _ in }
         model.browserURL = "https://www.zhihu.com/question/123"
+        model.config.forceCloseEnabled = true
+        model.forceToday = (used: 12 * 60, limit: model.config.forceCloseMinutes * 60)
         for tab in SettingsTab.allCases {
             SettingsWindow.renderPNG(model: model, tab: tab,
                                      to: URL(fileURLWithPath: dir).appendingPathComponent("settings-\(tab).png"))

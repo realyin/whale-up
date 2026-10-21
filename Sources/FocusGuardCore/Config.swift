@@ -109,11 +109,10 @@ public struct Config: Codable, Equatable {
         "tiktok.com", "youtube.com/shorts", "x.com", "twitter.com", "reddit.com", "9gag.com",
     ]
 
-    /// 强制关闭模式：在这些网站上连续看满 forceCloseMinutes 分钟，直接关掉当前网页；
-    /// 之后 forceCloseCooldownMinutes 分钟内再打开这些网站，会被立刻关掉
+    /// 强制关闭模式：今天在这些网站上累计看满 forceCloseMinutes 分钟，直接关掉当前网页；
+    /// 当天之后不管什么时候再打开都会被立刻关掉。想多看只能在设置里手动给今天加时间
     public var forceCloseEnabled = false
     public var forceCloseMinutes: Double = 30
-    public var forceCloseCooldownMinutes: Double = 15
     public var forceCloseSites: [String] = [
         "douyin.com", "kuaishou.com", "bilibili.com", "tiktok.com", "youtube.com/shorts",
     ]
@@ -134,6 +133,8 @@ public struct Config: Codable, Equatable {
     public var llm = LLMConfig()
     /// 每天几点自动写当天的小结（需要开启 AI 判断）
     public var digestHour = 22
+    /// 一天从几点开始算：这之前的都算前一天（晚上刷到凌晨不会被拆成两天）
+    public var dayStartHour = 4
     /// 小结和每周复盘同时写进 Obsidian
     public var writeToObsidian = true
     /// 写到哪个文件夹；留空 = 自动找到 Obsidian 当前的库，在里面建“专注守护”文件夹
@@ -171,12 +172,12 @@ public struct Config: Codable, Equatable {
         junkSites = try c.decodeIfPresent([String].self, forKey: .junkSites) ?? d.junkSites
         forceCloseEnabled = try c.decodeIfPresent(Bool.self, forKey: .forceCloseEnabled) ?? d.forceCloseEnabled
         forceCloseMinutes = try c.decodeIfPresent(Double.self, forKey: .forceCloseMinutes) ?? d.forceCloseMinutes
-        forceCloseCooldownMinutes = try c.decodeIfPresent(Double.self, forKey: .forceCloseCooldownMinutes) ?? d.forceCloseCooldownMinutes
         forceCloseSites = try c.decodeIfPresent([String].self, forKey: .forceCloseSites) ?? d.forceCloseSites
         contentScope = try c.decodeIfPresent(ContentScope.self, forKey: .contentScope) ?? d.contentScope
         sensitiveSites = try c.decodeIfPresent([String].self, forKey: .sensitiveSites) ?? d.sensitiveSites
         llm = try c.decodeIfPresent(LLMConfig.self, forKey: .llm) ?? d.llm
         digestHour = try c.decodeIfPresent(Int.self, forKey: .digestHour) ?? d.digestHour
+        dayStartHour = try c.decodeIfPresent(Int.self, forKey: .dayStartHour) ?? d.dayStartHour
         writeToObsidian = try c.decodeIfPresent(Bool.self, forKey: .writeToObsidian) ?? d.writeToObsidian
         obsidianFolder = try c.decodeIfPresent(String.self, forKey: .obsidianFolder) ?? d.obsidianFolder
     }

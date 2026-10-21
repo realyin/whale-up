@@ -47,9 +47,8 @@ final class MainModel: ObservableObject {
     }
 
     func views(on day: Date) -> [ContentView] {
-        let start = Calendar.current.startOfDay(for: day)
-        return (try? contentStore?.views(from: start, to: start.addingTimeInterval(86400 + 3600))
-            .filter { Calendar.current.isDate(Date(timeIntervalSince1970: $0.startedAt), inSameDayAs: start) }) ?? []
+        let range = LogicalDay.range(day)
+        return (try? contentStore?.views(from: range.start, to: range.end)) ?? []
     }
 }
 
@@ -130,9 +129,8 @@ func clock(_ t: Double) -> String {
 }
 
 func dayTitle(_ day: Date) -> String {
-    let cal = Calendar.current
-    if cal.isDateInToday(day) { return "今天" }
-    if cal.isDateInYesterday(day) { return "昨天" }
+    if LogicalDay.isToday(day) { return "今天" }
+    if LogicalDay.of(day) == LogicalDay.adding(-1, to: LogicalDay.today) { return "昨天" }
     return day.formatted(.dateTime.month().day().weekday(.wide))
 }
 
@@ -193,12 +191,12 @@ struct DayStepper: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            Button { day = Calendar.current.date(byAdding: .day, value: -1, to: day)! } label: { Image(systemName: "chevron.left") }
+            Button { day = LogicalDay.adding(-1, to: day) } label: { Image(systemName: "chevron.left") }
             Text(dayTitle(day)).font(.system(size: 13, weight: .medium)).frame(minWidth: 96)
-            Button { day = Calendar.current.date(byAdding: .day, value: 1, to: day)! } label: { Image(systemName: "chevron.right") }
-                .disabled(Calendar.current.isDateInToday(day))
-            if !Calendar.current.isDateInToday(day) {
-                Button("回到今天") { day = Calendar.current.startOfDay(for: Date()) }.buttonStyle(.link).padding(.leading, 6)
+            Button { day = LogicalDay.adding(1, to: day) } label: { Image(systemName: "chevron.right") }
+                .disabled(LogicalDay.isToday(day))
+            if !LogicalDay.isToday(day) {
+                Button("回到今天") { day = LogicalDay.today }.buttonStyle(.link).padding(.leading, 6)
             }
         }
         .buttonStyle(.borderless)
@@ -215,7 +213,7 @@ struct DayRibbon: View {
     @State private var hoverX: CGFloat = 0
 
     var body: some View {
-        let start = Calendar.current.startOfDay(for: day).timeIntervalSince1970
+        let start = LogicalDay.range(day).start.timeIntervalSince1970
         VStack(alignment: .leading, spacing: 6) {
             GeometryReader { geo in
                 let w = geo.size.width
@@ -232,7 +230,7 @@ struct DayRibbon: View {
                             .frame(width: max(3, x(s.end) - x(s.start)), height: height - 10)
                             .offset(x: x(s.start), y: 5)
                     }
-                    if Calendar.current.isDateInToday(day) {
+                    if LogicalDay.isToday(day) {
                         Rectangle().fill(Color.primary).frame(width: 2, height: height + 6)
                             .offset(x: x(Date().timeIntervalSince1970), y: -3)
                     }
@@ -254,10 +252,11 @@ struct DayRibbon: View {
 
             ZStack(alignment: .leading) {
                 HStack {
+                    // 从一天开始的那个小时排起，如 4:00 … 第二天 4:00
                     ForEach([0, 6, 12, 18], id: \.self) { h in
-                        Text("\(h):00").font(.system(size: 11)).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+                        Text("\((LogicalDay.startHour + h) % 24):00").font(.system(size: 11)).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    Text("24:00").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text("\(LogicalDay.startHour == 0 ? 24 : LogicalDay.startHour):00").font(.system(size: 11)).foregroundStyle(.secondary)
                 }
                 .opacity(hovered == nil ? 1 : 0)
                 if let s = hovered {
@@ -282,7 +281,7 @@ struct TodayPage: View {
 
     var body: some View {
         let _ = model.version
-        let today = Calendar.current.startOfDay(for: Date())
+        let today = LogicalDay.today
         let views = model.views(on: today)
         let timeline = Timeline.build(views: views, config: model.config)
         let goodSeconds = timeline.sessions.reduce(0) { $0 + $1.activeSeconds - $1.junkSeconds }
@@ -406,7 +405,7 @@ struct TodayPage: View {
 
 struct TimelinePage: View {
     @ObservedObject var model: MainModel
-    @State private var day = Calendar.current.startOfDay(for: Date())
+    @State private var day = LogicalDay.today
     @State private var expanded: Set<String> = []
 
     var body: some View {
@@ -465,7 +464,9 @@ struct TimelinePage: View {
 
     private func groupedByHour(_ sessions: [TimelineSession]) -> [(Int, [TimelineSession])] {
         let groups = Dictionary(grouping: sessions) { Calendar.current.component(.hour, from: Date(timeIntervalSince1970: $0.start)) }
-        return groups.keys.sorted().map { ($0, groups[$0]!) }
+        // 从一天开始的那个小时排起（凌晨的排在最后）
+        let order = { (h: Int) in (h - LogicalDay.startHour + 24) % 24 }
+        return groups.keys.sorted { order($0) < order($1) }.map { ($0, groups[$0]!) }
     }
 
     private func row(_ s: TimelineSession) -> some View {
@@ -591,7 +592,7 @@ struct ContentPage: View {
 
     private func load() -> [ContentRow] {
         let end = Date()
-        let start = Calendar.current.date(byAdding: .day, value: -(range - 1), to: Calendar.current.startOfDay(for: end))!
+        let start = LogicalDay.range(LogicalDay.adding(-(range - 1), to: LogicalDay.of(end))).start
         let q = search.trimmingCharacters(in: .whitespaces).lowercased()
         return ((try? model.contentStore?.views(from: start, to: end.addingTimeInterval(60))) ?? [])
             .filter { v in
@@ -625,10 +626,11 @@ struct TrendsPage: View {
         let _ = model.version
         let cal = Calendar.current
         let end = Date()
-        let start = cal.date(byAdding: .day, value: -(range - 1), to: cal.startOfDay(for: end))!
+        let firstDay = LogicalDay.adding(-(range - 1), to: LogicalDay.of(end))
+        let start = LogicalDay.range(firstDay).start
         let views = (try? model.contentStore?.views(from: start, to: end.addingTimeInterval(60))) ?? []
         let reasons = (try? model.contentStore?.reasons(from: start, to: end.addingTimeInterval(60))) ?? []
-        let bars = dayBars(views: views, start: start)
+        let bars = dayBars(views: views, start: firstDay)
         let junkViews = views.filter { $0.isJunk(config: model.config) }
 
         PageScaffold(title: "趋势") {
@@ -685,7 +687,7 @@ struct TrendsPage: View {
         let cal = Calendar.current
         var junk: [Date: Double] = [:], good: [Date: Double] = [:]
         for v in views {
-            let d = cal.startOfDay(for: Date(timeIntervalSince1970: v.startedAt))
+            let d = LogicalDay.of(Date(timeIntervalSince1970: v.startedAt))
             if v.isJunk(config: model.config) { junk[d, default: 0] += v.activeSeconds } else { good[d, default: 0] += v.activeSeconds }
         }
         return (0..<range).flatMap { i -> [DayBar] in

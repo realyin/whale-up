@@ -121,8 +121,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             },
             status: { [weak self] in
                 guard let self else { return [:] }
-                let today = Calendar.current.startOfDay(for: Date())
-                let count = (try? self.contentStore?.views(from: today, to: today.addingTimeInterval(86400)))??.count ?? 0
+                let today = LogicalDay.range(Date())
+                let count = (try? self.contentStore?.views(from: today.start, to: today.end))??.count ?? 0
                 return ["ok": true, "scope": self.config.contentScope.rawValue, "todayViews": count]
             })
         server?.onFavorite = { [weak self] input in
@@ -224,7 +224,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         saveTracker()
         if debug {
-            print("[\(now)] \(current?.appName ?? "-") \(current?.url ?? "") junk=\(currentReason ?? "no") idle=\(idle) session=\(Int(tracker.sessionSeconds))s today=\(Int(tracker.todaySeconds))s force=\(Int(forceCloser.sessionSeconds))s")
+            print("[\(now)] \(current?.appName ?? "-") \(current?.url ?? "") junk=\(currentReason ?? "no") idle=\(idle) session=\(Int(tracker.sessionSeconds))s today=\(Int(tracker.todaySeconds))s force=\(Int(forceUsedToday))s")
             fflush(stdout)
         }
         updateStatusTitle()
@@ -255,12 +255,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var todayJunkItems: [UsageItem] { stats.items(on: Date(), config: config).filter(\.isJunk) }
     private var todayJunkSeconds: Double { todayJunkItems.reduce(0) { $0 + $1.seconds } }
 
-    /// 强制关闭模式：在指定网站上停留太久就直接关掉当前网页
+    /// 设置页上显示的“今天已看 / 今天能看”
+    private func refreshForceToday() {
+        guard let settings = main?.model.settings else { return }
+        let value = (used: forceUsedToday, limit: forceCloser.limitSeconds(config: config))
+        if settings.forceToday != value { settings.forceToday = value }
+    }
+
+    /// 今天在强制关闭名单网站上累计看了多久（和统计里看到的一样，后台播放的视频也算）
+    private var forceUsedToday: Double { stats.seconds(on: Date(), sites: config.forceCloseSites) }
+
+    /// 强制关闭模式：今天在名单网站上累计看够了，就直接关掉当前网页；当天再打开也会被关掉
     private func enforce(idle: Bool, now: Date, elapsed: Double) {
         let rule = current?.url.flatMap { Classifier.matchSite($0, rules: config.forceCloseSites) }
-        // 强制关闭只针对名单里的网站；大模型判断为有营养的内容不计时
+        // 强制关闭只针对名单里的网站；大模型判断为有营养的内容不管
         let onSite = rule != nil && JunkJudge.isJunk(siteRuleMatched: true, label: currentLabel, config: config)
-        switch forceCloser.record(onSite: onSite, isIdle: idle, now: now, elapsed: elapsed, config: config) {
+        let action = forceCloser.record(onSite: onSite, usedToday: forceUsedToday, now: now, config: config)
+        refreshForceToday()
+        switch action {
         case .warn:
             toast.show("⏳ 还有 1 分钟，\(rule ?? "") 将被自动关闭")
         case .close:
@@ -273,8 +285,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             nudgeWindow.close()
             tracker.acceptRest()
-            let until = forceCloser.blockedUntil?.formatted(date: .omitted, time: .shortened) ?? ""
-            toast.show("🚫 已自动关闭 \(rule ?? "")\n\(until) 之前再打开会被直接关掉")
+            toast.show("🚫 今天在 \(config.forceCloseSites.joined(separator: "、")) 上已经看了 \(formatDuration(forceUsedToday))，已关掉 \(rule ?? "")\n今天再打开也会被关掉；真要多看，去设置里给今天加时间")
         case nil:
             break
         }
@@ -448,6 +459,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func loadConfig() {
         let oldInterval = config.checkIntervalSeconds
         (config, configError) = Config.load()
+        LogicalDay.startHour = config.dayStartHour
         configModifiedAt = modificationDate(of: Config.fileURL)
         if timer != nil, config.checkIntervalSeconds != oldInterval { scheduleTimer() }
         if timer != nil { updateMascot() }
@@ -467,6 +479,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let oldInterval = config.checkIntervalSeconds
         config = new
         configError = nil
+        LogicalDay.startHour = config.dayStartHour
         config.save()
         configModifiedAt = modificationDate(of: Config.fileURL)
         if config.checkIntervalSeconds != oldInterval { scheduleTimer() }
@@ -660,8 +673,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else if let reason = currentReason {
             info("正在看 \(reason)，连续 \(formatDuration(tracker.sessionSeconds))")
         }
-        if config.forceCloseEnabled, let until = forceCloser.blockedUntil, until > Date() {
-            info("强制关闭冷却中，\(clock(until.timeIntervalSince1970)) 前打开会被关掉")
+        if config.forceCloseEnabled {
+            let used = forceUsedToday
+            info(forceCloser.isBlocked(usedToday: used, config: config)
+                 ? "强制关闭：今天的 \(formatDuration(forceCloser.limitSeconds(config: config))) 已用完，再打开会被关掉"
+                 : "强制关闭：今天还能看 \(formatDuration(forceCloser.remainingSeconds(usedToday: used, config: config)))")
         }
         if !monitor.deniedBrowsers.isEmpty {
             _ = action("⚠️ 读不到 \(monitor.deniedBrowsers.sorted().joined(separator: "、")) 的网址，去授权…", #selector(openAutomationSettings))
@@ -731,9 +747,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
 
     private func deleteDay(_ day: Date) {
-        let start = Calendar.current.startOfDay(for: day)
-        let end = Calendar.current.date(byAdding: .day, value: 1, to: start)!
-        try? contentStore?.deleteDay(from: start, to: end, dayKey: DayKey.string(start))
+        let (start, end) = LogicalDay.range(day)
+        try? contentStore?.deleteDay(from: start, to: end, dayKey: DayKey.string(day))
         stats.removeDay(start)
         saveStats()
         main?.model.version += 1
@@ -762,6 +777,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             settings.extensionLastSeen = server?.lastReportAt
             settings.serverError = server?.error ?? (contentStore == nil ? "内容数据库打开失败" : nil)
             settings.labelerStatus = labelerStatus
+            settings.grantForce = { [weak self] minutes in
+                guard let self else { return }
+                self.forceCloser.grant(minutes: minutes)
+                self.saveTracker()
+                self.refreshForceToday()
+                self.toast.show("⏳ 今天多给你 \(Int(minutes)) 分钟，用完还会关")
+            }
             settings.previewVoice = { [weak self] in
                 guard let self, let mascot = self.mascot else { return }
                 mascot.voice.voiceID = self.config.mascotVoiceName
@@ -786,6 +808,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             main = MainWindow(model: model)
         }
+        refreshForceToday()
         main?.model.stats = stats
         main?.model.todayJunkSeconds = tracker.todaySeconds
         main?.model.pausedUntil = pausedUntil
