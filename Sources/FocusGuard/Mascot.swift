@@ -20,8 +20,19 @@ final class Mascot: NSObject, WKScriptMessageHandler {
         var waitSeconds = 0
     }
 
-    /// 窗口大小：下方 188 高是角色，上方留给对话气泡
-    static let size = NSSize(width: 280, height: 400)
+    /// 她和气泡占的区域：下方是角色，上方留给对话气泡
+    static let stage = NSSize(width: 280, height: 400)
+    /// 窗口在左右和下方多留的透明边，右键圆环弹出时有地方放（平时鼠标点穿，不挡东西）
+    static let pad = (x: 72.0, bottom: 140.0)
+    static let size = NSSize(width: stage.width + pad.x * 2, height: stage.height + pad.bottom)
+
+    /// 她所在区域的左下角 ↔ 窗口左下角
+    private static func panelOrigin(_ stageOrigin: NSPoint) -> NSPoint {
+        NSPoint(x: stageOrigin.x - pad.x, y: stageOrigin.y - pad.bottom)
+    }
+    private static func stageOrigin(_ panelOrigin: NSPoint) -> NSPoint {
+        NSPoint(x: panelOrigin.x + pad.x, y: panelOrigin.y + pad.bottom)
+    }
 
     /// App 里带的桌宠网页、运行库和内置角色（模型由 scripts/fetch_mascot.sh 下载）
     static var assetsDir: URL? {
@@ -85,12 +96,12 @@ final class Mascot: NSObject, WKScriptMessageHandler {
     /// 用户戳了她一下
     var onTapped: () -> Void = {}
 
-    /// 平时站的位置（可以拖动，记住）
+    /// 平时站的位置（她所在区域的左下角，可以拖动，记住）
     private var home: NSPoint {
         get {
             if let s = UserDefaults.standard.string(forKey: "mascotHome") { return NSPointFromString(s) }
             let v = NSScreen.main?.visibleFrame ?? .zero
-            return NSPoint(x: v.maxX - Self.size.width - 8, y: v.minY)
+            return NSPoint(x: v.maxX - Self.stage.width - 8, y: v.minY)
         }
         set { UserDefaults.standard.set(NSStringFromPoint(newValue), forKey: "mascotHome") }
     }
@@ -108,11 +119,12 @@ final class Mascot: NSObject, WKScriptMessageHandler {
         let web = WKWebView(frame: NSRect(origin: .zero, size: Self.size), configuration: config)
         web.setValue(false, forKey: "drawsBackground")
         var page = URLComponents(url: dir.appendingPathComponent("index.html"), resolvingAgainstBaseURL: false)!
-        page.queryItems = [URLQueryItem(name: "character", value: id)]
+        page.queryItems = [URLQueryItem(name: "character", value: id),
+                           URLQueryItem(name: "pad", value: "\(Int(Self.pad.x)),\(Int(Self.pad.bottom))")]
         web.loadFileURL(page.url!, allowingReadAccessTo: dir)
         self.web = web
 
-        let panel = MascotPanel(contentRect: NSRect(origin: home, size: Self.size),
+        let panel = MascotPanel(contentRect: NSRect(origin: Self.panelOrigin(home), size: Self.size),
                                 styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -134,6 +146,9 @@ final class Mascot: NSObject, WKScriptMessageHandler {
     }
 
     func hide() {
+        if let m = outsideClickMonitor { NSEvent.removeMonitor(m) }
+        outsideClickMonitor = nil
+        ringOpen = false
         mouseTimer?.invalidate()
         mouseTimer = nil
         voice.stop()
@@ -147,7 +162,7 @@ final class Mascot: NSObject, WKScriptMessageHandler {
 
     private func updateClickThrough() {
         guard let panel else { return }
-        if dragging { panel.ignoresMouseEvents = false; return }
+        if dragging || ringOpen { panel.ignoresMouseEvents = false; return }
         let m = NSEvent.mouseLocation
         let p = CGPoint(x: m.x - panel.frame.minX, y: panel.frame.maxY - m.y)
         panel.ignoresMouseEvents = !hitRects.contains { $0.contains(p) }
@@ -209,8 +224,53 @@ final class Mascot: NSObject, WKScriptMessageHandler {
 
     func play(_ action: MascotBehavior.Action) { play(action.rawValue) }
 
-    /// 右键点她
-    var onMenu: () -> Void = {}
+    /// 右键点她（参数：是否按着 Option，按着时弹系统菜单）
+    var onMenu: (_ option: Bool) -> Void = { _ in }
+    /// 在圆环里选了一项
+    var onRing: (String) -> Void = { _ in }
+    private var ringOpen = false
+    private var outsideClickMonitor: Any?
+
+    /// 右键圆环菜单的一项；children 不为空时点它展开第二圈
+    struct RingItem {
+        var id: String
+        var title: String
+        var icon: String
+        var on = false
+        var disabled = false
+        var children: [RingItem] = []
+        /// 点开第二圈时顶上缎带里的说明（默认用 title）
+        var note: String?
+
+        var dict: [String: Any] {
+            var d: [String: Any] = ["id": id, "title": title, "icon": icon, "on": on, "disabled": disabled]
+            if !children.isEmpty { d["children"] = children.map(\.dict) }
+            if let note { d["note"] = note }
+            return d
+        }
+    }
+
+    /// 围着她弹出一圈；status 是顶上缎带里的一句话
+    func openRing(_ items: [RingItem], status: String) {
+        guard let panel else { return }
+        // 屏幕可用区域换成窗口坐标（左上为原点），靠近屏幕边时圆环会变成朝里的一段弧
+        let v = (panel.screen ?? NSScreen.main)?.visibleFrame ?? panel.frame
+        let visible: [String: Double] = ["x": v.minX - panel.frame.minX, "y": panel.frame.maxY - v.maxY,
+                                         "w": v.width, "h": v.height]
+        let spec: [String: Any] = ["items": items.map(\.dict), "status": status, "visible": visible]
+        ringOpen = true
+        js("mascot.openRing(\(json(spec)))")
+        // 点到别的窗口时收起
+        if outsideClickMonitor == nil {
+            outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, self.ringOpen else { return }
+                    self.ringOpen = false
+                    self.js("mascot.closeRing()")
+                }
+            }
+        }
+    }
 
     func stopAction() {
         playing = nil
@@ -249,9 +309,10 @@ final class Mascot: NSObject, WKScriptMessageHandler {
             ?? panel.frame
         var dest = panel.frame.origin
         if let t = target {
-            // 让角色的头尽量靠近浏览器顶部的标签栏（角色在窗口下方 188 高的区域里）
-            dest = NSPoint(x: min(t.maxX - Self.size.width * 0.7, visible.maxX - Self.size.width),
-                           y: max(visible.minY, min(t.maxY - Self.size.height + 10, visible.maxY - Self.size.height)))
+            // 让角色的头尽量靠近浏览器顶部的标签栏
+            let w = Self.stage.width, h = Self.stage.height
+            dest = Self.panelOrigin(NSPoint(x: min(t.maxX - w * 0.7, visible.maxX - w),
+                                            y: max(visible.minY, min(t.maxY - h + 10, visible.maxY - h))))
         }
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = target == nil ? 0 : 0.7
@@ -269,7 +330,7 @@ final class Mascot: NSObject, WKScriptMessageHandler {
             self.js("mascot.setMood('\(self.mood.rawValue)')")
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.8
-                panel.animator().setFrameOrigin(self.home)
+                panel.animator().setFrameOrigin(Self.panelOrigin(self.home))
             }
         }
     }
@@ -291,6 +352,9 @@ final class Mascot: NSObject, WKScriptMessageHandler {
     private func after(_ seconds: Double, _ work: @escaping @MainActor () -> Void) {
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { MainActor.assumeIsolated { work() } }
     }
+
+    /// 开发用：把她挪到某个位置（不改记住的位置）
+    func moveForDemo(stageOrigin: NSPoint) { panel?.setFrameOrigin(Self.panelOrigin(stageOrigin)) }
 
     /// 开发用：把当前画面存成 PNG
     func snapshot(to url: URL, done: @escaping () -> Void) {
@@ -345,7 +409,7 @@ final class Mascot: NSObject, WKScriptMessageHandler {
                 if let p = self.panel { p.setFrameOrigin(NSPoint(x: p.frame.minX + dx, y: p.frame.minY - dy)) }
             case "dragEnd":
                 self.dragging = false
-                if let p = self.panel, !self.busy { self.home = p.frame.origin }
+                if let p = self.panel, !self.busy { self.home = Self.stageOrigin(p.frame.origin) }
             case "button":
                 if let id { self.onButton?(id) }
             case "reason":
@@ -353,7 +417,12 @@ final class Mascot: NSObject, WKScriptMessageHandler {
             case "tapped":
                 self.onTapped()
             case "menu":
-                self.onMenu()
+                self.onMenu(body["option"] as? Bool ?? false)
+            case "ring":
+                self.ringOpen = false
+                if let id { self.onRing(id) }
+            case "ringClosed":
+                self.ringOpen = false
             case "woke":
                 self.playing = nil
                 self.play("yawn")

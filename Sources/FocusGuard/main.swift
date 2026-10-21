@@ -217,6 +217,30 @@ func runMascotDemo(to dir: String) {
                                 ("milktea", "milktea", 0), ("read", "read", 0)] {
         steps.append((shot, { mascot.js("mascot.stop(); mascot.setMood('idle'); mascot.play('\(name)', null, \(index))") }))
     }
+    // FOCUSGUARD_MASCOT_RING=corner|center：只截右键圆环（第一圈、动作圈、更多圈）
+    if let place = ProcessInfo.processInfo.environment["FOCUSGUARD_MASCOT_RING"] {
+        if let v = NSScreen.main?.visibleFrame {
+            mascot.moveForDemo(stageOrigin: place == "center" ? NSPoint(x: v.midX - Mascot.stage.width / 2, y: v.midY - 150)
+                                                              : NSPoint(x: v.maxX - Mascot.stage.width - 8, y: v.minY))
+        }
+        typealias Item = Mascot.RingItem
+        let acts = [("eat", "🍚", "吃大米饭"), ("sleep", "😴", "睡觉"), ("yawn", "🥱", "打哈欠"), ("stretch", "🙆", "伸懒腰"),
+                    ("swim", "🏊", "游泳"), ("dance", "💃", "跳舞"), ("work", "💻", "陪你工作"), ("heart", "💗", "比心"),
+                    ("milktea", "🧋", "喝奶茶"), ("read", "📖", "看书")].map { Item(id: "act:\($0.0)", title: $0.2, icon: $0.1) }
+        let items = [Item(id: "actions", title: "动作", icon: "🎀", children: acts), Item(id: "cast", title: "施魔法", icon: "🪄"),
+                     Item(id: "today", title: "今天", icon: "📊"),
+                     Item(id: "lists", title: "加入名单", icon: "📌", children: [Item(id: "a", title: "没营养", icon: "🍿", on: true)],
+                          note: "把 bilibili.com 加入…"),
+                     Item(id: "pause", title: "暂停 1 小时", icon: "⏸️"),
+                     Item(id: "more", title: "更多", icon: "💭", children: [Item(id: "main", title: "主窗口", icon: "🏠"),
+                         Item(id: "settings", title: "设置", icon: "⚙️"), Item(id: "force", title: "强制关闭", icon: "🛡️", on: true),
+                         Item(id: "hide", title: "隐藏她", icon: "🙈"), Item(id: "quit", title: "退出", icon: "🚪")])]
+        // 先空等一拍：窗口刚挪过去时第一张截图可能还是旧画面
+        steps = [("ring-\(place)-warm", {}), ("ring-\(place)", { mascot.openRing(items, status: "今天没营养 23 分钟，额度还剩 37 分钟") }),
+                 ("ring-\(place)-actions", { mascot.js("document.querySelector('.ri.group').click()") }),
+                 ("ring-\(place)-more", { mascot.js("mascot.closeRing()"); mascot.openRing(items, status: "")
+                     mascot.js("setTimeout(() => document.querySelectorAll('.ri.group')[2].click(), 50)") })]
+    }
     // FOCUSGUARD_MASCOT_SEQ=动作名：只演这个动作，连拍 16 张看动作是否连贯
     if let seq = ProcessInfo.processInfo.environment["FOCUSGUARD_MASCOT_SEQ"] {
         steps = [("seq-00", { mascot.js("mascot.setMood('idle'); mascot.play('\(seq)', null, 0)") })]

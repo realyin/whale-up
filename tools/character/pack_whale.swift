@@ -161,6 +161,22 @@ var spec: [String: Any] = [
               "soft": "#e9f0fc", "soft-ink": "#2d3f7a", "stitch": "rgba(61, 111, 214, .4)", "lace": "#ffffff"],
 ]
 if frames.contains(where: { $0.0 == "blink" }) { spec["blink"] = "blink.png" }
+// 右键圆环的图标：素材目录里 icons/out 下用 pack_icons 切好的小图（名字是动作名或功能名）
+let iconDir = "\(src)/icons/out"
+if let files = try? FileManager.default.contentsOfDirectory(atPath: iconDir) {
+    try? FileManager.default.createDirectory(atPath: "\(dst)/icons", withIntermediateDirectories: true)
+    var icons: [String: String] = [:]
+    let actionNames: Set = ["eat", "sleep", "yawn", "stretch", "swim", "dance", "work", "heart", "milktea", "read"]
+    let listNames = ["junk": "add:junk", "sensitive": "add:sensitive"]
+    for f in files where f.hasSuffix(".png") {
+        let name = String(f.dropLast(4))
+        try? FileManager.default.removeItem(atPath: "\(dst)/icons/\(f)")
+        try? FileManager.default.copyItem(atPath: "\(iconDir)/\(f)", toPath: "\(dst)/icons/\(f)")
+        icons[actionNames.contains(name) ? "act:\(name)" : listNames[name] ?? name] = "icons/\(f)"
+    }
+    if icons["force"] != nil { icons["add:force"] = icons["force"] }
+    spec["icons"] = icons
+}
 // ---- 新姿势：每组单独抠图，按组内各帧的公共外框裁剪（同组帧相对位置不变，播放时按脚底中心对齐）----
 func bbox(_ b: Bitmap) -> CGRect? {
     var minX = W, minY = H, maxX = -1, maxY = -1

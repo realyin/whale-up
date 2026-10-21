@@ -6,7 +6,11 @@
   const app = new PIXI.Application({ view: stage, backgroundAlpha: 0, resizeTo: window, antialias: true, autoDensity: true,
                                      resolution: window.devicePixelRatio || 2 });
   const effects = new PIXI.Container();
-  const characterId = new URLSearchParams(location.search).get("character") || "mao";
+  const params = new URLSearchParams(location.search);
+  const characterId = params.get("character") || "mao";
+  // 窗口左右和下方留出的透明边（给圆环菜单用），她站在留边里面
+  const [PADX, PADB] = (params.get("pad") || "0,0").split(",").map(Number);
+  document.documentElement.style.setProperty("--padx", `${PADX}px`);
   let actor = null; // 当前角色驱动（Live2D 或图片）
   let characterSpec = null;
   let currentMood = "idle";
@@ -35,7 +39,7 @@
       layout() {
         model.scale.set(spec.height / model.internalModel.height);
         model.x = (window.innerWidth - model.width) / 2;
-        model.y = window.innerHeight - model.height + model.height * 0.02;
+        model.y = window.innerHeight - PADB - model.height + model.height * 0.02;
       },
       tick(delta) {
         if (!speaking) return;
@@ -236,7 +240,7 @@
         const hopY = hop > 0 ? -Math.sin((1 - hop / 30) * Math.PI) * 18 : 0;
         if (hop > 0) hop -= delta;
         const shake = mood === "angry" && !textures.angry ? Math.sin(t * 1.3) * 1.5 : 0;
-        rig.position.set(window.innerWidth / 2 + shake + m.x, window.innerHeight - 4 + hopY + m.y - talk * 1.5);
+        rig.position.set(window.innerWidth / 2 + shake + m.x, window.innerHeight - PADB - 4 + hopY + m.y - talk * 1.5);
 
         // 部件摆动（生气时摆得更快）；新姿势的图自带尾巴，这时把单独的尾巴藏起来
         const speed = mood === "angry" ? 2.2 : 1;
@@ -460,19 +464,217 @@
     tapTimer = setTimeout(() => actor.setMood(currentMood), 2500);
   }
 
-  // ---- 鼠标：拖动窗口、点角色、告诉 Swift 哪里可以点穿 ----
+  // ---- 右键圆环菜单：功能围着她弹出一圈，点“动作”等再展开第二圈 ----
+  // spec：{ status, items: [{ id, title, icon, on, disabled, hint, children: [...] }], visible: {x, y, w, h} }
+  // visible 是屏幕可用区域（窗口坐标），靠近屏幕边时圆环变成朝屏幕里的一段弧
 
-  stage.addEventListener("contextmenu", (e) => {
+  const ringEl = document.getElementById("ring");
+  let ring = null; // { spec, stack: [items...], openedAt }
+
+  /** 圆心：她身体的中心 */
+  function ringCenter() {
+    const b = actor.bounds();
+    return { x: b.x + b.width / 2, y: b.y + b.height * 0.52, body: Math.hypot(b.width, b.height) * 0.42 };
+  }
+
+  /** 在 [x0, x1] × [y0, y1] 里给 n 个泡泡找位置：先放内圈，放不下再放外圈；
+   *  圈上被屏幕边挡住的部分不用，泡泡集中在最长的那段能用的弧上 */
+  function ringPositions(n, c, box, size, labelWidth = 0) {
+    // 相邻泡泡至少隔开一个泡泡或一条名字缎带的宽度
+    const spacing = Math.max(size + 16, labelWidth + 10);
+    const half = size / 2 + 4;
+    const fits = (r, a) => {
+      const x = c.x + r * Math.cos(a);
+      const y = c.y + r * Math.sin(a);
+      return x - half > box.x0 && x + half < box.x1 && y - half > box.y0 && y + half + 18 < box.y1;
+    };
+    // 一圈能放几个：整圈、或最长那段能用的弧
+    const arc = (r) => {
+      const step = Math.PI / 60;
+      const ok = [];
+      for (let i = 0; i < 120; i++) ok.push(fits(r, -Math.PI + i * step));
+      if (ok.every(Boolean)) return Math.floor((2 * Math.PI * r) / spacing);
+      let best = 0;
+      for (let i = 0; i < 120; i++) {
+        if (!ok[i] || ok[(i + 119) % 120]) continue;
+        let len = 0;
+        while (len < 120 && ok[(i + len) % 120]) len++;
+        best = Math.max(best, len);
+      }
+      return best ? Math.floor(((best - 1) * step * r) / spacing) + 1 : 0;
+    };
+    const rows = [];
+    let left = n;
+    // 内圈离开她的身体；放不下时先把这一圈撑大一点（最多 50px），还不行再开外圈
+    let r0 = Math.max(size * 2.1 + 4, c.body + size / 2 + 8);
+    for (let grow = 0; grow <= 50; grow += 10) if (arc(r0 + grow) >= n) { r0 += grow; break; }
+    for (const r of [r0, r0 + size + 22, r0 + 2 * (size + 22)]) {
+      if (left <= 0) break;
+      const step = Math.PI / 60;
+      const ok = [];
+      for (let i = 0; i < 120; i++) ok.push(fits(r, -Math.PI + i * step));
+      let full = ok.every(Boolean);
+      // 找最长的连续可用段（首尾相接）
+      let best = { start: 0, len: 0 };
+      if (!full) {
+        for (let i = 0; i < 120; i++) {
+          if (!ok[i] || ok[(i + 119) % 120]) continue;
+          let len = 0;
+          while (len < 120 && ok[(i + len) % 120]) len++;
+          if (len > best.len) best = { start: i, len };
+        }
+        if (!best.len) continue;
+      }
+      const span = full ? 2 * Math.PI : (best.len - 1) * step;
+      const cap = full ? Math.floor((2 * Math.PI * r) / spacing) : Math.floor((span * r) / spacing) + 1;
+      if (cap <= 0) continue;
+      const k = Math.min(left, cap);
+      left -= k;
+      if (full) {
+        for (let i = 0; i < k; i++) rows.push({ r, a: -Math.PI / 2 + (i * 2 * Math.PI) / k });
+      } else {
+        // 泡泡挨着排在弧的中间，不铺满整段弧
+        const mid = -Math.PI + (best.start + (best.len - 1) / 2) * step;
+        const da = spacing / r;
+        for (let i = 0; i < k; i++) rows.push({ r, a: mid + (i - (k - 1) / 2) * da });
+      }
+    }
+    // 实在放不下的（屏幕太小）叠在最后一圈上
+    while (rows.length < n) rows.push({ ...rows[rows.length - 1] });
+    return rows.map(({ r, a }) => ({ x: c.x + r * Math.cos(a), y: c.y + r * Math.sin(a) }));
+  }
+
+  function renderRing(items, back) {
+    ringEl.innerHTML = "";
+    const c = ringCenter();
+    const v = ring.spec.visible || { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight };
+    const box = { x0: Math.max(0, v.x), y0: Math.max(0, v.y),
+                  x1: Math.min(window.innerWidth, v.x + v.w), y1: Math.min(window.innerHeight, v.y + v.h) };
+    const size = items.length > 7 ? 50 : 56;
+    const measure = document.createElement("canvas").getContext("2d");
+    measure.font = "700 10.5px -apple-system, 'PingFang SC', sans-serif";
+    const labelWidth = Math.max(...items.map((it) => measure.measureText((it.on ? "✓ " : "") + it.title).width + 14));
+    const pos = ringPositions(items.length, c, box, size, labelWidth);
+
+    items.forEach((it, i) => {
+      const el = document.createElement("button");
+      el.className = "ri" + (it.on ? " on" : "") + (it.children ? " group" : "");
+      el.disabled = !!it.disabled;
+      el.style.setProperty("--size", `${size}px`);
+      el.style.left = `${c.x}px`;
+      el.style.top = `${c.y}px`;
+      el.innerHTML = `<span class="ic"></span><span class="lb"></span>`;
+      // 角色包里画好的图标优先（character.json 的 icons：{项目 id: 图片}），没有再用 emoji
+      const art = (characterSpec.icons || {})[it.id];
+      if (art) {
+        const img = document.createElement("img");
+        img.src = `characters/${characterId}/${art}`;
+        el.querySelector(".ic").appendChild(img);
+      } else el.querySelector(".ic").textContent = it.icon || "•";
+      el.querySelector(".lb").textContent = it.title;
+      if (it.hint) el.title = it.hint;
+      el.onclick = (e) => { e.stopPropagation(); pick(it); };
+      ringEl.appendChild(el);
+      // 从她身上一个接一个弹出去
+      setTimeout(() => {
+        el.classList.add("out");
+        el.style.left = `${pos[i].x}px`;
+        el.style.top = `${pos[i].y}px`;
+      }, 16 + i * 22);
+    });
+
+    // 顶上（或下面）一条小缎带：今天的情况，第二圈时提示“点她返回”
+    const top = Math.min(...pos.map((p) => p.y)) - size / 2;
+    const bottom = Math.max(...pos.map((p) => p.y)) + size / 2 + 20;
+    const pill = document.createElement("div");
+    pill.className = "ring-status";
+    pill.textContent = back ? `${back} · 点她返回` : ring.spec.status || "";
+    pill.style.left = `${c.x}px`;
+    pill.style.top = top - 34 > box.y0 ? `${top - 34}px` : `${Math.min(bottom + 6, box.y1 - 30)}px`;
+    if (pill.textContent) ringEl.appendChild(pill);
+  }
+
+  function openRing(spec) {
+    if (!actor) return;
+    clearTimeout(ringCloseTimer);
+    ring = { spec, stack: [], openedAt: performance.now() };
+    document.body.classList.add("ring-open");
+    renderRing(spec.items);
+    actor.tap?.();
+    report();
+  }
+
+  let ringCloseTimer = null;
+  function closeRing() {
+    if (!ring) return;
+    ring = null;
+    for (const el of ringEl.querySelectorAll(".ri")) {
+      el.classList.remove("out");
+      const c = ringCenter();
+      el.style.left = `${c.x}px`;
+      el.style.top = `${c.y}px`;
+    }
+    ringEl.querySelector(".ring-status")?.remove();
+    ringCloseTimer = setTimeout(() => { ringEl.innerHTML = ""; }, 220);
+    document.body.classList.remove("ring-open");
+    post({ type: "ringClosed" });
+    report();
+  }
+
+  function pick(it) {
+    if (!ring || it.disabled) return;
+    if (it.children) {
+      ring.stack.push(it);
+      renderRing(it.children, it.note || it.title);
+      return;
+    }
+    closeRing();
+    post({ type: "ring", id: it.id });
+  }
+
+  /** 点她：在第二圈时回到第一圈，否则收起 */
+  function ringBack() {
+    if (!ring) return;
+    if (ring.stack.length) {
+      ring.stack.pop();
+      const parent = ring.stack[ring.stack.length - 1];
+      renderRing(parent ? parent.children : ring.spec.items, parent && (parent.note || parent.title));
+    } else closeRing();
+  }
+
+  function insideHer(x, y) {
+    const b = actor.bounds();
+    return x > b.x && x < b.x + b.width && y > b.y && y < b.y + b.height;
+  }
+
+  // ---- 鼠标：拖动窗口、点角色、右键圆环、告诉 Swift 哪里可以点穿 ----
+
+  // 右键按下：弹出圆环（按住拖到某一项上松开也能直接选）
+  document.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     drag = null;
-    post({ type: "menu" });
+    if (ring) { closeRing(); return; }
+    post({ type: "menu", option: e.altKey });
+  });
+  window.addEventListener("mouseup", (e) => {
+    if (e.button !== 2 || !ring || performance.now() - ring.openedAt < 250) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest(".ri");
+    el?.click();
   });
 
   let drag = null;
-  stage.addEventListener("mousedown", (e) => {
-    if (e.button !== 0) return;
+  document.addEventListener("mousedown", (e) => {
+    if (ring) {
+      // 圆环打开时：点她返回/收起，点空白处收起；点泡泡交给泡泡自己
+      if (e.button !== 0 || e.target.closest(".ri")) return;
+      if (insideHer(e.clientX, e.clientY)) ringBack();
+      else closeRing();
+      return;
+    }
+    if (e.button !== 0 || e.target.closest("#bubble")) return;
     drag = { x: e.screenX, y: e.screenY, moved: false };
   });
+  window.addEventListener("keydown", (e) => { if (e.key === "Escape") closeRing(); });
   window.addEventListener("mousemove", (e) => {
     if (!drag) return;
     const dx = e.screenX - drag.x;
@@ -491,6 +693,8 @@
   /** 可交互区域（窗口坐标，左上为原点）：角色身体 + 气泡；其余区域鼠标点穿 */
   function report() {
     const rects = [];
+    // 圆环打开时整个窗口都接收鼠标（点空白处收起）
+    if (ring) rects.push({ x: 0, y: 0, w: window.innerWidth, h: window.innerHeight });
     if (actor) {
       const b = actor.bounds();
       // 气泡的尾巴贴着角色头顶
@@ -581,6 +785,6 @@
   /** 开发用：直接切换 Live2D 的某个表情 */
   function expr(name) { actor?.expr(name); }
 
-  window.mascot = { setMood, setSpeaking, say, hideBubble, cast, burst, tap, report, expr, play, stop };
+  window.mascot = { setMood, setSpeaking, say, hideBubble, cast, burst, tap, report, expr, play, stop, openRing, closeRing };
   load().catch((e) => post({ type: "error", message: String(e) }));
 })();

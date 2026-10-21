@@ -421,7 +421,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     m.remark(line)
                 }
                 m.onError = { [weak self] in self?.toast.show("桌宠加载失败：\($0)") }
-                m.onMenu = { [weak self] in self?.showMascotMenu() }
+                m.onMenu = { [weak self] option in option ? self?.showMascotMenu() : self?.showMascotRing() }
+                m.onRing = { [weak self] id in self?.handleRing(id) }
                 m.show()
                 mascot = m
             }
@@ -504,7 +505,84 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         fillMenu(menu)
     }
 
-    /// 右键点桌宠：先是她的动作，再是和菜单栏一样的功能
+    /// 今天的一句话概况（菜单栏菜单和右键圆环共用）
+    private func todayStatus() -> String {
+        var status = "今天没营养 \(formatDuration(tracker.todaySeconds))"
+        if let left = config.budgetRemainingSeconds(usedToday: tracker.todaySeconds) {
+            status += left > 0 ? "，额度还剩 \(formatDuration(left))" : "，额度已用完"
+        }
+        return status
+    }
+
+    /// 动作的小图标
+    private static let actionIcons = ["eat": "🍚", "sleep": "😴", "yawn": "🥱", "stretch": "🙆", "swim": "🏊",
+                                      "dance": "💃", "work": "💻", "heart": "💗", "milktea": "🧋", "read": "📖"]
+
+    /// 右键点桌宠：功能围着她弹出一圈。第一圈是常用的 6 个，动作、加入名单、更多点开是第二圈
+    private func showMascotRing() {
+        guard let mascot else { return }
+        typealias Item = Mascot.RingItem
+        let actions = mascot.actions.map { name in
+            Item(id: "act:\(name)", title: Mascot.actionInfo[name]?.title ?? name,
+                 icon: Self.actionIcons[name] ?? "✨", on: mascot.playing == name)
+        }
+        let rule = lastBrowserURL.flatMap(Classifier.siteRule(from:))
+        let lists: [Item] = [
+            Item(id: "add:junk", title: "没营养", icon: "🍿", on: rule.map(config.junkSites.contains) ?? false),
+            Item(id: "add:force", title: "强制关闭", icon: "⛔️", on: rule.map(config.forceCloseSites.contains) ?? false),
+            Item(id: "add:sensitive", title: "不记录", icon: "🔒", on: rule.map(config.sensitiveSites.contains) ?? false),
+        ].map { var i = $0; i.disabled = rule == nil || i.on; return i }
+        var more: [Item] = [
+            Item(id: "main", title: "主窗口", icon: "🏠"),
+            Item(id: "settings", title: "设置", icon: "⚙️"),
+            Item(id: "force", title: "强制关闭", icon: "🛡️", on: config.forceCloseEnabled),
+        ]
+        if mascot.playing == "sleep" { more.append(Item(id: "wake", title: "叫醒她", icon: "⏰")) }
+        more += [Item(id: "hide", title: "隐藏她", icon: "🙈"), Item(id: "quit", title: "退出", icon: "🚪")]
+        let items: [Item] = [
+            Item(id: "actions", title: "动作", icon: "🎀", children: actions),
+            Item(id: "cast", title: "施魔法", icon: "🪄"),
+            Item(id: "today", title: "今天", icon: "📊"),
+            Item(id: "lists", title: "加入名单", icon: "📌", disabled: rule == nil, children: lists,
+                 note: rule.map { "把 \($0) 加入…" }),
+            pausedUntil == nil ? Item(id: "pause", title: "暂停 1 小时", icon: "⏸️") : Item(id: "resume", title: "恢复监测", icon: "▶️"),
+            Item(id: "more", title: "更多", icon: "💭", children: more),
+        ]
+        mascot.openRing(items, status: todayStatus())
+    }
+
+    private func handleRing(_ id: String) {
+        guard let mascot else { return }
+        if id.hasPrefix("act:") {
+            let name = String(id.dropFirst(4))
+            if mascot.playing == name { mascot.stopAction(); return }
+            mascot.play(name)
+            if let line = Mascot.actionInfo[name]?.line { mascot.remark(line, seconds: 3) }
+            return
+        }
+        let rule = lastBrowserURL.flatMap(Classifier.siteRule(from:))
+        switch id {
+        case "cast": mascotCast()
+        case "today":
+            var line = todayStatus()
+            if let reason = currentReason { line += "。现在在看 \(reason)，已经连续 \(formatDuration(tracker.sessionSeconds)) 了" }
+            mascot.remark(line + "。", seconds: 6)
+        case "add:junk": if let rule { addJunkSite(rule) }
+        case "add:force": if let rule { addForceSite(rule) }
+        case "add:sensitive": if let rule { addSensitiveSite(rule) }
+        case "pause": pauseOneHour(); mascot.remark("好，我先歇一个小时，不管你啦～", seconds: 3)
+        case "resume": resume(); mascot.remark("我回来盯着你啦！", seconds: 3)
+        case "main": openMain()
+        case "settings": openSettings()
+        case "force": toggleForceClose()
+        case "wake": mascotWake()
+        case "hide": hideMascot()
+        case "quit": quit()
+        default: break
+        }
+    }
+
+    /// 右键点桌宠时按着 Option：系统菜单（先是她的动作，再是和菜单栏一样的功能）
     private func showMascotMenu() {
         guard let mascot else { return }
         let menu = NSMenu()
@@ -576,11 +654,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         // 一句话概况
-        var status = "今天没营养 \(formatDuration(tracker.todaySeconds))"
-        if let left = config.budgetRemainingSeconds(usedToday: tracker.todaySeconds) {
-            status += left > 0 ? "，额度还剩 \(formatDuration(left))" : "，额度已用完"
-        }
-        info(status)
+        info(todayStatus())
         if let until = pausedUntil {
             info("已暂停，\(clock(until.timeIntervalSince1970)) 恢复")
         } else if let reason = currentReason {
@@ -626,6 +700,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func addToSensitiveSites(_ sender: NSMenuItem) {
         guard let rule = sender.representedObject as? String else { return }
+        addSensitiveSite(rule)
+    }
+
+    private func addSensitiveSite(_ rule: String) {
         var new = config
         new.sensitiveSites.append(rule)
         applyConfig(new)
@@ -716,6 +794,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func addToJunkSites(_ sender: NSMenuItem) {
         guard let rule = sender.representedObject as? String else { return }
+        addJunkSite(rule)
+    }
+
+    private func addJunkSite(_ rule: String) {
         var new = config
         new.junkSites.append(rule)
         applyConfig(new)
@@ -724,6 +806,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func addToForceSites(_ sender: NSMenuItem) {
         guard let rule = sender.representedObject as? String else { return }
+        addForceSite(rule)
+    }
+
+    private func addForceSite(_ rule: String) {
         var new = config
         new.forceCloseSites.append(rule)
         applyConfig(new)

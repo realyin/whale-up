@@ -14,7 +14,7 @@ html, body { margin: 0; height: 100%; background: transparent; overflow: hidden;
 #stage { position: absolute; left: 0; bottom: 0; width: 100%; height: 100%; }
 
 /* 对话气泡：像她衣服上裁下来的一块——奶白底、深色描边、内圈虚线缝线、顶上一圈蕾丝 */
-#bubble { position: absolute; left: 16px; right: 16px; bottom: 200px; z-index: 2;
+#bubble { position: absolute; left: calc(var(--padx, 0px) + 16px); right: calc(var(--padx, 0px) + 16px); bottom: 200px; z-index: 2;
   background: var(--paper); color: var(--ink); border: 2px solid var(--ink); border-radius: 16px;
   padding: 16px 13px 11px; box-shadow: 0 3px 0 rgba(0, 0, 0, .08), 0 8px 18px rgba(20, 30, 70, .18);
   transform-origin: 50% 100%; animation: pop .32s cubic-bezier(.3, 1.5, .5, 1); }
@@ -47,3 +47,31 @@ button.chip { background: var(--soft); color: var(--soft-ink); padding: 2px 6px;
   border-width: 1px; border-color: transparent; box-shadow: none; }
 button.chip.on { background: var(--accent); color: var(--accent-ink); }
 button:disabled { opacity: .5; cursor: default; box-shadow: 0 2px 0 rgba(0, 0, 0, .15); border-color: currentColor; }
+
+/* 右键圆环：每一项是一颗女仆装配色的圆泡泡，下面挂一条小名字缎带 */
+#ring { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+body.ring-open #bubble { opacity: 0; pointer-events: none; }
+.ri { --size: 52px; position: absolute; width: var(--size); height: var(--size); margin: calc(var(--size) / -2) 0 0 calc(var(--size) / -2);
+  padding: 0; border-radius: 50%; background: var(--paper); border: 2px solid var(--ink); box-shadow: 0 3px 0 var(--ink);
+  pointer-events: auto; display: flex; align-items: center; justify-content: center;
+  transform: scale(.2); opacity: 0;
+  transition: left .34s cubic-bezier(.3, 1.45, .5, 1), top .34s cubic-bezier(.3, 1.45, .5, 1),
+              transform .26s cubic-bezier(.3, 1.6, .5, 1), opacity .16s, background .12s; }
+.ri.out { transform: scale(1); opacity: 1; }
+.ri::before { content: ""; position: absolute; inset: 3px; border-radius: 50%; border: 1.2px dashed var(--stitch); }
+.ri .ic { font-size: calc(var(--size) * .44); line-height: 1; transition: transform .2s; display: flex; }
+.ri .ic img { width: calc(var(--size) * .84); height: calc(var(--size) * .84); object-fit: contain; }
+.ri .lb { position: absolute; top: calc(100% + 2px); left: 50%; transform: translateX(-50%); white-space: nowrap;
+  background: var(--ink); color: var(--paper); font-size: 10.5px; font-weight: 700; padding: 1px 6px 2px; border-radius: 6px; }
+.ri.group::after { content: "›"; position: absolute; right: -3px; top: -4px; width: 15px; height: 15px; border-radius: 50%;
+  background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 700; line-height: 13px; border: 1.5px solid var(--ink); }
+.ri.on { background: var(--soft); }
+.ri.on .lb::before { content: "✓ "; }
+.ri.out:hover:not(:disabled) { transform: scale(1.16); background: var(--soft); border-color: var(--accent); box-shadow: 0 3px 0 var(--accent); z-index: 1; }
+.ri.out:hover:not(:disabled) .ic { transform: rotate(-10deg) scale(1.08); }
+.ri.out:active:not(:disabled) { transform: scale(1.05); box-shadow: 0 1px 0 var(--ink); }
+.ri:disabled { cursor: default; }
+.ri.out:disabled { opacity: .45; }
+.ring-status { position: absolute; transform: translateX(-50%); white-space: nowrap; pointer-events: none;
+  background: var(--paper); color: var(--ink); border: 2px solid var(--ink); border-radius: 999px; padding: 3px 12px;
+  font-size: 11.5px; font-weight: 600; box-shadow: 0 3px 0 rgba(0, 0, 0, .1); animation: pop .3s cubic-bezier(.3, 1.5, .5, 1); }
