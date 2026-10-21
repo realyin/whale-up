@@ -179,6 +179,22 @@ final class Mascot: NSObject, WKScriptMessageHandler, AVSpeechSynthesizerDelegat
         js("mascot.hideBubble()")
     }
 
+    /// 播放一个小动作（打哈欠、睡觉、伸懒腰、吃饭）
+    func play(_ action: MascotBehavior.Action) {
+        guard !busy else { return }
+        let effect: String
+        switch action {
+        case .sleep: effect = "'zzz'"
+        case .eat: effect = "'rice'"
+        default: effect = "null"
+        }
+        js("mascot.play('\(action.rawValue)', \(effect))")
+    }
+
+    func stopAction() {
+        js("mascot.stop()")
+    }
+
     /// 说完自动收起的一句话
     func remark(_ text: String, mood: Mood? = nil, seconds: Double = 4) {
         if let mood { js("mascot.setMood('\(mood.rawValue)')") }

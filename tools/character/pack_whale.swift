@@ -77,7 +77,7 @@ let textRects: [(Int, Int, Int, Int)] = [
     (518, 0, 960, 240), (535, 240, 960, 315), (465, 30, 530, 120), (35, 235, 100, 295), (55, 315, 90, 350),
     (625, 390, 740, 432), (640, 450, 725, 505), (835, 570, 890, 640), (10, 595, 100, 712), (228, 708, 312, 742), (283, 692, 332, 745),
 ]
-let crop = CGRect(x: 40, y: 100, width: 915, height: 690)   // 所有帧共用的裁剪范围
+let crop = CGRect(x: 40, y: 40, width: 915, height: 750)    // 所有帧共用的裁剪范围（上方留出伸懒腰举手的空间）
 let tailRect = (735, 355, 955, 640)                           // 尾巴（原图坐标）
 
 guard var idle = load("\(src)/reference.webp") else { fatalError("没有 reference.webp") }
@@ -93,7 +93,7 @@ save(tail, crop: tailCrop, to: "\(dst)/tail.png")
 
 var images: [String: String] = [:]
 var frames: [(String, Bitmap)] = [("idle", idle)]
-for name in ["blink", "angry", "watching", "shy", "cast"] {
+for name in ["blink", "angry", "watching", "shy", "cast", "yawn", "sleep", "stretch", "eat1", "eat2"] {
     guard var b = load("\(src)/\(name).png") else { continue }
     cutout(&b, rects: [])
     frames.append((name, b))
@@ -102,7 +102,11 @@ for name in ["blink", "angry", "watching", "shy", "cast"] {
 func mask(_ b: Bitmap, scale: Int) -> [Bool] {
     let w = W / scale, h = H / scale
     var m = [Bool](repeating: false, count: w * h)
-    for y in 0..<h { for x in 0..<w { m[y * w + x] = b.px[i4(x * scale, y * scale) + 3] > 128 } }
+    // 只用不会随动作变化的部位（底部的裙摆、腿和鞋，原图 y 620–790）来对齐
+    for y in 0..<h { for x in 0..<w {
+        let oy = y * scale
+        m[y * w + x] = oy >= 620 && oy < 790 && b.px[i4(x * scale, oy) + 3] > 128
+    } }
     return m
 }
 func bestShift(_ a: [Bool], _ b: [Bool], w: Int, h: Int, range: ClosedRange<Int>, around: (Int, Int) = (0, 0)) -> (Int, Int) {
@@ -142,7 +146,7 @@ frames = frames.map { (name, b) in
 for (name, var b) in frames {
     clearRect(&b, tailRect)   // 尾巴统一由单独的部件来画
     save(b, crop: crop, to: "\(dst)/\(name).png")
-    if name != "blink" { images[name] = "\(name).png" }
+    if ["idle", "angry", "watching", "shy", "cast"].contains(name) { images[name] = "\(name).png" }
     print("已生成 \(name).png")
 }
 // 尾巴在画布上的位置：裁剪后坐标；旋转中心在尾巴根部（左下）
@@ -150,9 +154,17 @@ let at = [tailRect.0 - Int(crop.minX), tailRect.1 - Int(crop.minY)]
 var spec: [String: Any] = [
     "name": "鲸鱼娘", "kind": "sprite", "height": 125, "images": images,
     "parts": [["image": "tail.png", "at": at, "pivot": [6, 230], "swing": 6, "period": 2.6]],
-    "headAt": [0.22, 0.02], "castFrom": [0.5, 0.6], "castFromCast": [0.05, 0.30],
+    "headAt": [0.22, 0.08], "castFrom": [0.5, 0.62], "castFromCast": [0.05, 0.37],
 ]
 if frames.contains(where: { $0.0 == "blink" }) { spec["blink"] = "blink.png" }
+// 小动作：打哈欠、睡觉、伸懒腰、吃大米饭（两帧交替）
+var actions: [String: Any] = [:]
+let have = Set(frames.map(\.0))
+if have.contains("yawn") { actions["yawn"] = ["frames": ["yawn.png"], "seconds": 2.8] }
+if have.contains("sleep") { actions["sleep"] = ["frames": ["sleep.png"], "loop": true] }
+if have.contains("stretch") { actions["stretch"] = ["frames": ["stretch.png"], "seconds": 3.5] }
+if have.contains("eat1") && have.contains("eat2") { actions["eat"] = ["frames": ["eat1.png", "eat2.png"], "fps": 1.2, "seconds": 8] }
+spec["actions"] = actions
 let json = try! JSONSerialization.data(withJSONObject: spec, options: [.prettyPrinted, .sortedKeys])
 try! json.write(to: URL(fileURLWithPath: "\(dst)/character.json"))
 print("尾巴部件位置 \(at)")

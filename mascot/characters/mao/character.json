@@ -3,7 +3,20 @@
   "kind": "live2d",
   "model": "../../vendor/Mao/Mao.model3.json",
   "height": 188,
-  "expressions": { "happy": "exp_02", "excited": "exp_04", "watching": "exp_05", "angry": "exp_08", "shy": "exp_06" },
+  "expressions": {
+    "happy": "exp_02",
+    "excited": "exp_04",
+    "watching": "exp_05",
+    "angry": "exp_08",
+    "shy": "exp_06"
+  },
   "castMotion": 3,
-  "castFrom": [0.15, 0.07]
+  "castFrom": [
+    0.15,
+    0.07
+  ],
+  "actionExpressions": {
+    "sleep": "exp_03",
+    "yawn": "exp_03"
+  }
 }

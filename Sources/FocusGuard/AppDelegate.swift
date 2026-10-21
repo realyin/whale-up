@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let pausePanel = PausePanel()
     /// 桌宠（开启且模型文件在时才有）
     private var mascot: Mascot?
+    private var mascotBehavior = MascotBehavior()
     private var wasJunk = false
     private var lastPauseAt: Date?
     private var main: MainWindow?
@@ -192,6 +193,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         wasJunk = isJunk
+
+        // 桌宠的小动作：离开时睡觉、饭点吃饭、坐久了伸懒腰、偶尔打哈欠
+        if let mascot, mascot.isShown {
+            for event in mascotBehavior.update(now: now, idleSeconds: monitor.idleSeconds(),
+                                               isJunk: currentReason != nil, config: config) {
+                switch event {
+                case .start(let action, let line):
+                    mascot.play(action)
+                    if let line { mascot.remark(line, seconds: 5) }
+                case .stop:
+                    mascot.stopAction()
+                }
+            }
+        }
 
         // 强制关闭不受“暂停”影响，否则一暂停就绕过去了
         enforce(idle: idle, now: now, elapsed: elapsed)

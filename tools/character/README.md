@@ -11,7 +11,7 @@
 codex exec --skip-git-repo-check -s workspace-write -C <素材目录> -i reference.webp < prompt-angry.txt
 ```
 
-建议生成：`blink`（闭眼，用来眨眼）、`angry`、`watching`、`shy`、`cast`（施法动作）。
+建议生成：`blink`（闭眼，用来眨眼）、`angry`、`watching`、`shy`、`cast`（施法动作），以及小动作 `yawn`、`sleep`、`stretch`、`eat1` / `eat2`（吃饭两帧交替）。
 
 ## 打包
 
@@ -31,5 +31,6 @@ swift sheet.swift sheet.png a.png b.png ...   # 把几张图拼在一起对比
 | `height` | 显示高度（像素） |
 | `images` | 各状态整张图：`idle`、`happy`、`watching`、`angry`、`shy`、`cast`；缺的用头顶符号代替 |
 | `blink` | 闭眼帧，平时每 3–6 秒眨一次 |
+| `actions` | 小动作：`yawn`、`sleep`、`stretch`、`eat`，每个是 `{frames, fps, seconds, loop}`；多帧按 fps 交替 |
 | `parts` | 单独摆动的部件：`image`、`at`（在画布上的左上角）、`pivot`（部件内旋转中心）、`swing`（角度）、`period`（秒） |
 | `headAt` / `castFrom` / `castFromCast` | 头顶符号位置、平时 / 施法帧里星星发出的位置（相对角色大小的比例） |

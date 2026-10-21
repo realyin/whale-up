@@ -51,6 +51,13 @@
       },
       tap() { model.motion("TapBody", Math.floor(Math.random() * 3)); },
       cast() { model.motion("TapBody", spec.castMotion ?? 3, PIXI.live2d.MotionPriority.FORCE); },
+      // Live2D 角色没有动作帧：睡觉时用闭眼的表情，其他动作不做
+      play(name) {
+        const exp = (spec.actionExpressions || {})[name];
+        if (exp) { model.expression(exp); return true; }
+        return false;
+      },
+      stop() { this.setMood(currentMood); },
       castPoint() {
         const [fx, fy] = spec.castFrom || [0.15, 0.07];
         return { x: model.x + model.width * fx, y: model.y + model.height * fy };
@@ -67,6 +74,12 @@
     const textures = {};
     for (const [mood, file] of Object.entries(spec.images || {})) textures[mood] = PIXI.Texture.from(base + file);
     const blinkTexture = spec.blink ? PIXI.Texture.from(base + spec.blink) : null;
+    // 动作：{ frames: [...], fps, seconds, loop }
+    const actions = {};
+    for (const [name, a] of Object.entries(spec.actions || {})) {
+      actions[name] = { ...a, textures: a.frames.map((f) => PIXI.Texture.from(base + f)) };
+    }
+    let action = null; // { name, def, started }
     const loaded = (tex) => new Promise((r) => (tex.baseTexture.valid ? r() : tex.baseTexture.once("loaded", r)));
     await loaded(textures.idle);
 
@@ -102,7 +115,13 @@
     let casting = false;
     let blinkLeft = 0;
     let nextBlink = 180 + Math.random() * 200;
-    const faceTexture = () => (casting && textures.cast) || textures[mood] || textures.idle;
+    const actionTexture = () => {
+      if (!action) return null;
+      const elapsed = (performance.now() - action.started) / 1000;
+      const frames = action.def.textures;
+      return frames[Math.floor(elapsed * (action.def.fps || 1)) % frames.length];
+    };
+    const faceTexture = () => (casting && textures.cast) || actionTexture() || textures[mood] || textures.idle;
 
     return {
       bounds: () => rig.getBounds(),
@@ -119,6 +138,17 @@
         // 部件摆动（生气时摆得更快）
         const speed = mood === "angry" ? 2.2 : 1;
         for (const p of parts) p.sprite.rotation = Math.sin((t / 60) * ((2 * Math.PI) / p.period) * speed + p.phase) * p.swing;
+
+        // 动作播放：换帧；不循环的到时间就结束
+        if (action) {
+          const elapsed = (performance.now() - action.started) / 1000;
+          if (!action.def.loop && elapsed > (action.def.seconds || 3)) {
+            const ended = action.name;
+            action = null;
+            post({ type: "actionEnded", name: ended });
+          }
+          if (!casting) body.texture = faceTexture();
+        }
 
         // 眨眼：只在用平时那张脸时眨
         if (blinkTexture && !casting && faceTexture() === textures.idle) {
@@ -139,7 +169,19 @@
       setMood(m) {
         mood = m;
         body.texture = faceTexture();
-        badge.text = textures[m] ? "" : BADGES[m] || "";
+        badge.text = textures[m] || action ? "" : BADGES[m] || "";
+      },
+      play(name) {
+        const def = actions[name];
+        if (!def) return false;
+        action = { name, def, started: performance.now() };
+        badge.text = "";
+        body.texture = faceTexture();
+        return true;
+      },
+      stop() {
+        action = null;
+        this.setMood(mood);
       },
       setSpeaking(on) { speaking = on; },
       tap() { hop = 30; },
@@ -183,6 +225,7 @@
       p.life -= delta;
       p.x += p.vx * delta;
       p.y += p.vy * delta;
+      if (p.gravity) p.vy += p.gravity * delta;
       p.alpha = Math.max(0, p.life / p.maxLife);
       if (p.life <= 0) p.destroy();
     }
@@ -338,9 +381,47 @@
     post({ type: "hitRects", rects });
   }
 
+  // ---- 动作：打哈欠、睡觉、伸懒腰、吃饭 ----
+
+  let effectTimer = null;
+  /** 播放动作；effect: "zzz" 头顶飘 z，"rice" 偶尔蹦出米粒 */
+  function play(name, effect) {
+    if (!actor) return;
+    actor.play(name);
+    clearInterval(effectTimer);
+    if (effect === "zzz") effectTimer = setInterval(zzz, 1100);
+    if (effect === "rice") effectTimer = setInterval(rice, 700);
+  }
+
+  function stop() {
+    clearInterval(effectTimer);
+    effectTimer = null;
+    actor?.stop();
+  }
+
+  function zzz() {
+    const b = actor.bounds();
+    const z = new PIXI.Text(Math.random() < 0.5 ? "z" : "Z", { fontSize: 14 + Math.random() * 8, fill: 0x6b7fd7, fontWeight: "700" });
+    Object.assign(z, { x: b.x + b.width * 0.3, y: b.y + b.height * 0.15, vx: 0.35 + Math.random() * 0.2, vy: -0.6, life: 110, maxLife: 110 });
+    effects.addChild(z);
+  }
+
+  function rice() {
+    if (Math.random() < 0.4) return;
+    const b = actor.bounds();
+    const g = new PIXI.Graphics();
+    g.beginFill(0xffffff);
+    g.lineStyle(1, 0xd8d0c0);
+    g.drawEllipse(0, 0, 2.2, 3.2);
+    g.endFill();
+    g.rotation = Math.random() * Math.PI;
+    Object.assign(g, { x: b.x + b.width * 0.42, y: b.y + b.height * 0.45, vx: (Math.random() - 0.5) * 1.5, vy: -1.5 - Math.random(), gravity: 0.12, life: 40, maxLife: 40 });
+    effects.addChild(g);
+  }
+
   /** 开发用：直接切换 Live2D 的某个表情 */
   function expr(name) { actor?.expr(name); }
 
-  window.mascot = { setMood, setSpeaking, say, hideBubble, cast, burst, tap, report, expr };
+  window.mascot = { setMood, setSpeaking, say, hideBubble, cast, burst, tap, report, expr, play, stop };
   load().catch((e) => post({ type: "error", message: String(e) }));
 })();
