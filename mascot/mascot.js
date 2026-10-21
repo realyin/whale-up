@@ -340,7 +340,10 @@
       p.x += p.vx * delta;
       p.y += p.vy * delta;
       if (p.gravity) p.vy += p.gravity * delta;
-      p.alpha = Math.max(0, p.life / p.maxLife);
+      if (p.drag) { p.vx *= Math.pow(p.drag, delta); p.vy *= Math.pow(p.drag, delta); }
+      // 离窗口边越近越透明，飞出去的星星不会被窗口边“切”出一条直线
+      const edge = Math.min(p.x, window.innerWidth - p.x, p.y, window.innerHeight - p.y);
+      p.alpha = Math.max(0, p.life / p.maxLife) * Math.max(0, Math.min(1, edge / 70));
       if (p.life <= 0) p.destroy();
     }
   }
@@ -408,8 +411,9 @@
     let n = 0;
     setTimeout(() => {
       const timer = setInterval(() => {
+        // 星星喷出去后慢慢减速，像一道拖尾，在窗口里就散开淡掉
         for (let i = 0; i < 5; i++) star(ox, oy, (dx / len) * (4 + Math.random() * 4) + (Math.random() - 0.5) * 2.5,
-                                       (dy / len) * (4 + Math.random() * 4) + (Math.random() - 0.5) * 2.5, 45);
+                                       (dy / len) * (4 + Math.random() * 4) + (Math.random() - 0.5) * 2.5, 50, 0.95);
         if (++n > 16) clearInterval(timer);
       }, 45);
     }, 350);
@@ -425,12 +429,12 @@
     for (let i = 0; i < 40; i++) {
       const a = Math.random() * Math.PI * 2;
       const v = 2 + Math.random() * 5;
-      star(x, y, Math.cos(a) * v, Math.sin(a) * v, 50);
+      star(x, y, Math.cos(a) * v, Math.sin(a) * v, 55, 0.95);
     }
   }
 
   const COLORS = [0xff6fa8, 0xffd84d, 0x9be7ff, 0xc9a2ff, 0xffffff];
-  function star(x, y, vx, vy, life) {
+  function star(x, y, vx, vy, life, drag) {
     const g = new PIXI.Graphics();
     const outer = 4 + Math.random() * 6;
     const inner = outer * 0.45;
@@ -444,7 +448,7 @@
     g.drawPolygon(points);
     g.endFill();
     g.rotation = Math.random() * Math.PI;
-    Object.assign(g, { x, y, vx, vy, life, maxLife: life });
+    Object.assign(g, { x, y, vx, vy, life, maxLife: life, drag });
     effects.addChild(g);
   }
 
