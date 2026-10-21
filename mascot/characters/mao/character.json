@@ -18,5 +18,6 @@
   "actionExpressions": {
     "sleep": "exp_03",
     "yawn": "exp_03"
-  }
+  },
+  "nickname": "Mao"
 }

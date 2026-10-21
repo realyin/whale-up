@@ -155,6 +155,10 @@ var spec: [String: Any] = [
     "name": "鲸鱼娘", "kind": "sprite", "height": 125, "images": images,
     "parts": [["image": "tail.png", "at": at, "pivot": [6, 230], "swing": 6, "period": 2.6]],
     "headAt": [0.22, 0.08], "castFrom": [0.5, 0.62], "castFromCast": [0.05, 0.37],
+    // 气泡配色取自她的女仆装：深蓝描边、奶白底、蝴蝶结的蓝
+    "nickname": "大肥鱼",
+    "theme": ["paper": "#fffdf9", "ink": "#1f2b5e", "accent": "#3d6fd6", "accent-ink": "#ffffff",
+              "soft": "#e9f0fc", "soft-ink": "#2d3f7a", "stitch": "rgba(61, 111, 214, .4)", "lace": "#ffffff"],
 ]
 if frames.contains(where: { $0.0 == "blink" }) { spec["blink"] = "blink.png" }
 // ---- 新姿势：每组单独抠图，按组内各帧的公共外框裁剪（同组帧相对位置不变，播放时按脚底中心对齐）----

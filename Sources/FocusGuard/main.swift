@@ -217,11 +217,16 @@ func runMascotDemo(to dir: String) {
                                 ("milktea", "milktea", 0), ("read", "read", 0)] {
         steps.append((shot, { mascot.js("mascot.stop(); mascot.setMood('idle'); mascot.play('\(name)', null, \(index))") }))
     }
+    // FOCUSGUARD_MASCOT_SEQ=动作名：只演这个动作，连拍 16 张看动作是否连贯
+    if let seq = ProcessInfo.processInfo.environment["FOCUSGUARD_MASCOT_SEQ"] {
+        steps = [("seq-00", { mascot.js("mascot.setMood('idle'); mascot.play('\(seq)', null, 0)") })]
+        for n in 1...15 { steps.append((String(format: "seq-%02d", n), {})) }
+    }
 
     @MainActor func run(_ i: Int) {
         guard i < steps.count else { exit(0) }
         steps[i].1()
-        DispatchQueue.main.asyncAfter(deadline: .now() + (steps[i].0 == "cast" ? 1.0 : steps[i].0 == "burst" ? 0.35 : 1.6)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + (steps[i].0.hasPrefix("seq-") ? 0.1 : steps[i].0 == "cast" ? 1.0 : steps[i].0 == "burst" ? 0.35 : 1.6)) {
             MainActor.assumeIsolated {
                 mascot.snapshot(to: out.appendingPathComponent("mascot-\(steps[i].0).png")) {
                     MainActor.assumeIsolated { run(i + 1) }

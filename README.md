@@ -180,6 +180,7 @@ FOCUSGUARD_WRITE_DIGEST=1 build/FocusGuard.app/Contents/MacOS/FocusGuard  # 立�
 FOCUSGUARD_WRITE_WEEKLY=1 build/FocusGuard.app/Contents/MacOS/FocusGuard  # 立刻写本周复盘（会调用大模型并写入 Obsidian）
 FOCUSGUARD_TEST_FAVORITE=<网址> build/FocusGuard.app/Contents/MacOS/FocusGuard  # 抓网页并提炼要点（临时数据库，会调用大模型）
 FOCUSGUARD_MASCOT_DEMO=/tmp build/FocusGuard.app/Contents/MacOS/FocusGuard  # 单独显示桌宠，截图各表情、气泡、施法
+FOCUSGUARD_MASCOT_SEQ=dance FOCUSGUARD_MASCOT_DEMO=/tmp build/FocusGuard.app/Contents/MacOS/FocusGuard  # 只演一个动作，连拍 16 张检查是否连贯
 ```
 
 代码结构：`Sources/FocusGuardCore` 是纯逻辑（分类、计时、文案），`Sources/FocusGuard` 是菜单栏 App（系统监测、弹窗）。

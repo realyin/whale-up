@@ -31,6 +31,8 @@ swift sheet.swift sheet.png a.png b.png ...   # 把几张图拼在一起对比
 | `height` | 显示高度（像素） |
 | `images` | 各状态整张图：`idle`、`happy`、`watching`、`angry`、`shy`、`cast`；缺的用头顶符号代替 |
 | `blink` | 闭眼帧，平时每 3–6 秒眨一次 |
+| `nickname` | 气泡左上角名牌上的名字 |
+| `theme` | 气泡配色，键对应 `mascot.css` 里的 CSS 变量：`paper`、`ink`、`accent`、`accent-ink`、`soft`、`soft-ink`、`stitch`、`lace` |
 | `actions` | 小动作：`yawn`、`sleep`、`stretch`、`eat`、`swim`、`dance`、`work`、`heart`、`milktea`、`read`，每个是 `{frames, fps, seconds, loop, effect, ownPose}` 或它们的数组（多种姿势，随机挑一种）；多帧按 fps 交替；`ownPose` 为 true 时整张图自带尾巴，不再叠加摆动的尾巴；`effect` 可选 `zzz`/`rice`/`bubbles`/`notes`/`hearts` |
 | `parts` | 单独摆动的部件：`image`、`at`（在画布上的左上角）、`pivot`（部件内旋转中心）、`swing`（角度）、`period`（秒） |
 | `headAt` / `castFrom` / `castFromCast` | 头顶符号位置、平时 / 施法帧里星星发出的位置（相对角色大小的比例） |

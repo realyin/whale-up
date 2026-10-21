@@ -73,6 +73,26 @@
   // character.json：images（各表情整张图，同一画布大小）、blink（闭眼帧）、
   // parts（单独摆动的部件：image、at=在画布上的左上角、pivot=部件内的旋转中心、swing=摆动角度、period=周期秒）
 
+  // 每个动作的身体动态：s 是动作开始后的秒数，返回在角色身上叠加的位移/旋转/倾斜/缩放。
+  // 图片角色只有几张关键帧，靠这些连续的动态让动作“活”起来，而不是两张图来回跳
+  const wave = (s, period) => Math.sin((2 * Math.PI * s) / period);
+  const bump = (s, hz) => Math.max(0, Math.sin(2 * Math.PI * hz * s));
+  const rise = (s, seconds) => Math.sin(Math.PI * Math.min(1, s / seconds)); // 0 → 1 → 0
+  const MOTIONS = {
+    idle: (s) => ({ skew: 0.012 * wave(s, 4.2) }),
+    eat: (s) => ({ y: -2.5 * bump(s, 1.2), rot: 0.015 * wave(s, 1.7) }),
+    sleep: (s) => ({ sy: 0.022 * wave(s, 3.6), rot: 0.02 * wave(s, 7) }),
+    yawn: (s) => ({ sy: 0.05 * rise(s, 2.2), sx: -0.02 * rise(s, 2.2), skew: 0.02 * wave(s, 2.4) }),
+    stretch: (s) => ({ sy: 0.06 * rise(s, 2.6), sx: -0.025 * rise(s, 2.6), skew: 0.05 * wave(s, 2.6) }),
+    swim: (s) => ({ x: 12 * wave(s, 3), y: 5 * wave(s, 1.5), rot: 0.06 * Math.cos((2 * Math.PI * s) / 3) }),
+    dance: (s) => ({ y: -9 * Math.abs(Math.sin(Math.PI * 2.2 * s)), rot: 0.07 * Math.sin(Math.PI * 2.2 * s), skew: 0.04 * wave(s, 1.8) }),
+    work: (s) => ({ y: -1.2 * bump(s, 5), rot: 0.01 * wave(s, 3) }),
+    heart: (s) => ({ y: -3 * bump(s, 1.6), sx: 0.04 * bump(s, 1.6), sy: 0.04 * bump(s, 1.6) }),
+    milktea: (s) => ({ y: -2 * wave(s, 1.8), rot: 0.02 * wave(s, 3.6) }),
+    read: (s) => ({ y: -1 * wave(s, 2), rot: 0.025 * wave(s, 4) }),
+  };
+  const smooth = (x) => x * x * (3 - 2 * x);
+
   async function spriteActor(base, spec) {
     const textures = {};
     for (const [mood, file] of Object.entries(spec.images || {})) textures[mood] = PIXI.Texture.from(base + file);
@@ -87,13 +107,31 @@
     const loaded = (tex) => new Promise((r) => (tex.baseTexture.valid ? r() : tex.baseTexture.once("loaded", r)));
     await loaded(textures.idle);
 
-    // 整个角色放在一个容器里，呼吸缩放时部件一起动
+    // 整个角色放在一个容器里，呼吸、摇摆时部件一起动
     const rig = new PIXI.Container();
     const body = new PIXI.Sprite(textures.idle);
     // 所有帧按底部中心对齐：同画布的表情帧位置不变，新姿势的帧站在同一个地面上
     body.anchor.set(0.5, 1);
     body.position.set(textures.idle.width / 2, textures.idle.height);
     rig.addChild(body);
+    // 换图时旧图盖在上面慢慢淡出，换姿势不再“咔”地一跳
+    const ghost = new PIXI.Sprite(textures.idle);
+    ghost.anchor.set(0.5, 1);
+    ghost.position.copyFrom(body.position);
+    ghost.alpha = 0;
+    rig.addChild(ghost);
+    let fadeRate = 0;
+    const setTexture = (tex, seconds = 0.18) => {
+      if (body.texture === tex) return;
+      if (seconds > 0) {
+        ghost.texture = body.texture;
+        ghost.alpha = 1;
+        fadeRate = 1 / (seconds * 60);
+      }
+      else ghost.alpha = 0;
+      body.texture = tex;
+    };
+
     const parts = [];
     for (const p of spec.parts || []) {
       const tex = PIXI.Texture.from(base + p.image);
@@ -117,55 +155,102 @@
     let mood = "idle";
     let t = 0;
     let hop = 0;
+    let pop = 0; // 换动作时的“弹一下”（先压扁再回弹），1 → 0
+    let popAmp = 1;
+    const kick = (amp) => { pop = 1; popAmp = amp; };
     let speaking = false;
+    let speakAmp = 0;
     let baseScale = 1;
     let casting = false;
     let blinkLeft = 0;
     let nextBlink = 180 + Math.random() * 200;
+    // 当前动态和正在淡出的上一个动态，两者交叉过渡
+    const now = () => performance.now() / 1000;
+    let motion = { fn: MOTIONS.idle, from: now(), fadeIn: 0.01 };
+    let leaving = null;
+    const switchMotion = (fn) => {
+      leaving = { ...motion, until: now() + 0.4 };
+      motion = { fn, from: now(), fadeIn: 0.4 };
+      kick(1);
+    };
     const actionTexture = () => {
       if (!action) return null;
-      const elapsed = (performance.now() - action.started) / 1000;
+      const elapsed = now() - action.started;
       const frames = action.def.textures;
       return frames[Math.floor(elapsed * (action.def.fps || 1)) % frames.length];
     };
     const faceTexture = () => (casting && textures.cast) || actionTexture() || textures[mood] || textures.idle;
+    const endAction = () => {
+      action = null;
+      switchMotion(MOTIONS.idle);
+    };
 
     return {
       bounds: () => rig.getBounds(),
       layout() { baseScale = spec.height / H; },
       tick(delta) {
         t += delta;
-        const breathe = 1 + 0.018 * Math.sin(t * 0.06) + (speaking ? 0.012 * Math.abs(Math.sin(t * 0.4)) : 0);
-        rig.scale.set(baseScale * (1 + (breathe - 1) * 0.3), baseScale * breathe);
+        const s = now();
+
+        // 动作播放：到时间就结束；帧之间淡入淡出
+        if (action) {
+          const elapsed = s - action.started;
+          if (!action.def.loop && elapsed > (action.def.seconds || 3)) {
+            const ended = action.name;
+            endAction();
+            stopEffect();
+            post({ type: "actionEnded", name: ended });
+            setTexture(faceTexture(), 0);
+          } else if (!casting && body.texture !== faceTexture()) {
+            // 关键帧之间直接切（交叉淡化会出现两张图叠在一起的“重影”），
+            // 切换点正好落在动态的节拍上，再配一下压扁回弹，看起来是“跳”到下一个姿势
+            setTexture(faceTexture(), 0);
+            kick(0.5);
+          }
+        }
+        if (ghost.alpha > 0) ghost.alpha = Math.max(0, ghost.alpha - fadeRate * delta);
+
+        // 叠加动态：当前动态淡入，上一个淡出
+        const m = { x: 0, y: 0, rot: 0, skew: 0, sx: 0, sy: 0 };
+        const add = (part, w) => { for (const k in part) m[k] += part[k] * w; };
+        add(motion.fn(s - motion.from), smooth(Math.min(1, (s - motion.from) / motion.fadeIn)));
+        if (leaving) {
+          const w = (leaving.until - s) / 0.4;
+          if (w <= 0) leaving = null;
+          else add(leaving.fn(s - leaving.from), smooth(w));
+        }
+
+        // 呼吸；说话时轻轻点头（平滑起落，不抖）
+        speakAmp += ((speaking ? 1 : 0) - speakAmp) * Math.min(1, 0.12 * delta);
+        const breathe = 0.018 * Math.sin(s * 3.6);
+        const talk = speakAmp * (0.5 - 0.5 * Math.cos(s * 2 * Math.PI * 2.6));
+        // 弹一下：衰减的振荡
+        if (pop > 0) pop = Math.max(0, pop - delta / 27);
+        const squash = pop > 0 ? Math.sin((1 - pop) * Math.PI * 3) * pop * 0.07 * popAmp : 0;
+        const sy = 1 + breathe + talk * 0.012 + m.sy - squash;
+        const sx = 1 + breathe * 0.3 + m.sx + squash;
+        rig.scale.set(baseScale * sx, baseScale * sy);
+        rig.rotation = m.rot;
+        rig.skew.x = m.skew;
+
         const hopY = hop > 0 ? -Math.sin((1 - hop / 30) * Math.PI) * 18 : 0;
         if (hop > 0) hop -= delta;
         const shake = mood === "angry" && !textures.angry ? Math.sin(t * 1.3) * 1.5 : 0;
-        rig.position.set(window.innerWidth / 2 + shake, window.innerHeight - 4 + hopY);
+        rig.position.set(window.innerWidth / 2 + shake + m.x, window.innerHeight - 4 + hopY + m.y - talk * 1.5);
 
-        // 部件摆动（生气时摆得更快）
+        // 部件摆动（生气时摆得更快）；新姿势的图自带尾巴，这时把单独的尾巴藏起来
         const speed = mood === "angry" ? 2.2 : 1;
-        for (const p of parts) p.sprite.rotation = Math.sin((t / 60) * ((2 * Math.PI) / p.period) * speed + p.phase) * p.swing;
-
-        // 动作播放：换帧；不循环的到时间就结束
-        if (action) {
-          const elapsed = (performance.now() - action.started) / 1000;
-          if (!action.def.loop && elapsed > (action.def.seconds || 3)) {
-            const ended = action.name;
-            action = null;
-            stopEffect();
-            post({ type: "actionEnded", name: ended });
-          }
-          if (!casting) body.texture = faceTexture();
-        }
-        // 新姿势的图自带尾巴，这时把单独摆动的尾巴藏起来
         const ownPose = action && action.def.ownPose;
-        for (const p of parts) p.sprite.visible = !ownPose;
+        for (const p of parts) {
+          p.sprite.rotation = Math.sin((t / 60) * ((2 * Math.PI) / p.period) * speed + p.phase) * p.swing;
+          p.sprite.visible = !ownPose;
+        }
 
-        // 眨眼：只在用平时那张脸时眨
-        if (blinkTexture && !casting && faceTexture() === textures.idle) {
+        // 眨眼：只在用平时那张脸时眨（眨眼本来就是一下子，不淡入淡出）
+        if (blinkTexture && !casting && !action && faceTexture() === textures.idle) {
           if (blinkLeft > 0) {
             blinkLeft -= delta;
-            body.texture = blinkLeft > 0 ? blinkTexture : textures.idle;
+            setTexture(blinkLeft > 0 ? blinkTexture : textures.idle, 0);
           } else if ((nextBlink -= delta) <= 0) {
             blinkLeft = 8;
             nextBlink = 180 + Math.random() * 200;
@@ -179,7 +264,7 @@
       },
       setMood(m) {
         mood = m;
-        body.texture = faceTexture();
+        setTexture(faceTexture(), 0.2);
         badge.text = textures[m] || action ? "" : BADGES[m] || "";
       },
       actions: () => Object.keys(actions),
@@ -188,23 +273,24 @@
         const variants = actions[name];
         if (!variants) return null;
         const def = variants[index ?? Math.floor(Math.random() * variants.length)] || variants[0];
-        action = { name, def, started: performance.now() };
+        action = { name, def, started: now() };
         badge.text = "";
-        body.texture = faceTexture();
+        switchMotion(MOTIONS[name] || MOTIONS.idle);
+        setTexture(faceTexture(), 0);
         return def;
       },
       stop() {
-        action = null;
+        if (action) endAction();
         this.setMood(mood);
       },
       setSpeaking(on) { speaking = on; },
-      tap() { hop = 30; },
+      tap() { hop = 30; kick(1); },
       cast() {
         hop = 30;
         if (!textures.cast) return;
         casting = true;
-        body.texture = faceTexture();
-        setTimeout(() => { casting = false; body.texture = faceTexture(); }, 1800);
+        setTexture(faceTexture(), 0.12);
+        setTimeout(() => { casting = false; setTexture(faceTexture(), 0.25); }, 1800);
       },
       castPoint() {
         const [fx, fy] = (textures.cast && spec.castFromCast) || spec.castFrom || [0.5, 0.5];
@@ -215,10 +301,17 @@
     };
   }
 
+  /** 气泡配色和名牌跟着角色：theme 里的键对应 mascot.css 的 CSS 变量 */
+  function applyTheme(spec) {
+    for (const [k, v] of Object.entries(spec.theme || {})) document.documentElement.style.setProperty(`--${k}`, v);
+    document.getElementById("name").textContent = spec.nickname || "";
+  }
+
   async function load() {
     const base = `characters/${characterId}/`;
     const spec = await loadJSON(base + "character.json");
     characterSpec = spec;
+    applyTheme(spec);
     actor = spec.kind === "live2d" ? await live2dActor(base, spec) : await spriteActor(base, spec);
     app.stage.addChild(effects);
     layout();
