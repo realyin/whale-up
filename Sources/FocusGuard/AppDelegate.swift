@@ -387,8 +387,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// 按设置显示或收起桌宠
     private func updateMascot() {
         if config.mascotEnabled, Mascot.assetsDir != nil {
+            if let m = mascot, m.characterID != config.mascotCharacter {
+                m.hide()  // 换角色：重新创建
+                mascot = nil
+            }
             if mascot == nil {
                 let m = Mascot()
+                m.characterID = config.mascotCharacter
                 m.onTapped = { [weak self] in
                     guard let self, let m = self.mascot else { return }
                     let used = self.tracker.todaySeconds
@@ -427,6 +432,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         (config, configError) = Config.load()
         configModifiedAt = modificationDate(of: Config.fileURL)
         if timer != nil, config.checkIntervalSeconds != oldInterval { scheduleTimer() }
+        if timer != nil { updateMascot() }
         main?.model.settings.replace(with: config)
         main?.model.config = config
     }

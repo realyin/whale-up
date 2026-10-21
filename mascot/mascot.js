@@ -1,74 +1,164 @@
-// 桌宠：渲染 Live2D 角色 Mao，提供表情、对话气泡、说话口型和施法特效。
-// Swift 通过 window.mascot.* 调用；网页通过 webkit.messageHandlers.mascot 回传事件。
+// 桌宠：渲染角色（Live2D 模型或透明图片），提供表情、对话气泡、说话口型和施法特效。
+// 角色包在 characters/<id>/character.json；Swift 通过 window.mascot.* 调用，网页通过 webkit.messageHandlers.mascot 回传事件。
 (() => {
   const post = (msg) => window.webkit?.messageHandlers?.mascot?.postMessage(msg);
   const stage = document.getElementById("stage");
   const app = new PIXI.Application({ view: stage, backgroundAlpha: 0, resizeTo: window, antialias: true, autoDensity: true,
                                      resolution: window.devicePixelRatio || 2 });
-  let model = null;
-  /** 角色高度（像素）；窗口上方留给对话气泡 */
-  const CHARACTER_HEIGHT = 188;
-  let speaking = false;
   const effects = new PIXI.Container();
+  const characterId = new URLSearchParams(location.search).get("character") || "mao";
+  let actor = null; // 当前角色驱动（Live2D 或图片）
+  let currentMood = "idle";
 
-  // 表情名（模型里只有编号，按实际效果对应）
-  const MOODS = { idle: null, happy: "exp_02", excited: "exp_04", watching: "exp_05", angry: "exp_08", shy: "exp_06" };
+  /** file:// 下用 XHR 读 JSON（fetch 不支持本地文件） */
+  function loadJSON(url) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("GET", url);
+      xhr.onload = () => { try { resolve(JSON.parse(xhr.responseText)); } catch (e) { reject(e); } };
+      xhr.onerror = () => reject(new Error("读不到 " + url));
+      xhr.send();
+    });
+  }
+
+  // ---- Live2D 角色 ----
+
+  async function live2dActor(base, spec) {
+    const model = await PIXI.live2d.Live2DModel.from(base + spec.model, { autoInteract: false });
+    app.stage.addChild(model);
+    const moods = spec.expressions || {};
+    let speaking = false;
+    let phase = 0;
+    return {
+      bounds: () => model.getBounds(),
+      layout() {
+        model.scale.set(spec.height / model.internalModel.height);
+        model.x = (window.innerWidth - model.width) / 2;
+        model.y = window.innerHeight - model.height + model.height * 0.02;
+      },
+      tick(delta) {
+        if (!speaking) return;
+        phase += delta * 0.35;
+        model.internalModel.coreModel.setParameterValueById("ParamMouthOpenY", 0.35 + 0.45 * Math.abs(Math.sin(phase)));
+      },
+      setMood(mood) {
+        if (moods[mood]) model.expression(moods[mood]);
+        else model.internalModel.motionManager.expressionManager?.resetExpression();
+      },
+      setSpeaking(on) {
+        speaking = on;
+        if (!on) model.internalModel.coreModel.setParameterValueById("ParamMouthOpenY", 0);
+      },
+      tap() { model.motion("TapBody", Math.floor(Math.random() * 3)); },
+      cast() { model.motion("TapBody", spec.castMotion ?? 3, PIXI.live2d.MotionPriority.FORCE); },
+      castPoint() {
+        const [fx, fy] = spec.castFrom || [0.15, 0.07];
+        return { x: model.x + model.width * fx, y: model.y + model.height * fy };
+      },
+      expr(name) { model.expression(name); },
+    };
+  }
+
+  // ---- 图片角色：呼吸、蹦跳、抖动和头顶的情绪符号都由代码做 ----
+
+  async function spriteActor(base, spec) {
+    const images = spec.images || {};
+    const textures = {};
+    for (const [mood, file] of Object.entries(images)) textures[mood] = PIXI.Texture.from(base + file);
+    await new Promise((r) => (textures.idle.baseTexture.valid ? r() : textures.idle.baseTexture.once("loaded", r)));
+    const sprite = new PIXI.Sprite(textures.idle);
+    sprite.anchor.set(0.5, 1);
+    app.stage.addChild(sprite);
+    const BADGES = { happy: "♪", excited: "✨", watching: "👀", angry: "💢", shy: "💗" };
+    const badge = new PIXI.Text("", { fontSize: 22 });
+    badge.anchor.set(0.5, 1);
+    app.stage.addChild(badge);
+    let mood = "idle";
+    let t = 0;
+    let hop = 0; // 蹦一下的剩余时间
+    let speaking = false;
+    let baseScale = 1;
+    return {
+      bounds: () => sprite.getBounds(),
+      layout() {
+        baseScale = spec.height / textures.idle.height;
+        sprite.x = window.innerWidth / 2;
+        sprite.y = window.innerHeight - 4;
+      },
+      tick(delta) {
+        t += delta;
+        const breathe = 1 + 0.018 * Math.sin(t * 0.06) + (speaking ? 0.012 * Math.abs(Math.sin(t * 0.4)) : 0);
+        sprite.scale.set(baseScale * (1 + (breathe - 1) * 0.3), baseScale * breathe);
+        const hopY = hop > 0 ? -Math.sin((1 - hop / 30) * Math.PI) * 18 : 0;
+        if (hop > 0) hop -= delta;
+        const shake = mood === "angry" ? Math.sin(t * 1.3) * 1.5 : 0;
+        sprite.x = window.innerWidth / 2 + shake;
+        sprite.y = window.innerHeight - 4 + hopY;
+        const [hx, hy] = spec.headAt || [0.3, 0.1];
+        const b = sprite.getBounds();
+        badge.x = b.x + b.width * hx + 24;
+        badge.y = b.y + b.height * hy + Math.sin(t * 0.1) * 2;
+      },
+      setMood(m) {
+        mood = m;
+        sprite.texture = textures[m] || textures.idle;
+        badge.text = textures[m] ? "" : BADGES[m] || "";
+      },
+      setSpeaking(on) { speaking = on; },
+      tap() { hop = 30; },
+      cast() {
+        hop = 30;
+        if (textures.cast) {
+          sprite.texture = textures.cast;
+          setTimeout(() => (sprite.texture = textures[mood] || textures.idle), 1600);
+        }
+      },
+      castPoint() {
+        const [fx, fy] = spec.castFrom || [0.5, 0.5];
+        const b = sprite.getBounds();
+        return { x: b.x + b.width * fx, y: b.y + b.height * fy };
+      },
+      expr() {},
+    };
+  }
 
   async function load() {
-    model = await PIXI.live2d.Live2DModel.from("vendor/Mao/Mao.model3.json", { autoInteract: false });
-    app.stage.addChild(model);
+    const base = `characters/${characterId}/`;
+    const spec = await loadJSON(base + "character.json");
+    actor = spec.kind === "live2d" ? await live2dActor(base, spec) : await spriteActor(base, spec);
     app.stage.addChild(effects);
     layout();
     window.addEventListener("resize", layout);
     app.ticker.add(tick);
-    post({ type: "ready" });
+    setMood(currentMood);
+    post({ type: "ready", name: spec.name || characterId });
   }
 
   function layout() {
-    if (!model) return;
-    const h = CHARACTER_HEIGHT;
-    const scale = h / model.internalModel.height;
-    model.scale.set(scale);
-    model.x = (window.innerWidth - model.width) / 2;
-    model.y = window.innerHeight - model.height + model.height * 0.02;
+    actor?.layout();
     report();
   }
 
-  // 说话时嘴巴一张一合
-  let mouthPhase = 0;
   function tick(delta) {
-    if (!model) return;
-    const core = model.internalModel.coreModel;
-    if (speaking) {
-      mouthPhase += delta * 0.35;
-      core.setParameterValueById("ParamMouthOpenY", 0.35 + 0.45 * Math.abs(Math.sin(mouthPhase)));
-    }
+    actor?.tick(delta);
     for (const p of [...effects.children]) {
-      if (p.life !== undefined) {
-        p.life -= delta;
-        p.x += p.vx * delta;
-        p.y += p.vy * delta;
-        p.alpha = Math.max(0, p.life / p.maxLife);
-        if (p.life <= 0) p.destroy();
-      }
+      if (p.life === undefined) continue;
+      p.life -= delta;
+      p.x += p.vx * delta;
+      p.y += p.vy * delta;
+      p.alpha = Math.max(0, p.life / p.maxLife);
+      if (p.life <= 0) p.destroy();
     }
   }
 
   // ---- 对外接口 ----
 
-  let currentMood = "idle";
   function setMood(mood) {
     currentMood = mood;
-    if (!model) return;
-    const name = MOODS[mood];
-    if (name) model.expression(name);
-    else model.internalModel.motionManager.expressionManager?.resetExpression();
+    actor?.setMood(mood);
   }
 
-  function setSpeaking(on) {
-    speaking = on;
-    if (!on && model) model.internalModel.coreModel.setParameterValueById("ParamMouthOpenY", 0);
-  }
+  function setSpeaking(on) { actor?.setSpeaking(on); }
 
   /** 对话气泡。buttons: [{id, title, style, waitSeconds}]；reasons: [{id, title}] */
   function say(text, buttons = [], reasons = []) {
@@ -78,6 +168,7 @@
     const reasonBox = document.getElementById("reasons");
     box.innerHTML = "";
     reasonBox.innerHTML = "";
+    delete reasonBox.dataset.done;
     for (const r of reasons) {
       const el = document.createElement("button");
       el.className = "chip";
@@ -90,7 +181,6 @@
       };
       reasonBox.appendChild(el);
     }
-    delete reasonBox.dataset.done;
     for (const b of buttons) {
       const el = document.createElement("button");
       el.className = b.style || "secondary";
@@ -115,13 +205,11 @@
     report();
   }
 
-  /** 施法：挥魔杖 + 星星朝 (dx, dy) 方向飞出，最后炸开 */
+  /** 施法：角色做施法动作，星星从手边朝 (dx, dy) 方向飞出 */
   function cast(dx = -1, dy = -1) {
-    if (!model) return;
-    model.motion("TapBody", 3, PIXI.live2d.MotionPriority.FORCE);
-    // 举起魔杖后，从杖头（角色左上方）朝 (dx, dy) 方向喷出星星
-    const ox = model.x + model.width * 0.15;
-    const oy = model.y + model.height * 0.07;
+    if (!actor) return;
+    actor.cast();
+    const { x: ox, y: oy } = actor.castPoint();
     const len = Math.hypot(dx, dy) || 1;
     let n = 0;
     setTimeout(() => {
@@ -135,9 +223,10 @@
 
   /** 一团星星炸开（网页被关掉的那一下） */
   function burst(x, y) {
-    if (x === undefined && model) {
-      x = model.x + model.width * 0.05;
-      y = model.y - 30;
+    if (x === undefined && actor) {
+      const b = actor.bounds();
+      x = b.x + b.width * 0.05;
+      y = b.y - 30;
     }
     for (let i = 0; i < 40; i++) {
       const a = Math.random() * Math.PI * 2;
@@ -168,12 +257,12 @@
   // 被戳一下：害羞地动一动，过一会儿恢复
   let tapTimer = null;
   function tap() {
-    if (!model) return;
-    model.motion("TapBody", Math.floor(Math.random() * 3));
-    model.expression(MOODS.shy);
+    if (!actor) return;
+    actor.tap();
+    actor.setMood("shy");
     post({ type: "tapped" });
     clearTimeout(tapTimer);
-    tapTimer = setTimeout(() => setMood(currentMood), 2500);
+    tapTimer = setTimeout(() => actor.setMood(currentMood), 2500);
   }
 
   // ---- 鼠标：拖动窗口、点角色、告诉 Swift 哪里可以点穿 ----
@@ -198,9 +287,11 @@
   /** 可交互区域（窗口坐标，左上为原点）：角色身体 + 气泡；其余区域鼠标点穿 */
   function report() {
     const rects = [];
-    if (model) {
-      const b = model.getBounds();
-      rects.push({ x: b.x + b.width * 0.22, y: b.y + b.height * 0.08, w: b.width * 0.56, h: b.height * 0.92 });
+    if (actor) {
+      const b = actor.bounds();
+      // 气泡的尾巴贴着角色头顶
+      document.getElementById("bubble").style.bottom = `${Math.max(0, window.innerHeight - b.y + 6)}px`;
+      rects.push({ x: b.x + b.width * 0.1, y: b.y + b.height * 0.05, w: b.width * 0.8, h: b.height * 0.95 });
     }
     const bubble = document.getElementById("bubble");
     if (!bubble.hidden) {
@@ -210,8 +301,8 @@
     post({ type: "hitRects", rects });
   }
 
-  /** 开发用：直接切换某个表情 */
-  function expr(name) { model?.expression(name); }
+  /** 开发用：直接切换 Live2D 的某个表情 */
+  function expr(name) { actor?.expr(name); }
 
   window.mascot = { setMood, setSpeaking, say, hideBubble, cast, burst, tap, report, expr };
   load().catch((e) => post({ type: "error", message: String(e) }));

@@ -279,6 +279,14 @@ struct ReminderSettings: View {
             Section("桌宠") {
                 Toggle("显示桌宠：用她代替弹窗提醒，时间到了会飞过去用法术关网页", isOn: $config.mascotEnabled)
                 Toggle("说话时读出来", isOn: $config.mascotVoice).disabled(!config.mascotEnabled)
+                Picker("角色", selection: $config.mascotCharacter) {
+                    ForEach(Mascot.characters(), id: \.id) { Text($0.name).tag($0.id) }
+                }
+                .disabled(!config.mascotEnabled)
+                Button("打开角色文件夹（自己加角色）") {
+                    NSWorkspace.shared.activateFileViewerSelecting([Mascot.webRoot.appendingPathComponent("characters")])
+                }
+                .buttonStyle(.link)
                 if Mascot.assetsDir == nil {
                     Text("没有找到桌宠模型。在项目目录运行 scripts/fetch_mascot.sh 下载后重新安装。")
                         .font(.caption).foregroundStyle(.orange)

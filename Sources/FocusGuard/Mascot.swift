@@ -23,13 +23,50 @@ final class Mascot: NSObject, WKScriptMessageHandler, AVSpeechSynthesizerDelegat
     /// 窗口大小：下方 188 高是角色，上方留给对话气泡
     static let size = NSSize(width: 280, height: 400)
 
-    /// 桌宠用的网页和模型（模型由 scripts/fetch_mascot.sh 下载）
+    /// App 里带的桌宠网页、运行库和内置角色（模型由 scripts/fetch_mascot.sh 下载）
     static var assetsDir: URL? {
         guard let dir = Bundle.main.resourceURL?.appendingPathComponent("Mascot"),
-              FileManager.default.fileExists(atPath: dir.appendingPathComponent("vendor/Mao/Mao.model3.json").path)
+              FileManager.default.fileExists(atPath: dir.appendingPathComponent("vendor/lib/pixi.min.js").path)
         else { return nil }
         return dir
     }
+
+    /// 实际加载的目录：~/Library/Application Support/FocusGuard/Mascot。
+    /// 启动时把 App 里的文件复制过来；characters/ 下用户自己加的角色包保留不动。
+    static var webRoot: URL {
+        Config.fileURL.deletingLastPathComponent().appendingPathComponent("Mascot")
+    }
+
+    static func installWebFiles() {
+        guard let src = assetsDir else { return }
+        let fm = FileManager.default
+        try? fm.createDirectory(at: webRoot.appendingPathComponent("characters"), withIntermediateDirectories: true)
+        for name in (try? fm.contentsOfDirectory(atPath: src.path)) ?? [] where name != "characters" {
+            let target = webRoot.appendingPathComponent(name)
+            try? fm.removeItem(at: target)
+            try? fm.copyItem(at: src.appendingPathComponent(name), to: target)
+        }
+        let builtIn = src.appendingPathComponent("characters")
+        for name in (try? fm.contentsOfDirectory(atPath: builtIn.path)) ?? [] {
+            let target = webRoot.appendingPathComponent("characters/\(name)")
+            try? fm.removeItem(at: target)
+            try? fm.copyItem(at: builtIn.appendingPathComponent(name), to: target)
+        }
+    }
+
+    /// 可选的角色：(id, 名字)
+    static func characters() -> [(id: String, name: String)] {
+        let dir = webRoot.appendingPathComponent("characters")
+        let ids = ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []).sorted()
+        return ids.compactMap { id in
+            guard let data = try? Data(contentsOf: dir.appendingPathComponent("\(id)/character.json")),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+            return (id, json["name"] as? String ?? id)
+        }
+    }
+
+    /// 要显示的角色
+    var characterID = "mao"
 
     var voiceEnabled = true
     private var panel: NSPanel?
@@ -61,13 +98,18 @@ final class Mascot: NSObject, WKScriptMessageHandler, AVSpeechSynthesizerDelegat
     var isShown: Bool { panel?.isVisible ?? false }
 
     func show() {
-        guard panel == nil, let dir = Self.assetsDir else { return }
+        guard panel == nil, Self.assetsDir != nil else { return }
+        Self.installWebFiles()
+        let dir = Self.webRoot
+        let id = Self.characters().contains { $0.id == characterID } ? characterID : "mao"
         let config = WKWebViewConfiguration()
         config.userContentController.add(self, name: "mascot")
         config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         let web = WKWebView(frame: NSRect(origin: .zero, size: Self.size), configuration: config)
         web.setValue(false, forKey: "drawsBackground")
-        web.loadFileURL(dir.appendingPathComponent("index.html"), allowingReadAccessTo: dir)
+        var page = URLComponents(url: dir.appendingPathComponent("index.html"), resolvingAgainstBaseURL: false)!
+        page.queryItems = [URLQueryItem(name: "character", value: id)]
+        web.loadFileURL(page.url!, allowingReadAccessTo: dir)
         self.web = web
 
         let panel = MascotPanel(contentRect: NSRect(origin: home, size: Self.size),

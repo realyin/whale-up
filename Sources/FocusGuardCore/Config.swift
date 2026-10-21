@@ -81,6 +81,8 @@ public struct Config: Codable, Equatable {
     public var mascotEnabled = true
     /// 桌宠说话时读出来（系统中文语音）
     public var mascotVoice = true
+    /// 桌宠角色（Application Support/FocusGuard/Mascot/characters 下的文件夹名）
+    public var mascotCharacter = "mao"
     /// 逐级加强：第二次提醒起“再刷”要等倒计时，第三次起还要写理由
     public var frictionEnabled = true
     public var frictionWaitSeconds = 10
@@ -155,6 +157,7 @@ public struct Config: Codable, Equatable {
         budgetCloses = try c.decodeIfPresent(Bool.self, forKey: .budgetCloses) ?? d.budgetCloses
         mascotEnabled = try c.decodeIfPresent(Bool.self, forKey: .mascotEnabled) ?? d.mascotEnabled
         mascotVoice = try c.decodeIfPresent(Bool.self, forKey: .mascotVoice) ?? d.mascotVoice
+        mascotCharacter = try c.decodeIfPresent(String.self, forKey: .mascotCharacter) ?? d.mascotCharacter
         frictionEnabled = try c.decodeIfPresent(Bool.self, forKey: .frictionEnabled) ?? d.frictionEnabled
         frictionWaitSeconds = try c.decodeIfPresent(Int.self, forKey: .frictionWaitSeconds) ?? d.frictionWaitSeconds
         pauseBeforeJunk = try c.decodeIfPresent(Bool.self, forKey: .pauseBeforeJunk) ?? d.pauseBeforeJunk

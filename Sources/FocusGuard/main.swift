@@ -195,12 +195,13 @@ func renderMainDemo(to dir: String) {
 func runMascotDemo(to dir: String) {
     NSApplication.shared.setActivationPolicy(.accessory)
     let mascot = Mascot()
+    mascot.characterID = ProcessInfo.processInfo.environment["FOCUSGUARD_MASCOT_CHARACTER"] ?? "mao"
     mascot.voiceEnabled = false
     mascot.onError = { print("桌宠出错：", $0) }
     mascot.show()
     let out = URL(fileURLWithPath: dir)
-    var steps: [(String, @MainActor () -> Void)] = (1...8).map { i in
-        ("exp_0\(i)", { mascot.js("mascot.expr('exp_0\(i)')") })
+    var steps: [(String, @MainActor () -> Void)] = ["idle", "happy", "watching", "angry"].map { mood in
+        (mood, { mascot.js("mascot.setMood('\(mood)')") })
     }
     steps.append(("bubble", {
         mascot.js("mascot.setMood('angry')")
