@@ -343,7 +343,7 @@
       if (p.drag) { p.vx *= Math.pow(p.drag, delta); p.vy *= Math.pow(p.drag, delta); }
       // 离窗口边越近越透明，飞出去的星星不会被窗口边“切”出一条直线
       const edge = Math.min(p.x, window.innerWidth - p.x, p.y, window.innerHeight - p.y);
-      p.alpha = Math.max(0, p.life / p.maxLife) * Math.max(0, Math.min(1, edge / 70));
+      p.alpha = Math.max(0, p.life / p.maxLife) * Math.max(0, Math.min(1, edge / 60));
       if (p.life <= 0) p.destroy();
     }
   }
@@ -412,8 +412,8 @@
     setTimeout(() => {
       const timer = setInterval(() => {
         // 星星喷出去后慢慢减速，像一道拖尾，在窗口里就散开淡掉
-        for (let i = 0; i < 5; i++) star(ox, oy, (dx / len) * (4 + Math.random() * 4) + (Math.random() - 0.5) * 2.5,
-                                       (dy / len) * (4 + Math.random() * 4) + (Math.random() - 0.5) * 2.5, 50, 0.95);
+        for (let i = 0; i < 6; i++) star(ox, oy, (dx / len) * (5 + Math.random() * 5) + (Math.random() - 0.5) * 3.5,
+                                       (dy / len) * (5 + Math.random() * 5) + (Math.random() - 0.5) * 3.5, 60, 0.975);
         if (++n > 16) clearInterval(timer);
       }, 45);
     }, 350);
@@ -429,7 +429,7 @@
     for (let i = 0; i < 40; i++) {
       const a = Math.random() * Math.PI * 2;
       const v = 2 + Math.random() * 5;
-      star(x, y, Math.cos(a) * v, Math.sin(a) * v, 55, 0.95);
+      star(x, y, Math.cos(a) * v * 1.3, Math.sin(a) * v * 1.3, 60, 0.97);
     }
   }
 

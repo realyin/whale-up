@@ -22,8 +22,8 @@ final class Mascot: NSObject, WKScriptMessageHandler {
 
     /// 她和气泡占的区域：下方是角色，上方留给对话气泡
     static let stage = NSSize(width: 280, height: 400)
-    /// 窗口在左右和下方多留的透明边，右键圆环弹出时有地方放（平时鼠标点穿，不挡东西）
-    static let pad = (x: 72.0, bottom: 140.0)
+    /// 窗口在左右和下方多留的透明边：右键圆环弹出、施法的星星飞出去时有地方放（平时鼠标点穿，不挡东西）
+    static let pad = (x: 170.0, bottom: 140.0)
     static let size = NSSize(width: stage.width + pad.x * 2, height: stage.height + pad.bottom)
 
     /// 她所在区域的左下角 ↔ 窗口左下角
