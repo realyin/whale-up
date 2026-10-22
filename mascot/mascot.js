@@ -100,7 +100,7 @@
   async function spriteActor(base, spec) {
     const textures = {};
     for (const [mood, file] of Object.entries(spec.images || {})) textures[mood] = PIXI.Texture.from(base + file);
-    const blinkTexture = spec.blink ? PIXI.Texture.from(base + spec.blink) : null;
+    let blinkTexture = spec.blink ? PIXI.Texture.from(base + spec.blink) : null;
     // 动作：{ frames: [...], fps, seconds, loop, effect, ownPose }，或者 { variants: [同样的写法…] } 每次随机挑一种
     const actions = {};
     for (const [name, a] of Object.entries(spec.actions || {})) {
@@ -110,6 +110,37 @@
     let action = null; // { name, def, started }
     const loaded = (tex) => new Promise((r) => (tex.baseTexture.valid ? r() : tex.baseTexture.once("loaded", r)));
     await loaded(textures.idle);
+
+    // 原图大约缩到三分之一来画。GPU 直接缩小只是隔几个像素取一个，边缘发毛、有锯齿；
+    // 所以加载时先用高质量缩放把每张图缩到接近屏幕上的像素大小（逐次减半再缩到位）。
+    // 纹理的 resolution 设成缩放比例，宽高还是原图坐标，部件位置、锚点等都不用改
+    // 多留 1.6 倍：她一直在呼吸、摇摆，正好 1:1 时每帧都在亚像素上重采样会发虚；GPU 只缩 1.6 倍还不会出锯齿
+    const k = Math.min(1, (spec.height * (window.devicePixelRatio || 2) * 1.6) / textures.idle.height);
+    const sharpen = async (tex) => {
+      await loaded(tex);
+      const img = tex.baseTexture.resource.source;
+      let src = img, w = img.width, h = img.height;
+      const tw = Math.max(1, Math.round(img.width * k)), th = Math.max(1, Math.round(img.height * k));
+      while (w / 2 >= tw) {
+        const c = document.createElement("canvas");
+        c.width = Math.round(w / 2); c.height = Math.round(h / 2);
+        const g = c.getContext("2d");
+        g.imageSmoothingQuality = "high";
+        g.drawImage(src, 0, 0, c.width, c.height);
+        src = c; w = c.width; h = c.height;
+      }
+      const out = document.createElement("canvas");
+      out.width = tw; out.height = th;
+      const g = out.getContext("2d");
+      g.imageSmoothingQuality = "high";
+      g.drawImage(src, 0, 0, tw, th);
+      return PIXI.Texture.from(out, { resolution: k });
+    };
+    for (const m of Object.keys(textures)) textures[m] = await sharpen(textures[m]);
+    if (blinkTexture) blinkTexture = await sharpen(blinkTexture);
+    for (const variants of Object.values(actions)) {
+      for (const v of variants) v.textures = await Promise.all(v.textures.map(sharpen));
+    }
 
     // 整个角色放在一个容器里，呼吸、摇摆时部件一起动
     const rig = new PIXI.Container();
@@ -138,9 +169,7 @@
 
     const parts = [];
     for (const p of spec.parts || []) {
-      const tex = PIXI.Texture.from(base + p.image);
-      await loaded(tex);
-      const sprite = new PIXI.Sprite(tex);
+      const sprite = new PIXI.Sprite(await sharpen(PIXI.Texture.from(base + p.image)));
       sprite.pivot.set(p.pivot[0], p.pivot[1]);
       sprite.position.set(p.at[0] + p.pivot[0], p.at[1] + p.pivot[1]);
       rig.addChildAt(sprite, 0); // 部件画在身体后面（尾巴从裙子下面伸出来）
