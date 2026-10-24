@@ -437,7 +437,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "FocusGuard Safari Extension/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "FocusGuard Safari Extension";
+				INFOPLIST_KEY_CFBundleDisplayName = "鲸醒 Safari 扩展";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -450,7 +450,7 @@
 					"-framework",
 					SafariServices,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.yinguoliang.focusguard.safari.Extension;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.realyin.whaleup.safari.Extension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -471,7 +471,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "FocusGuard Safari Extension/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "FocusGuard Safari Extension";
+				INFOPLIST_KEY_CFBundleDisplayName = "鲸醒 Safari 扩展";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -484,7 +484,7 @@
 					"-framework",
 					SafariServices,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.yinguoliang.focusguard.safari.Extension;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.realyin.whaleup.safari.Extension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -509,7 +509,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "FocusGuard Safari/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "FocusGuard Safari";
+				INFOPLIST_KEY_CFBundleDisplayName = "鲸醒 Safari";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMainStoryboardFile = Main;
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
@@ -524,7 +524,7 @@
 					"-framework",
 					WebKit,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.yinguoliang.focusguard.safari;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.realyin.whaleup.safari;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -550,7 +550,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "FocusGuard Safari/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "FocusGuard Safari";
+				INFOPLIST_KEY_CFBundleDisplayName = "鲸醒 Safari";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMainStoryboardFile = Main;
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
@@ -565,7 +565,7 @@
 					"-framework",
 					WebKit,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.yinguoliang.focusguard.safari;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.realyin.whaleup.safari;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;

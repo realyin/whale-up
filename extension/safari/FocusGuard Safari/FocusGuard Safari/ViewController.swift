@@ -9,7 +9,7 @@ import Cocoa
 import SafariServices
 import WebKit
 
-let extensionBundleIdentifier = "com.yinguoliang.focusguard.safari.Extension"
+let extensionBundleIdentifier = "io.github.realyin.whaleup.safari.Extension"
 
 class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHandler {
 

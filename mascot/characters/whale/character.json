@@ -1,0 +1,223 @@
+{
+  "actions": {
+    "dance": {
+      "variants": [
+        {
+          "effect": "notes",
+          "fps": 2.2,
+          "frames": [
+            "pose-dance1.png",
+            "pose-dance2.png"
+          ],
+          "ownPose": true,
+          "seconds": 7
+        }
+      ]
+    },
+    "eat": {
+      "variants": [
+        {
+          "effect": "rice",
+          "fps": 1.2,
+          "frames": [
+            "eat1.png",
+            "eat2.png"
+          ],
+          "seconds": 8
+        },
+        {
+          "effect": "rice",
+          "fps": 1.2,
+          "frames": [
+            "pose-eat_sit1.png",
+            "pose-eat_sit2.png"
+          ],
+          "ownPose": true,
+          "seconds": 8
+        }
+      ]
+    },
+    "heart": {
+      "variants": [
+        {
+          "effect": "hearts",
+          "frames": [
+            "pose-heart.png"
+          ],
+          "ownPose": true,
+          "seconds": 3.5
+        }
+      ]
+    },
+    "milktea": {
+      "variants": [
+        {
+          "frames": [
+            "pose-milktea.png"
+          ],
+          "ownPose": true,
+          "seconds": 6
+        }
+      ]
+    },
+    "read": {
+      "variants": [
+        {
+          "frames": [
+            "pose-read.png"
+          ],
+          "ownPose": true,
+          "seconds": 10
+        }
+      ]
+    },
+    "sleep": {
+      "variants": [
+        {
+          "effect": "zzz",
+          "frames": [
+            "sleep.png"
+          ],
+          "loop": true
+        },
+        {
+          "effect": "zzz",
+          "frames": [
+            "pose-sleep_curl.png"
+          ],
+          "loop": true,
+          "ownPose": true
+        }
+      ]
+    },
+    "stretch": {
+      "variants": [
+        {
+          "frames": [
+            "stretch.png"
+          ],
+          "seconds": 3.5
+        },
+        {
+          "frames": [
+            "pose-stretch_stand.png"
+          ],
+          "ownPose": true,
+          "seconds": 3.5
+        }
+      ]
+    },
+    "swim": {
+      "variants": [
+        {
+          "effect": "bubbles",
+          "fps": 1.6,
+          "frames": [
+            "pose-swim1.png",
+            "pose-swim2.png"
+          ],
+          "ownPose": true,
+          "seconds": 7
+        }
+      ]
+    },
+    "work": {
+      "variants": [
+        {
+          "frames": [
+            "pose-work.png"
+          ],
+          "ownPose": true,
+          "seconds": 10
+        }
+      ]
+    },
+    "yawn": {
+      "variants": [
+        {
+          "frames": [
+            "yawn.png"
+          ],
+          "seconds": 2.8
+        }
+      ]
+    }
+  },
+  "blink": "blink.png",
+  "castFrom": [
+    0.5,
+    0.62
+  ],
+  "castFromCast": [
+    0.05,
+    0.37
+  ],
+  "headAt": [
+    0.22,
+    0.08
+  ],
+  "height": 125,
+  "images": {
+    "angry": "angry.png",
+    "cast": "cast.png",
+    "idle": "idle.png",
+    "shy": "shy.png",
+    "watching": "watching.png"
+  },
+  "kind": "sprite",
+  "name": "鲸鱼娘",
+  "parts": [
+    {
+      "at": [
+        695,
+        315
+      ],
+      "image": "tail.png",
+      "period": 2.6,
+      "pivot": [
+        6,
+        230
+      ],
+      "swing": 6
+    }
+  ],
+  "nickname": "大肥鱼",
+  "theme": {
+    "paper": "#fffdf9",
+    "ink": "#1f2b5e",
+    "accent": "#3d6fd6",
+    "accent-ink": "#ffffff",
+    "soft": "#e9f0fc",
+    "soft-ink": "#2d3f7a",
+    "stitch": "rgba(61, 111, 214, .4)",
+    "lace": "#ffffff"
+  },
+  "icons": {
+    "today": "icons/today.png",
+    "act:dance": "icons/dance.png",
+    "act:work": "icons/work.png",
+    "cast": "icons/cast.png",
+    "wake": "icons/wake.png",
+    "add:junk": "icons/junk.png",
+    "quit": "icons/quit.png",
+    "force": "icons/force.png",
+    "actions": "icons/actions.png",
+    "settings": "icons/settings.png",
+    "main": "icons/main.png",
+    "act:sleep": "icons/sleep.png",
+    "act:yawn": "icons/yawn.png",
+    "resume": "icons/resume.png",
+    "act:heart": "icons/heart.png",
+    "act:read": "icons/read.png",
+    "pause": "icons/pause.png",
+    "lists": "icons/lists.png",
+    "act:stretch": "icons/stretch.png",
+    "act:eat": "icons/eat.png",
+    "add:sensitive": "icons/sensitive.png",
+    "act:milktea": "icons/milktea.png",
+    "more": "icons/more.png",
+    "act:swim": "icons/swim.png",
+    "hide": "icons/hide.png",
+    "add:force": "icons/force.png"
+  }
+}

@@ -1,6 +1,24 @@
-# 专注守护 FocusGuard
+# 鲸醒 WhaleUp
 
-一个 Mac 菜单栏小助手。发现你在刷短视频、刷没营养的内容刷太久了，就弹窗劝你去休息；深夜会劝你去睡觉。
+> 凌晨两点，你：“再刷最后一个。” 她：“……你已经刷了 47 分钟了哦。”
+
+一只住在 Mac 屏幕右下角的鲸鱼女仆。平时陪着你，发现你刷短视频、刷没营养的内容太久了，就冒出来劝你；不听劝？她会飞到浏览器上挥魔杖，“砰”地把网页关掉。
+
+![鲸醒：她施法关掉网页](docs/images/hero.gif)
+
+- **记账**：每个网站、每个 App 每天用了多久；晚上刷到凌晨也算在当天（一天从凌晨 4 点开始算）
+- **分得清有没有营养**：接上大模型（DeepSeek、Claude、OpenAI 兼容接口或本机 Ollama，用你自己的 Key）后，学习的不打扰，没营养的才管
+- **逐级劝导**：气泡提醒 → 倒计时 → 问你为什么在刷 → 强制关闭；劝导文案按你正在看的内容来写
+- **强制关闭**：给抖音、B 站这类网站设每天的总时长，刷满就关，当天再打开也关
+- **每天写小结、每周写复盘**，可以直接写进 Obsidian
+- **陪着你**：饭点吃大米饭、坐久了伸懒腰、你离开就睡着；右键点她，功能围着她转一圈
+- **数据都在本机**：银行、支付、邮箱这类网站默认连标题都不记
+
+| 右键点她 | 今天 |
+|---|---|
+| ![右键圆环](docs/images/ring.png) | ![今天页](docs/images/today.png) |
+
+宣传短片的源码在 [`promo/`](promo/)（Remotion 写的，`npm run render` 导出）。
 
 ## 它怎么判断
 
@@ -30,14 +48,24 @@
 
 所有判断都在本机完成，不联网、不上传任何数据。
 
-## 编译运行
+## 安装
+
+需要 macOS 13 以上、Xcode（或 Swift 6 工具链）。目前只能从源码编译：
 
 ```bash
+git clone https://github.com/realyin/whale-up.git
+cd whale-up
 ./scripts/install.sh        # 编译、装到“应用程序”并启动；首次安装自动设为开机启动
+./scripts/setup_voice.sh    # 可选：装她的二次元语音（微软在线语音，需要 Python 3）
 ./scripts/build_safari.sh   # 可选：编译并安装 Safari 扩展
 ```
 
-菜单栏会出现 🌱（正在刷时变成 👀，后面的数字是今天累计分钟数）。点它选“打开专注守护”（⌘O），或在“应用程序”里再点一次 App，打开主窗口：
+然后：
+
+1. 装 Chrome 扩展（记录看了什么内容，AI 判断要用）：见下面的“内容记录”
+2. 想用 AI 判断：菜单 →“设置… → AI 判断”，选服务商、填 API Key（存在系统钥匙串里）
+
+菜单栏会出现 🌱（正在刷时变成 👀，后面的数字是今天累计分钟数）。点它选“打开鲸醒”（⌘O），或在“应用程序”里再点一次 App，打开主窗口：
 
 | 页面 | 内容 |
 |---|---|
@@ -49,7 +77,7 @@
 | 报告 | 每日小结和每周复盘 |
 | 设置 | 网站、App、强制关闭、提醒、内容记录、AI 判断 |
 
-第一次在浏览器里检测时，系统会问“是否允许 FocusGuard 控制 Safari/Chrome”，请点**允许**，否则读不到网址。
+第一次在浏览器里检测时，系统会问“是否允许 WhaleUp 控制 Safari/Chrome”，请点**允许**，否则读不到网址。
 构建脚本会优先用本机的 Apple Development 证书签名，这样重新编译后不用再次授权。开机启动可以在菜单里随时关掉。
 
 ## 时间线
@@ -62,7 +90,7 @@
 
 ## 桌宠
 
-屏幕右下角站着一个魔法少女（Live2D 官方示例模型 Mao），代替弹窗做提醒：
+屏幕右下角趴着大肥鱼（鲸鱼女仆，默认角色，素材在 `mascot/characters/whale`），代替弹窗做提醒：
 
 - **表情跟着你变**：看学习内容时开心，刷没营养的内容时嘟嘴盯着你，快到时限时皱眉
 - **提醒**：在她头顶的气泡里说，并用二次元少女音读出来（微软在线语音“晓伊”，需先运行 `./scripts/setup_voice.sh`；没装或没网时退回系统语音）；“关掉它 / 再刷 5 分钟 / 为什么在刷”都在气泡里。需要写理由的那一级仍用弹窗
@@ -72,14 +100,16 @@
 - 可以拖动她换位置；戳她一下会告诉你今天刷了多久，睡着时戳她会被叫醒
 - 在“设置 → 提醒 → 桌宠”里开关、选声音并试听、开关“自动做小动作”（关掉后只在你右键时才做），或点“演示一次施法”
 
-**第一次需要下载模型**（约 5 MB，不提交进仓库）：
+还可以换成 Live2D 官方示例模型 Mao（魔法少女）。它不在仓库里，要先下载（约 5 MB），再在“设置 → 提醒 → 桌宠”里切换：
 
 ```bash
-./scripts/fetch_mascot.sh   # 下载 Live2D Cubism Core、pixi.js、pixi-live2d-display 和示例模型 Mao
+./scripts/fetch_mascot.sh   # 下载 Live2D Cubism Core、pixi-live2d-display 和示例模型 Mao
 ./scripts/install.sh
 ```
 
-许可：Mao 属于 Live2D 免费素材许可，Cubism Core 属于 Live2D 专有软件许可，本项目只在本机个人使用。要把 App 分享给别人之前，请先阅读 Live2D 的许可条款（年收入超过 1000 万日元的企业需要另行授权）。
+Mao 属于 Live2D 免费素材许可，Cubism Core 属于 Live2D 专有软件许可，只供本机个人使用；分发前请先阅读 Live2D 的许可条款。
+
+想做自己的角色，见 [`tools/character`](tools/character/README.md)。
 
 ## 收藏与要点
 
@@ -103,7 +133,7 @@
 - **最近 7 天**每天刷没营养内容的时长柱状图，点某根柱子可以看那天的明细
 - **每天明细**：每个网站 / App 用了多久，可以切换“没营养的 / 全部”。“全部”里也能看到电脑总使用时长
 - 网站按域名统计，命中规则的按规则统计（比如 `youtube.com/shorts` 和其他 YouTube 页面分开算）；其他程序按 App 名统计
-- 键鼠 5 分钟没动不计时。保留最近 30 天，数据存在 `~/Library/Application Support/FocusGuard/stats.json`，只在本机
+- 键鼠 5 分钟没动不计时。保留最近 30 天，数据存在 `~/Library/Application Support/WhaleUp/stats.json`，只在本机
 - 规则改了，历史数据会按新规则重新归类：比如把知乎加入没营养网站后，以前在知乎上的时间也会算进去
 
 ## 内容记录（Chrome / Safari 扩展）
@@ -114,11 +144,11 @@
 - 只要视频在播放就计时：标签页切到后台、窗口最小化或被挡住也算，单独记为“后台播放”；后台静音播放的不算（通常是没人看的自动预览）。没有视频的网页只在前台且 Chrome 是当前窗口时计时
 - 劝导弹窗上可以一键记下“为什么在刷”（累了 / 无聊 / 逃避 / 放松）
 - 在主窗口的“内容”页查看和搜索
-- 数据存在本机 `~/Library/Application Support/FocusGuard/content.sqlite`，保留 90 天；扩展只把数据发到本机 App（`127.0.0.1:47621`），不上传
+- 数据存在本机 `~/Library/Application Support/WhaleUp/content.sqlite`，保留 90 天；扩展只把数据发到本机 App（`127.0.0.1:47621`），不上传
 
-**安装扩展（只需一次）：** 菜单 →“设置… → 内容记录”，点“打开扩展文件夹”，然后在 Chrome 的 `chrome://extensions` 打开“开发者模式”，点“加载已解压的扩展程序”，选中 `~/Library/Application Support/FocusGuard/ChromeExtension`。App 更新后，在扩展页点一下刷新按钮。
+**安装扩展（只需一次）：** 菜单 →“设置… → 内容记录”，点“打开扩展文件夹”，然后在 Chrome 的 `chrome://extensions` 打开“开发者模式”，点“加载已解压的扩展程序”，选中 `~/Library/Application Support/WhaleUp/ChromeExtension`。App 更新后，在扩展页点一下刷新按钮。
 
-**Safari：** 运行 `./scripts/build_safari.sh`，然后在 Safari →设置→扩展 里勾选“FocusGuard Safari Extension”并允许访问网站。
+**Safari：** 运行 `./scripts/build_safari.sh`，然后在 Safari →设置→扩展 里勾选“鲸醒 Safari 扩展”并允许访问网站。
 
 已实测：B 站、YouTube、抖音（标题、作者、标签、时长，抖音信息流里每个视频单独一条）。
 
@@ -143,7 +173,7 @@
 - **每日小结**：每天到点（默认 22:00）自动写当天的：一句话结论 + 最多 3 条发现 + 明天一个行动；漏写的前一天会补上
 - **每周复盘**：每周一自动写上一周的：结论、最多 3 条规律、有依据的原因、最多 2 条行动、有营养的替代、下周承诺
 - 只写洞察，不复述界面上已有的数字，不猜测心理；在主窗口的“今天”和“报告”页查看，也可以手动写 / 重写
-- 同时写进 Obsidian：自动找到当前的库，存到 `专注守护/每日小结/`、`专注守护/每周复盘/`；可在“AI 判断”设置里改文件夹或关闭
+- 同时写进 Obsidian：自动找到当前的库，存到 `鲸醒/每日小结/`、`鲸醒/每周复盘/`；可在“AI 判断”设置里改文件夹或关闭
 
 ## 劝导怎么越来越管用
 
@@ -166,30 +196,50 @@
 - **内容记录**：记录范围、扩展安装
 - **AI 判断**：开关、你的标准、服务商与模型、API Key、AI 劝导、小结时间、Obsidian
 
-改动立即生效。所有设置保存在 `~/Library/Application Support/FocusGuard/config.json`，也可以直接编辑这个文件。
+改动立即生效。所有设置保存在 `~/Library/Application Support/WhaleUp/config.json`，也可以直接编辑这个文件。
 
 ## 开发
 
 ```bash
 swift test                                   # 规则与计时逻辑的单元测试
-FOCUSGUARD_DEBUG=1 build/FocusGuard.app/Contents/MacOS/FocusGuard   # 在终端打印每次检测结果
-FOCUSGUARD_RENDER_NUDGE=/tmp build/FocusGuard.app/Contents/MacOS/FocusGuard  # 把弹窗渲染成 PNG
-FOCUSGUARD_RENDER_SETTINGS=/tmp build/FocusGuard.app/Contents/MacOS/FocusGuard  # 把设置页渲染成 PNG
-FOCUSGUARD_RENDER_MAIN=/tmp build/FocusGuard.app/Contents/MacOS/FocusGuard      # 用示例数据把主窗口每一页渲染成 PNG
-FOCUSGUARD_CLOSE_JUNK=com.google.Chrome build/FocusGuard.app/Contents/MacOS/FocusGuard  # 关掉当前标签页（若在没营养的网站上）
-FOCUSGUARD_TEST_LABEL=1 build/FocusGuard.app/Contents/MacOS/FocusGuard    # 用当前配置判断两条示例（会调用大模型）
-FOCUSGUARD_TEST_NUDGE=1 build/FocusGuard.app/Contents/MacOS/FocusGuard    # 按最近记录写一条劝导（会调用大模型）
-FOCUSGUARD_WRITE_DIGEST=1 build/FocusGuard.app/Contents/MacOS/FocusGuard  # 立刻写今天的小结（会调用大模型）
-FOCUSGUARD_WRITE_WEEKLY=1 build/FocusGuard.app/Contents/MacOS/FocusGuard  # 立刻写本周复盘（会调用大模型并写入 Obsidian）
-FOCUSGUARD_TEST_FAVORITE=<网址> build/FocusGuard.app/Contents/MacOS/FocusGuard  # 抓网页并提炼要点（临时数据库，会调用大模型）
-FOCUSGUARD_MASCOT_DEMO=/tmp build/FocusGuard.app/Contents/MacOS/FocusGuard  # 单独显示桌宠，截图各表情、气泡、施法
-FOCUSGUARD_MASCOT_SEQ=dance FOCUSGUARD_MASCOT_DEMO=/tmp build/FocusGuard.app/Contents/MacOS/FocusGuard  # 只演一个动作，连拍 16 张检查是否连贯
+WHALEUP_DEBUG=1 build/WhaleUp.app/Contents/MacOS/WhaleUp   # 在终端打印每次检测结果
+WHALEUP_RENDER_NUDGE=/tmp build/WhaleUp.app/Contents/MacOS/WhaleUp  # 把弹窗渲染成 PNG
+WHALEUP_RENDER_SETTINGS=/tmp build/WhaleUp.app/Contents/MacOS/WhaleUp  # 把设置页渲染成 PNG
+WHALEUP_RENDER_MAIN=/tmp build/WhaleUp.app/Contents/MacOS/WhaleUp      # 用示例数据把主窗口每一页渲染成 PNG
+WHALEUP_CLOSE_JUNK=com.google.Chrome build/WhaleUp.app/Contents/MacOS/WhaleUp  # 关掉当前标签页（若在没营养的网站上）
+WHALEUP_TEST_LABEL=1 build/WhaleUp.app/Contents/MacOS/WhaleUp    # 用当前配置判断两条示例（会调用大模型）
+WHALEUP_TEST_NUDGE=1 build/WhaleUp.app/Contents/MacOS/WhaleUp    # 按最近记录写一条劝导（会调用大模型）
+WHALEUP_WRITE_DIGEST=1 build/WhaleUp.app/Contents/MacOS/WhaleUp  # 立刻写今天的小结（会调用大模型）
+WHALEUP_WRITE_WEEKLY=1 build/WhaleUp.app/Contents/MacOS/WhaleUp  # 立刻写本周复盘（会调用大模型并写入 Obsidian）
+WHALEUP_TEST_FAVORITE=<网址> build/WhaleUp.app/Contents/MacOS/WhaleUp  # 抓网页并提炼要点（临时数据库，会调用大模型）
+WHALEUP_MASCOT_DEMO=/tmp build/WhaleUp.app/Contents/MacOS/WhaleUp  # 单独显示桌宠，截图各表情、气泡、施法
+WHALEUP_MASCOT_SEQ=dance WHALEUP_MASCOT_DEMO=/tmp build/WhaleUp.app/Contents/MacOS/WhaleUp  # 只演一个动作，连拍 16 张检查是否连贯
 ```
 
-代码结构：`Sources/FocusGuardCore` 是纯逻辑（分类、计时、文案），`Sources/FocusGuard` 是菜单栏 App（系统监测、弹窗）。
+代码结构：`Sources/WhaleUpCore` 是纯逻辑（分类、计时、文案），`Sources/WhaleUp` 是菜单栏 App（系统监测、弹窗）。
 
 ## 已知限制
 
 - Firefox 不支持读取网址，只能按 App 判断
 - AI 判断、小结只覆盖装了扩展的浏览器；抖音等桌面 App 只按名字判断
 - 手机还没有，见 [路线图](docs/roadmap.md)
+
+## 从「专注守护 / FocusGuard」升级
+
+旧版本叫专注守护（FocusGuard.app）。运行 `./scripts/install.sh` 会退出并删掉旧 App；新版第一次启动时，把数据目录从 `~/Library/Application Support/FocusGuard` 搬到 `WhaleUp`（旧路径留一个替身，已经加载的 Chrome 扩展照常能用），计时状态、桌宠位置也会搬过来。之后：
+
+- 系统会重新问一次“是否允许鲸醒控制 Chrome / Safari”，点允许
+- 第一次用到 AI 判断时，钥匙串会问能否读取旧的 API Key，点“始终允许”
+- 开机启动要在菜单里重新勾一次
+- Chrome 扩展：在 `chrome://extensions` 里点一下刷新
+
+## 许可
+
+代码以 [MIT 许可证](LICENSE) 开源。
+
+素材说明：
+
+- 角色“大肥鱼”（`mascot/characters/whale`）和右键圆环的图标由 AI 绘图生成，形象参考了 DeepSeek 的鲸鱼；这是同人形象，与 DeepSeek 官方无关
+- `mascot/lib/pixi.min.js` 是 [pixi.js](https://pixijs.com) 6.5.10，MIT 许可
+- Live2D 相关文件（Cubism Core、模型 Mao）不在仓库里，由 `scripts/fetch_mascot.sh` 下载，适用 Live2D 自己的许可
+- 她的声音用的是微软 Edge 在线语音（通过 [edge-tts](https://github.com/rany2/edge-tts)），需要联网

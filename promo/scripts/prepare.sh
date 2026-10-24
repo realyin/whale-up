@@ -3,9 +3,9 @@
 # 用法：./scripts/prepare.sh [背景图目录]
 set -e
 cd "$(dirname "$0")/.."
-SUPPORT="$HOME/Library/Application Support/FocusGuard"
+SUPPORT="$HOME/Library/Application Support/WhaleUp"
 mkdir -p public/whale public/voice public/bg public/sfx
-cp -R "$SUPPORT/Mascot/characters/whale/." public/whale/
+cp -R ../mascot/characters/whale/. public/whale/
 [ -n "$1" ] && cp "$1"/bg-*.png public/bg/
 
 TTS="$SUPPORT/tts/bin/edge-tts"

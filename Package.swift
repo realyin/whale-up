@@ -2,13 +2,13 @@
 import PackageDescription
 
 let package = Package(
-    name: "FocusGuard",
+    name: "WhaleUp",
     platforms: [.macOS(.v13)],
     targets: [
         // 纯逻辑：规则、分类、计时与提醒决策（可单元测试）
-        .target(name: "FocusGuardCore"),
+        .target(name: "WhaleUpCore"),
         // 菜单栏应用：系统监测 + 界面
-        .executableTarget(name: "FocusGuard", dependencies: ["FocusGuardCore"]),
-        .testTarget(name: "FocusGuardCoreTests", dependencies: ["FocusGuardCore"]),
+        .executableTarget(name: "WhaleUp", dependencies: ["WhaleUpCore"]),
+        .testTarget(name: "WhaleUpCoreTests", dependencies: ["WhaleUpCore"]),
     ]
 )

@@ -1,6 +1,6 @@
 # 做一个图片角色
 
-桌宠的图片角色 = `~/Library/Application Support/FocusGuard/Mascot/characters/<id>/` 里的若干张透明 PNG + `character.json`。
+桌宠的图片角色 = `~/Library/Application Support/WhaleUp/Mascot/characters/<id>/` 里的若干张透明 PNG + `character.json`。
 所有表情帧要**同一个姿势、同一个构图**，否则换表情时人物会跳动。
 
 ## 用 Codex 生成表情帧

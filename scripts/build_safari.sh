@@ -11,4 +11,4 @@ xcodebuild -project "extension/safari/FocusGuard Safari/FocusGuard Safari.xcodep
 rm -rf "/Applications/FocusGuard Safari.app"
 ditto "build/safari-dd/Build/Products/Release/FocusGuard Safari.app" "/Applications/FocusGuard Safari.app"
 open "/Applications/FocusGuard Safari.app"
-echo "已安装。请在 Safari →设置→扩展 里勾选“FocusGuard Safari Extension”，并允许它访问网站"
+echo "已安装。请在 Safari →设置→扩展 里勾选“鲸醒 Safari 扩展”，并允许它访问网站"

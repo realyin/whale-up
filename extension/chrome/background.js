@@ -5,7 +5,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg?.type !== "views") return;
   fetch(`${ENDPOINT}/views`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-FocusGuard": "1" },
+    headers: { "Content-Type": "application/json", "X-WhaleUp": "1" },
     body: JSON.stringify(msg.views),
   })
     .then((r) => reply({ ok: r.ok }))
@@ -40,14 +40,14 @@ async function favoriteActiveTab() {
   try {
     const r = await fetch(`${ENDPOINT}/favorites`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-FocusGuard": "1" },
+      headers: { "Content-Type": "application/json", "X-WhaleUp": "1" },
       body: JSON.stringify(page),
     });
     if (r.ok) return { ok: true, kind: page.textKind };
     const body = await r.json().catch(() => ({}));
-    return { ok: false, error: body.error || "App 没有接收，请检查专注守护是否在运行" };
+    return { ok: false, error: body.error || "App 没有接收，请检查鲸醒是否在运行" };
   } catch {
-    return { ok: false, error: "连不上本机 App，请先打开专注守护" };
+    return { ok: false, error: "连不上本机 App，请先打开鲸醒" };
   }
 }
 

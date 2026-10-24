@@ -1,40 +1,36 @@
 #!/bin/bash
-# 编译并打包成 build/FocusGuard.app
+# 编译并打包成 build/WhaleUp.app
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 swift build -c release
-BIN="$(swift build -c release --show-bin-path)/FocusGuard"
+BIN="$(swift build -c release --show-bin-path)/WhaleUp"
 
-APP=build/FocusGuard.app
+APP=build/WhaleUp.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
-cp "$BIN" "$APP/Contents/MacOS/FocusGuard"
+cp "$BIN" "$APP/Contents/MacOS/WhaleUp"
 mkdir -p "$APP/Contents/Resources"
 cp -R extension/chrome "$APP/Contents/Resources/ChromeExtension"
-# 桌宠（需要先运行 scripts/fetch_mascot.sh 下载模型）
-if [ -f mascot/vendor/Mao/Mao.model3.json ]; then
-    cp -R mascot "$APP/Contents/Resources/Mascot"
-else
-    echo "提示：没有桌宠模型，桌宠不可用。运行 scripts/fetch_mascot.sh 下载。"
-fi
+# 桌宠：默认角色大肥鱼在仓库里；Live2D 角色 Mao 要另外运行 scripts/fetch_mascot.sh 下载
+cp -R mascot "$APP/Contents/Resources/Mascot"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key><string>FocusGuard</string>
-    <key>CFBundleDisplayName</key><string>专注守护</string>
-    <key>CFBundleIdentifier</key><string>com.yinguoliang.focusguard</string>
-    <key>CFBundleExecutable</key><string>FocusGuard</string>
+    <key>CFBundleName</key><string>WhaleUp</string>
+    <key>CFBundleDisplayName</key><string>鲸醒</string>
+    <key>CFBundleIdentifier</key><string>io.github.realyin.whaleup</string>
+    <key>CFBundleExecutable</key><string>WhaleUp</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
     <key>CFBundleVersion</key><string>1</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSUIElement</key><true/>
     <key>NSAppleEventsUsageDescription</key>
-    <string>专注守护需要读取浏览器当前标签页的网址，用来判断你是不是在刷短视频。网址只在本机判断，不会上传。</string>
+    <string>鲸醒需要读取浏览器当前标签页的网址，用来判断你是不是在刷短视频。网址只在本机判断，不会上传。</string>
 </dict>
 </plist>
 PLIST
