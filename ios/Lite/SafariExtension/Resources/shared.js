@@ -12,7 +12,9 @@ const DEFAULTS = {
   sites: ["douyin.com", "bilibili.com", "b23.tv", "youtube.com", "kuaishou.com", "xiaohongshu.com",
           "weibo.com", "weibo.cn", "tiktok.com", "ixigua.com", "toutiao.com"],
   appUsed: 0,         // 上次同步时 App 自己记的秒数（抖音等 App，不含 Safari）
-  web: {},            // Safari 里今天每个网站刷了多少秒（只加不减）
+  web: {},            // Safari 里今天每个网站刷了多少秒（只加不减；有营养的不在这里）
+  good: {},           // Safari 里今天看的有营养内容：网站 → 秒（只记下来，不算进时长）
+  verdicts: {},       // AI 判断过的内容：内容 → { isJunk, category, reason }
   dirty: null,        // 在弹出面板里改了、还没同步过去的设置
   lastSync: 0,        // 上次和 App 对上的时间（毫秒）
 };
@@ -34,7 +36,7 @@ async function loadMirror() {
   // 上一版存的日期没补零（"2026-10-5"）
   if (m.day) m.day = m.day.replace(/-(\d)(?=-|$)/g, "-0$1");
   const today = dayKey(m.dayStartHour);
-  if (m.day !== today) Object.assign(m, { day: today, appUsed: 0, web: {}, extra: 0 });
+  if (m.day !== today) Object.assign(m, { day: today, appUsed: 0, web: {}, good: {}, extra: 0 });
   return m;
 }
 
@@ -51,12 +53,35 @@ function isWatchedSite(m, host) {
   return m.sites.some((x) => host === x || host.endsWith("." + x));
 }
 
-/** 在这台手机上先记下刚刷的几秒 */
-async function addLocal(site, seconds) {
+/** 在这台手机上先记下刚刷的几秒；good 为 true 时记到“有营养”里，不算时长 */
+async function addLocal(site, seconds, good = false) {
   const m = await loadMirror();
-  m.web[site] = (m.web[site] || 0) + seconds;
+  const book = good ? m.good : m.web;
+  book[site] = (book[site] || 0) + seconds;
   await saveMirror(m);
   return m;
+}
+
+/** 让 AI 判断一个内容（经后台 → 原生部分 → DeepSeek）；判断过的直接用记下的。返回 {isJunk,...} / {off:true} / null */
+async function judgeContent(key, info) {
+  const m = await loadMirror();
+  if (m.verdicts[key]) return m.verdicts[key];
+  try {
+    const reply = api.runtime.sendMessage({ to: "native", type: "judge", key, ...info });
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 25000));
+    const r = await Promise.race([reply, timeout]);
+    if (!r || r.error) return null;
+    if (r.off) return { off: true };
+    const now = await loadMirror();
+    now.verdicts[key] = { isJunk: !!r.isJunk, category: r.category || "", reason: r.reason || "" };
+    // 只留最近 300 条
+    const keys = Object.keys(now.verdicts);
+    for (const k of keys.slice(0, Math.max(0, keys.length - 300))) delete now.verdicts[k];
+    await saveMirror(now);
+    return now.verdicts[key];
+  } catch (e) {
+    return null;
+  }
 }
 
 /** 在弹出面板里改设置：先改本地（马上生效），再同步给 App */
@@ -76,7 +101,7 @@ function sync() {
     try {
       const m = await loadMirror();
       const dirty = m.dirty;
-      const reply = api.runtime.sendMessage({ to: "native", type: "sync", day: m.day, web: m.web, settings: dirty || undefined });
+      const reply = api.runtime.sendMessage({ to: "native", type: "sync", day: m.day, web: m.web, good: m.good, settings: dirty || undefined });
       const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 2500));
       const r = await Promise.race([reply, timeout]);
       if (!r || r.error || typeof r.appUsed !== "number") return null;

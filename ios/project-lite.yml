@@ -50,6 +50,7 @@ targets:
     sources:
       - path: Lite/SafariExtension/SafariWebExtensionHandler.swift
       - path: Lite/Shared/Usage.swift
+      - path: Lite/Shared/Judge.swift
       # 扩展的网页文件放在扩展包的根目录（包里不能有叫 Resources 的文件夹），图片保留 images/ 子目录
       - path: Lite/SafariExtension/Resources
         excludes: ["images/**"]

@@ -11,6 +11,8 @@ struct Usage: Codable {
     var day = ""
     /// 名目 → 秒数：App 名字（“抖音”），或 Safari 里的网站（“Safari · douyin.com”）
     var seconds: [String: Double] = [:]
+    /// Safari 里看的有营养内容（AI 判断过）：网站 → 秒数。只记下来给你看，不算进每天的时长
+    var good: [String: Double] = [:]
     /// 正在刷的 App 和开始时间（还没收到“刷完了”）
     var open: [String: Date] = [:]
     var extraDay = ""
@@ -38,6 +40,7 @@ struct Usage: Codable {
         extraDay = try c.decodeIfPresent(String.self, forKey: .extraDay) ?? d.extraDay
         extra = try c.decodeIfPresent(Int.self, forKey: .extra) ?? d.extra
         sites = try c.decodeIfPresent([String].self, forKey: .sites) ?? d.sites
+        good = try c.decodeIfPresent([String: Double].self, forKey: .good) ?? d.good
     }
 
     static func load() -> Usage {
@@ -57,6 +60,7 @@ struct Usage: Codable {
             u.day = today
             u.seconds = [:]
             u.open = [:]
+            u.good = [:]
         }
         if u.extraDay != today { u.extraDay = today; u.extra = 0 }
         return u
@@ -115,6 +119,7 @@ struct Usage: Codable {
 
     /// 给 Safari 扩展的：App 自己记的时间和设置（Safari 的时间以扩展那边为准）
     var snapshot: [String: Any] {
-        ["used": used, "appUsed": appUsed, "limit": limit, "extra": extra, "dayStartHour": dayStartHour, "sites": sites]
+        ["used": used, "appUsed": appUsed, "limit": limit, "extra": extra, "dayStartHour": dayStartHour, "sites": sites,
+         "ai": AISettings.load().ready]
     }
 }

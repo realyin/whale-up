@@ -17,6 +17,11 @@
       .head { width: 64px; height: 64px; border-radius: 50%; border: 3px solid var(--ink); background: var(--paper) center/cover;
               box-shadow: 0 3px 0 var(--ink); position: relative; pointer-events: auto; touch-action: none; -webkit-user-select: none; user-select: none; }
       .head.dragging { transform: scale(1.12); box-shadow: 0 8px 16px rgba(20,30,70,.35); }
+      .tag { position: absolute; left: 50%; top: -12px; transform: translateX(-50%); white-space: nowrap; font-size: 10.5px; font-weight: 800;
+             padding: 1px 6px 2px; border-radius: 8px; border: 1.5px solid var(--ink); background: var(--paper); color: var(--ink); }
+      .tag[hidden] { display: none; }
+      .tag.good { background: #3d6fd6; color: #fff; }
+      .tag.junk { background: #eb6834; color: #fff; }
       .count { position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); background: var(--ink); color: var(--paper);
                font-size: 11px; font-weight: 800; padding: 1px 7px 2px; border-radius: 8px; white-space: nowrap; }
       .bubble { pointer-events: auto; max-width: 230px; background: var(--paper); color: var(--ink); border: 2.5px solid var(--ink); border-radius: 16px;
@@ -37,7 +42,7 @@
     </style>
     <div class="buddy">
       <div class="bubble" hidden></div>
-      <div class="head"><span class="count"></span></div>
+      <div class="head"><span class="tag" hidden></span><span class="count"></span></div>
     </div>
     <div class="lock" hidden>
       <div class="card">
@@ -51,6 +56,9 @@
 
   const $ = (sel) => root.querySelector(sel);
   const bubble = $(".bubble");
+  // 当前内容的 AI 判断：undefined 还没看、"pending" 判断中、{isJunk,...}、{off:true} 没开 AI、null 判断失败
+  let verdict;
+  const isGood = () => !!verdict && typeof verdict === "object" && !verdict.off && verdict.isJunk === false;
   let bubbleTimer = null;
   let warned = false;
 
@@ -84,6 +92,14 @@
   function render(s) {
     const left = limitSeconds(s) - usedOf(s);
     $(".count").textContent = `${Math.floor(usedOf(s) / 60)}/${todayLimit(s)}′`;
+    // 头顶的小标签：AI 判断的结果
+    const tag = $(".tag");
+    tag.hidden = !verdict || verdict.off;
+    tag.className = "tag" + (verdict === "pending" ? "" : verdict && verdict.isJunk ? " junk" : " good");
+    tag.textContent = verdict === "pending" ? "判断中…" : verdict && !verdict.off ? (verdict.isJunk ? "没营养" : "✓ 有营养") : "";
+    if (tag.hidden) tag.className = "tag";
+    // 有营养的内容不计时，也不锁
+    if (isGood()) { if (!$(".lock").hidden) unlock(); return; }
     if (left <= 0) return lock(s);
     if (!$(".lock").hidden) unlock();
     if (left <= 300 && !warned) {
@@ -149,8 +165,27 @@
   head.addEventListener("pointerup", drop);
   head.addEventListener("pointercancel", drop);
 
-  // 每 5 秒：页面在前台、还没锁上，就先在本地记 5 秒、马上判断；再顺带和 App 同步（同步卡住也不影响计时）
+  // ---- AI 判断：换了一个视频 / 网页就问一次（判断过的直接用），有营养的不计时 ----
   const site = state.sites.find((x) => location.hostname === x || location.hostname.endsWith("." + x)) || location.hostname;
+  let contentKey = null;
+  function checkContent() {
+    const video = largestVideo();
+    const key = site + "|" + identity(video);
+    if (key === contentKey) return;
+    contentKey = key;
+    const info = extract(video);
+    verdict = "pending";
+    render(state);
+    judgeContent(key, { site, title: info.title, author: info.author, tags: info.tags.join("、"), description: info.description })
+      .then((v) => {
+        if (key !== contentKey) return;
+        verdict = v;  // null：判断不了，按没营养算
+        render(state);
+        if (isGood()) say(`这个是${verdict.category || "有营养的"}，不算时间，好好看～`, "head-shy", 4);
+      });
+  }
+
+  // 每 5 秒：页面在前台、还没锁上，就先在本地记 5 秒、马上判断；再顺带和 App 同步（同步卡住也不影响计时）
   async function refresh(synced) {
     if (!synced) return;
     if (limitSeconds(synced) - usedOf(synced) > 300) warned = false;
@@ -159,12 +194,14 @@
   }
   setInterval(async () => {
     if (document.visibilityState !== "visible") return;
-    if ($(".lock").hidden) state = await addLocal(site, 5);
+    checkContent();
+    if ($(".lock").hidden) state = await addLocal(site, 5, isGood());
     else state = await loadMirror();
     render(state);
     sync().then(refresh);
   }, 5000);
   sync().then(refresh);
+  checkContent();
 
   // 切回这个页面时马上同步一次（可能在 App 或弹出面板里改了设置）
   document.addEventListener("visibilitychange", () => {

@@ -7,6 +7,7 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
     func beginRequest(with context: NSExtensionContext) {
         let item = context.inputItems.first as? NSExtensionItem
         let message = item?.userInfo?[SFExtensionMessageKey] as? [String: Any] ?? [:]
+        if message["type"] as? String == "judge" { return judge(message, context) }
         var u = Usage.load()
         var changed = false
 
@@ -24,11 +25,39 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
                 let key = Usage.safariPrefix + site
                 if secs > (u.seconds[key] ?? 0) { u.seconds[key] = secs; changed = true }
             }
+            // 有营养的时间：记下来给你看，不算进每天的时长
+            for (site, value) in message["good"] as? [String: Any] ?? [:] {
+                let secs = min(24 * 3600, max(0, (value as? NSNumber)?.doubleValue ?? 0))
+                if secs > (u.good[site] ?? 0) { u.good[site] = secs; changed = true }
+            }
         }
         if changed { u.save() }
 
+        reply(u.snapshot, context)
+    }
+
+    /// 问 DeepSeek 这个视频 / 网页有没有营养；判断过的直接用记下的结果
+    private func judge(_ message: [String: Any], _ context: NSExtensionContext) {
+        let key = message["key"] as? String ?? ""
+        if let v = Judge.cached(key) { return reply(v.dict, context) }
+        let settings = AISettings.load()
+        guard settings.ready else { return reply(["off": true], context) }
+        var info: [String: String] = [:]
+        for k in ["site", "title", "author", "tags", "description"] { info[k] = message[k] as? String ?? "" }
+        Task {
+            do {
+                let v = try await Judge.ask(info, settings: settings)
+                Judge.remember(key, v)
+                reply(v.dict, context)
+            } catch {
+                reply(["error": "\(error)"], context)
+            }
+        }
+    }
+
+    private func reply(_ body: [String: Any], _ context: NSExtensionContext) {
         let response = NSExtensionItem()
-        response.userInfo = [SFExtensionMessageKey: u.snapshot]
+        response.userInfo = [SFExtensionMessageKey: body]
         context.completeRequest(returningItems: [response], completionHandler: nil)
     }
 }

@@ -113,6 +113,7 @@ struct HomeView: View {
                     todayCard
                     limitCard
                     adjustCard
+                    AICard()
                     SetupCard()
                 }
                 .padding(.horizontal, 18)
@@ -167,11 +168,19 @@ struct HomeView: View {
                 Spacer(minLength: 0)
             }
             let apps = Set(usage.seconds.keys).union(usage.open.keys).sorted { usage.usedSeconds($0) > usage.usedSeconds($1) }
+            let goodTotal = usage.good.values.reduce(0, +)
             if apps.isEmpty {
                 Text("还没有记录。按下面“怎么设置”设好快捷指令，打开抖音时就会开始计时。")
                     .font(.system(size: 13, design: .rounded)).foregroundColor(Theme.muted)
             } else {
                 Divider().overlay(Theme.track)
+                if goodTotal >= 60 {
+                    HStack {
+                        Text("有营养的（不算时间）").font(.system(size: 15, weight: .semibold, design: .rounded)).foregroundColor(Theme.accent)
+                        Spacer()
+                        Text(formatMinutes(goodTotal)).font(.system(size: 15, weight: .semibold, design: .rounded)).foregroundColor(Theme.accent)
+                    }
+                }
                 ForEach(apps, id: \.self) { app in
                     HStack(spacing: 8) {
                         Text(app).font(.system(size: 15, weight: .semibold, design: .rounded)).foregroundColor(Theme.ink)
@@ -246,6 +255,74 @@ struct HomeView: View {
     private func setLimit(_ value: Int) {
         usage.setLimit(value)
         usage.save()
+    }
+}
+
+/// AI 判断有没有营养：DeepSeek 的 Key、你的标准、测试一下
+struct AICard: View {
+    @State private var settings = AISettings.load()
+    @State private var testing = false
+    @State private var result: String?
+
+    var body: some View {
+        CardBox(title: "AI 判断有没有营养", icon: "sparkles") {
+            Toggle(isOn: $settings.enabled) {
+                Text("开启（Safari 里的视频）").font(.system(size: 15, weight: .semibold, design: .rounded)).foregroundColor(Theme.ink)
+            }
+            .tint(Theme.accent)
+            if settings.enabled {
+                field("DeepSeek API Key") {
+                    SecureField("sk-…", text: $settings.apiKey)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("你的标准").font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundColor(Theme.muted)
+                    TextEditor(text: $settings.preferences)
+                        .font(.system(size: 14, design: .rounded)).foregroundColor(Theme.ink)
+                        .scrollContentBackground(.hidden)
+                        .frame(height: 96)
+                        .padding(8)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.soft))
+                }
+                HStack(spacing: 12) {
+                    Button("测试一下") { test() }.buttonStyle(Pill(small: true)).disabled(testing || !settings.ready)
+                    if testing { ProgressView() }
+                }
+                if let result {
+                    Text(result).font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundColor(result.hasPrefix("✓") ? Theme.accent : Theme.junk)
+                }
+            }
+            Text("开启后，Safari 里看的视频会把标题、作者、简介发给 DeepSeek 判断：有营养的不计时，没营养的照常计时、到点锁上。同一个视频只问一次。抖音等 App 里看不到内容，只能按时长算。")
+                .font(.system(size: 13, design: .rounded)).foregroundColor(Theme.muted)
+        }
+        .onChange(of: settings) { _, s in s.save() }
+    }
+
+    private func field<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundColor(Theme.muted)
+            content()
+                .font(.system(size: 15, design: .rounded)).foregroundColor(Theme.ink)
+                .padding(.horizontal, 12).padding(.vertical, 10)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Theme.soft))
+        }
+    }
+
+    /// 拿两条示例问一下，看 Key 和标准管不管用
+    private func test() {
+        testing = true
+        result = nil
+        Task {
+            do {
+                let good = try await Judge.ask(["site": "bilibili.com", "title": "【入门】Swift 并发编程，30 分钟讲清楚", "author": "程序员小王"], settings: settings)
+                let junk = try await Judge.ask(["site": "douyin.com", "title": "猫猫翻车合集 第 47 集 #萌宠 #搞笑"], settings: settings)
+                result = "✓ 能用了。Swift 教程：\(good.isJunk ? "没营养" : "有营养")；猫猫翻车：\(junk.isJunk ? "没营养" : "有营养")"
+            } catch {
+                result = "没成功：\(error)"
+            }
+            testing = false
+        }
     }
 }
 
