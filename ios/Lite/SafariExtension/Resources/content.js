@@ -11,12 +11,15 @@
     <style>
       :host { --ink: #1f2b5e; --paper: #fffdf9; --accent: #3d6fd6; }
       * { box-sizing: border-box; font-family: -apple-system, "PingFang SC", sans-serif; }
-      .buddy { position: fixed; right: 12px; bottom: 90px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: auto; }
+      .buddy { position: fixed; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: none; }
+      .buddy.left { align-items: flex-start; }
+      .buddy.snap { transition: left .25s cubic-bezier(.3,1.4,.5,1), bottom .25s; }
       .head { width: 64px; height: 64px; border-radius: 50%; border: 3px solid var(--ink); background: var(--paper) center/cover;
-              box-shadow: 0 3px 0 var(--ink); position: relative; }
+              box-shadow: 0 3px 0 var(--ink); position: relative; pointer-events: auto; touch-action: none; -webkit-user-select: none; user-select: none; }
+      .head.dragging { transform: scale(1.12); box-shadow: 0 8px 16px rgba(20,30,70,.35); }
       .count { position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); background: var(--ink); color: var(--paper);
                font-size: 11px; font-weight: 800; padding: 1px 7px 2px; border-radius: 8px; white-space: nowrap; }
-      .bubble { max-width: 230px; background: var(--paper); color: var(--ink); border: 2.5px solid var(--ink); border-radius: 16px;
+      .bubble { pointer-events: auto; max-width: 230px; background: var(--paper); color: var(--ink); border: 2.5px solid var(--ink); border-radius: 16px;
                 padding: 10px 12px; font-size: 14px; font-weight: 700; line-height: 1.45; box-shadow: 0 3px 0 rgba(0,0,0,.12);
                 transform-origin: 100% 100%; animation: pop .3s cubic-bezier(.3,1.5,.5,1); }
       .bubble[hidden] { display: none; }
@@ -94,7 +97,57 @@
   if (limitSeconds(state) - state.used > 300) {
     say(`我盯着你呢。今天还能刷 ${Math.ceil((limitSeconds(state) - state.used) / 60)} 分钟。`, "head-watching", 4);
   }
-  $(".head").onclick = () => say(`今天一共刷了 ${Math.floor(state.used / 60)} 分钟啦（App 和网页一起算）。`, "head-shy", 4);
+  // ---- 拖动她：按住滑到别处，松手贴到最近的左边或右边；位置记住，换网页也一样 ----
+  const buddy = $(".buddy");
+  const head = $(".head");
+  const SIZE = 64, MARGIN = 10;
+  let pos = (await api.storage.local.get("whaleupPos")).whaleupPos || { side: "right", y: 0.62 };
+
+  // 按脑袋的中心定位、从底边算：上面冒出气泡时，脑袋不会被往下挤
+  function place(animate) {
+    const centerY = Math.min(window.innerHeight - SIZE / 2 - MARGIN, Math.max(SIZE / 2 + MARGIN, pos.y * window.innerHeight));
+    buddy.classList.toggle("snap", !!animate);
+    buddy.classList.toggle("left", pos.side === "left");
+    buddy.style.top = "auto";
+    buddy.style.bottom = `${window.innerHeight - centerY - SIZE / 2}px`;
+    if (pos.side === "left") { buddy.style.left = `${MARGIN}px`; buddy.style.right = "auto"; }
+    else { buddy.style.right = `${MARGIN}px`; buddy.style.left = "auto"; }
+  }
+  place(false);
+  window.addEventListener("resize", () => place(false));
+
+  let drag = null;
+  head.addEventListener("pointerdown", (e) => {
+    drag = { x: e.clientX, y: e.clientY, moved: false };
+    head.setPointerCapture(e.pointerId);
+  });
+  head.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    if (!drag.moved && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 6) return;
+    drag.moved = true;
+    head.classList.add("dragging");
+    bubble.hidden = true;
+    // 拖的时候脑袋跟着手指走
+    buddy.classList.remove("snap", "left");
+    buddy.style.right = "auto";
+    buddy.style.left = `${e.clientX - buddy.offsetWidth + SIZE / 2}px`;
+    buddy.style.bottom = `${window.innerHeight - e.clientY - SIZE / 2}px`;
+  });
+  const drop = (e) => {
+    if (!drag) return;
+    const moved = drag.moved;
+    drag = null;
+    head.classList.remove("dragging");
+    if (!moved) {
+      say(`今天一共刷了 ${Math.floor(state.used / 60)} 分钟啦（App 和网页一起算）。`, "head-shy", 4);
+      return;
+    }
+    pos = { side: e.clientX < window.innerWidth / 2 ? "left" : "right", y: e.clientY / window.innerHeight };
+    place(true);
+    api.storage.local.set({ whaleupPos: pos });
+  };
+  head.addEventListener("pointerup", drop);
+  head.addEventListener("pointercancel", drop);
 
   // 每 5 秒记一次：页面在前台才算。回来的是和鲸醒 App 合在一起的今天总时长
   const site = state.sites.find((x) => location.hostname === x || location.hostname.endsWith("." + x)) || location.hostname;
