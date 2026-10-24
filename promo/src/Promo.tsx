@@ -2,16 +2,17 @@ import React from "react";
 import { AbsoluteFill, Audio, Img, Sequence, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { DayBg, NightBg } from "./bg";
 import { C, FONT, ROUND } from "./theme";
+import { ShortVideoFeed } from "./feed";
 import { Bubble, Browser, Cursor, Feed, MenuBar, Stars, Subtitle, useIn } from "./ui";
 import { Whale } from "./Whale";
 
 // 时间线（30fps）：每段的起点和长度按配音时长排
 const S = {
-  night: [0, 150], peek: [150, 120], no: [270, 90], magic: [360, 210], title: [570, 135],
-  ring: [705, 117], stats: [822, 120], ai: [942, 132], digest: [1074, 123], force: [1197, 147],
-  eat: [1344, 108], stretch: [1452, 75], swim: [1527, 75], dance: [1602, 123], bye: [1725, 190],
+  night: [0, 300], peek: [300, 120], no: [420, 90], magic: [510, 210], title: [720, 135],
+  ring: [855, 117], stats: [972, 120], ai: [1092, 132], digest: [1224, 123], force: [1347, 147],
+  eat: [1494, 108], stretch: [1602, 75], swim: [1677, 75], dance: [1752, 123], bye: [1875, 190],
 } as const;
-export const TOTAL = 1915;
+export const TOTAL = 2065;
 
 const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 const Voice = ({ id, at }: { id: string; at: number }) => (
@@ -23,12 +24,61 @@ const Voice = ({ id, at }: { id: string; at: number }) => (
 const BROWSER = { x: 330, y: 110, w: 1180, h: 740 };
 const HOME = { x: 1690, y: 1050 };
 
+// 开头“关了又开”：两次关掉浏览器（点左上角红点）、两次 ⌘⇧T 又打开，每一轮划得更快
+const LOOP = { close1: 66, reopen1: 116, close2: 190, reopen2: 218 };
+const PHASES = [
+  { from: 0, base: 3, swipes: [16, 38, 58], clock: "00:30", sub: "00:30　“刷一个就睡。”" },
+  { from: LOOP.close1, base: 3, swipes: [] as number[], clock: "00:31", sub: "关了关了，睡觉！" },
+  { from: LOOP.reopen1 - 16, base: 17, swipes: [128, 142, 156, 170, 184], clock: "01:15", sub: "……就再看一个。" },
+  { from: LOOP.close2, base: 22, swipes: [] as number[], clock: "01:16", sub: "这次真关了。" },
+  { from: LOOP.reopen2 - 14, base: 39, swipes: [230, 239, 248, 257, 266, 275, 284, 293, 330, 380, 440], clock: "02:13", sub: "最后一个，真的。" },
+];
+const ALL_SWIPES = PHASES.flatMap((p) => p.swipes);
+
+/** 浏览器开合：1 是开着，0 是关着 */
+const browserOpen = (f: number, finalClose: number) => {
+  const seg: [number, number, number][] = [ // [起, 止, 方向] 方向 1 = 打开，-1 = 关上
+    [LOOP.close1, LOOP.close1 + 8, -1], [LOOP.reopen1, LOOP.reopen1 + 8, 1],
+    [LOOP.close2, LOOP.close2 + 8, -1], [LOOP.reopen2, LOOP.reopen2 + 8, 1], [finalClose, finalClose + 8, -1],
+  ];
+  let v = 1;
+  for (const [a, b, dir] of seg) {
+    if (f < a) return v;
+    if (f < b) return dir > 0 ? (f - a) / (b - a) : 1 - (f - a) / (b - a);
+    v = dir > 0 ? 1 : 0;
+  }
+  return v;
+};
+
+/** ⌘⇧T：手比脑子快 */
+const Shortcut = ({ from }: { from: number }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  return (
+    <div style={{ position: "absolute", left: 0, right: 0, top: 380, display: "flex", flexDirection: "column", alignItems: "center", gap: 18 }}>
+      <div style={{ display: "flex", gap: 20 }}>
+        {["⌘", "⇧", "T"].map((k, i) => {
+          const p = spring({ frame: frame - from - i * 3, fps, config: { damping: 9, stiffness: 220 } });
+          const down = frame - from - i * 3 >= 8;
+          return (
+            <div key={k} style={{ width: 120, height: 120, borderRadius: 22, background: "#f4f5f9", color: "#222", fontSize: 64, fontWeight: 700,
+              display: "flex", alignItems: "center", justifyContent: "center", transform: `scale(${p}) translateY(${down ? 6 : 0}px)`,
+              boxShadow: down ? "0 2px 0 #9aa0b5" : "0 8px 0 #9aa0b5", fontFamily: FONT }}>{k}</div>
+          );
+        })}
+      </div>
+      <div style={{ color: "#fff", fontSize: 34, fontWeight: 800, opacity: interpolate(frame - from, [8, 14], [0, 1], clamp) }}>（手比脑子快）</div>
+    </div>
+  );
+};
+
 const NightScene = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const local = frame; // 这一段从 0 开始
+  const phase = [...PHASES].reverse().find((p) => local >= p.from)!;
   // 刷到第几个
-  const count = Math.min(47, 40 + Math.floor(local / 22));
+  const count = Math.min(47, phase.base + phase.swipes.filter((f) => f <= local).length);
 
   // 她：第 2 段从屏幕下面冒出来；第 4 段飞去浏览器右上角施法，再飞回来
   const peekFrom = S.peek[0] + 10;
@@ -45,22 +95,43 @@ const NightScene = () => {
     : local >= S.no[0] + 15 && local < closeAt ? "angry"
     : local >= closeAt ? "idle" : "watching";
 
-  // 浏览器“砰”地关掉
-  const poof = interpolate(local, [closeAt, closeAt + 8], [1, 0], clamp);
+  // 浏览器开开关关，最后被她“砰”地关掉
+  const poof = browserOpen(local, closeAt);
+  // 刷视频时鼠标停在视频上，每划一下往上一拨；关浏览器时移到左上角红点
+  const V = { x: BROWSER.x + BROWSER.w / 2 + 150, y: BROWSER.y + 560 };
+  const D = { x: BROWSER.x + 18, y: BROWSER.y + 18 };
+  const lastSwipe = ALL_SWIPES.filter((f) => f <= local).pop() ?? -99;
+  const flick = interpolate(local - lastSwipe, [0, 3, 9], [0, -40, 0], clamp);
+  const toClose = (a: number) => interpolate(local, [a - 16, a - 2], [0, 1], clamp);
+  const backToVideo = (a: number) => interpolate(local, [a, a + 12], [1, 0], clamp);
+  const k = local < LOOP.close1 + 20 ? toClose(LOOP.close1)
+    : local < LOOP.close2 - 20 ? backToVideo(LOOP.reopen1 + 2)
+    : local < LOOP.close2 + 20 ? toClose(LOOP.close2) : backToVideo(LOOP.reopen2 + 2);
+  const feedCursor = { x: V.x + (D.x - V.x) * k, y: V.y + (D.y - V.y) * k + (k === 0 ? flick : 0) };
+  const clicking = [LOOP.close1, LOOP.close2].some((c) => local >= c - 2 && local < c + 3);
   const cursorIn = interpolate(local, [S.no[0], S.no[0] + 14], [0, 1], clamp);
   const pressed = local >= S.no[0] + 14 && local < S.no[0] + 20;
   const btn = { x: HOME.x - 120, y: HOME.y - 420 };
 
+  // 镜头：开头推近到竖屏视频上，看清在刷什么；她冒出来时拉回全景
+  // 关浏览器前拉远（看得见点了左上角红点），重新打开后再推近
+  const zoom = interpolate(local,
+    [0, LOOP.close1 - 20, LOOP.close1 - 8, LOOP.reopen1 + 8, LOOP.reopen1 + 20, LOOP.close2 - 20, LOOP.close2 - 8,
+     LOOP.reopen2 + 8, LOOP.reopen2 + 20, S.peek[0] - 4, S.peek[0] + 16],
+    [1.42, 1.45, 1, 1, 1.45, 1.48, 1, 1, 1.45, 1.52, 1], { ...clamp, easing: (t) => t * t * (3 - 2 * t) });
+  const focus = { x: BROWSER.x + BROWSER.w / 2, y: BROWSER.y + BROWSER.h / 2 + 20 };
+
   return (
     <AbsoluteFill style={{ fontFamily: FONT }}>
+      <AbsoluteFill style={{ transform: `scale(${zoom})`, transformOrigin: `${focus.x}px ${focus.y}px` }}>
       <NightBg />
-      <MenuBar time="02:13" />
+      <MenuBar time={phase.clock} />
       {poof > 0 && (
         <Browser {...BROWSER} title="刷刷看 - 停不下来" url="https://shuashuakan.example/feed"
           style={{ transform: `scale(${0.6 + 0.4 * poof})`, opacity: poof }}>
           <div style={{ position: "absolute", inset: 0, background: "#0d0f16" }} />
-          <div style={{ position: "absolute", left: "50%", top: 24, bottom: 24, width: 420, marginLeft: -210, borderRadius: 16, overflow: "hidden" }}>
-            <Feed />
+          <div style={{ position: "absolute", left: "50%", top: 16, bottom: 16, width: 400, marginLeft: -200, borderRadius: 16, overflow: "hidden" }}>
+            <ShortVideoFeed swipes={ALL_SWIPES} />
           </div>
           <div style={{ position: "absolute", right: 36, top: 30, color: "#fff", fontSize: 26, fontWeight: 800,
             background: "rgba(255,255,255,.12)", padding: "8px 18px", borderRadius: 12 }}>第 {count} 个</div>
@@ -97,7 +168,17 @@ const NightScene = () => {
       {cursorIn > 0 && local < S.no[0] + 40 && (
         <Cursor x={interpolate(cursorIn, [0, 1], [1100, btn.x + 60])} y={interpolate(cursorIn, [0, 1], [700, btn.y + 190])} pressed={pressed} />
       )}
-      {local < S.peek[0] && <Subtitle text="凌晨两点。你：“再刷最后一个。”" />}
+      {local < S.no[0] - 2 && poof > 0 && <Cursor x={feedCursor.x} y={feedCursor.y} pressed={clicking} />}
+      </AbsoluteFill>
+      {local >= LOOP.reopen1 - 16 && local < LOOP.reopen1 + 2 && <Shortcut from={LOOP.reopen1 - 16} />}
+      {local >= LOOP.reopen2 - 14 && local < LOOP.reopen2 + 2 && <Shortcut from={LOOP.reopen2 - 14} />}
+      {/* 开头的内心独白：放在视频左边的空地上，不挡视频 */}
+      {local < S.peek[0] && (
+        <div style={{ position: "absolute", left: 90, top: 470, width: 480, fontFamily: ROUND, fontSize: 60, fontWeight: 700, color: "#fff", lineHeight: 1.35,
+          textShadow: `0 4px 0 ${C.ink}, 0 0 18px rgba(0,0,0,.6)`, opacity: interpolate(local - phase.from, [0, 6], [0, 1], clamp) }}>
+          {phase.sub.split("　").map((line, i) => <div key={i} style={{ fontSize: i === 0 && phase.sub.includes("　") ? 40 : 60, opacity: i === 0 && phase.sub.includes("　") ? 0.8 : 1 }}>{line}</div>)}
+        </div>
+      )}
     </AbsoluteFill>
   );
 };
