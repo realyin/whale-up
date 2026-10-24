@@ -1,6 +1,6 @@
 // 在短视频网站上：右下角趴着大肥鱼的小脑袋，显示今天刷了几分钟；快到时限提醒；到了就盖上锁屏卡片、把视频停掉
 (async () => {
-  let state = await call("get");
+  let state = await loadMirror();
   if (!isWatchedSite(state, location.hostname)) return;
 
   const img = (name) => api.runtime.getURL(`images/${name}.png`);
@@ -82,8 +82,8 @@
   $(".lock button").onclick = () => location.replace(api.runtime.getURL("rest.html"));
 
   function render(s) {
-    const left = limitSeconds(s) - s.used;
-    $(".count").textContent = `${Math.floor(s.used / 60)}/${todayLimit(s)}′`;
+    const left = limitSeconds(s) - usedOf(s);
+    $(".count").textContent = `${Math.floor(usedOf(s) / 60)}/${todayLimit(s)}′`;
     if (left <= 0) return lock(s);
     if (!$(".lock").hidden) unlock();
     if (left <= 300 && !warned) {
@@ -94,8 +94,8 @@
 
   $(".head").style.backgroundImage = `url(${img("head-watching")})`;
   render(state);
-  if (limitSeconds(state) - state.used > 300) {
-    say(`我盯着你呢。今天还能刷 ${Math.ceil((limitSeconds(state) - state.used) / 60)} 分钟。`, "head-watching", 4);
+  if (limitSeconds(state) - usedOf(state) > 300) {
+    say(`我盯着你呢。今天还能刷 ${Math.ceil((limitSeconds(state) - usedOf(state)) / 60)} 分钟。`, "head-watching", 4);
   }
   // ---- 拖动她：按住滑到别处，松手贴到最近的左边或右边；位置记住，换网页也一样 ----
   const buddy = $(".buddy");
@@ -139,7 +139,7 @@
     drag = null;
     head.classList.remove("dragging");
     if (!moved) {
-      say(`今天一共刷了 ${Math.floor(state.used / 60)} 分钟啦（App 和网页一起算）。`, "head-shy", 4);
+      say(`今天一共刷了 ${Math.floor(usedOf(state) / 60)} 分钟啦（App 和网页一起算）。`, "head-shy", 4);
       return;
     }
     pos = { side: e.clientX < window.innerWidth / 2 ? "left" : "right", y: e.clientY / window.innerHeight };
@@ -149,19 +149,25 @@
   head.addEventListener("pointerup", drop);
   head.addEventListener("pointercancel", drop);
 
-  // 每 5 秒记一次：页面在前台才算。回来的是和鲸醒 App 合在一起的今天总时长
+  // 每 5 秒：页面在前台、还没锁上，就先在本地记 5 秒、马上判断；再顺带和 App 同步（同步卡住也不影响计时）
   const site = state.sites.find((x) => location.hostname === x || location.hostname.endsWith("." + x)) || location.hostname;
+  async function refresh(synced) {
+    if (!synced) return;
+    if (limitSeconds(synced) - usedOf(synced) > 300) warned = false;
+    state = synced;
+    render(state);
+  }
   setInterval(async () => {
     if (document.visibilityState !== "visible") return;
-    state = await call("tick", { seconds: 5, site });
+    if ($(".lock").hidden) state = await addLocal(site, 5);
+    else state = await loadMirror();
     render(state);
+    sync().then(refresh);
   }, 5000);
+  sync().then(refresh);
 
-  // 切回这个页面时马上刷新一次（可能在 App 或弹出面板里改了设置）
-  document.addEventListener("visibilitychange", async () => {
-    if (document.visibilityState !== "visible") return;
-    state = await call("get");
-    if (limitSeconds(state) - state.used > 300) warned = false;
-    render(state);
+  // 切回这个页面时马上同步一次（可能在 App 或弹出面板里改了设置）
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") sync().then(refresh);
   });
 })();
