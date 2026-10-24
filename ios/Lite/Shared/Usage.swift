@@ -18,6 +18,9 @@ struct Usage: Codable {
     var extraDay = ""
     /// 今天多看（正）或少看（负）几分钟，只管今天
     var extra = 0
+    /// 今天“多看”了几次（每天最多 maxGrants 次）
+    var grants = 0
+    static let maxGrants = 2
     /// Safari 扩展管哪些网站
     var sites = ["douyin.com", "bilibili.com", "b23.tv", "youtube.com", "kuaishou.com", "xiaohongshu.com",
                  "weibo.com", "weibo.cn", "tiktok.com", "ixigua.com", "toutiao.com"]
@@ -39,6 +42,7 @@ struct Usage: Codable {
         open = try c.decodeIfPresent([String: Date].self, forKey: .open) ?? d.open
         extraDay = try c.decodeIfPresent(String.self, forKey: .extraDay) ?? d.extraDay
         extra = try c.decodeIfPresent(Int.self, forKey: .extra) ?? d.extra
+        grants = try c.decodeIfPresent(Int.self, forKey: .grants) ?? d.grants
         sites = try c.decodeIfPresent([String].self, forKey: .sites) ?? d.sites
         good = try c.decodeIfPresent([String: Double].self, forKey: .good) ?? d.good
     }
@@ -62,7 +66,7 @@ struct Usage: Codable {
             u.open = [:]
             u.good = [:]
         }
-        if u.extraDay != today { u.extraDay = today; u.extra = 0 }
+        if u.extraDay != today { u.extraDay = today; u.extra = 0; u.grants = 0 }
         return u
     }
 
@@ -100,9 +104,17 @@ struct Usage: Codable {
         seconds[app, default: 0] += min(Self.maxSession, Date().timeIntervalSince(started))
     }
 
-    /// 今天多看 / 少看：今天最少 5 分钟，最多多看 3 小时
-    mutating func adjust(_ minutes: Int) {
+    var grantsLeft: Int { max(0, Self.maxGrants - grants) }
+
+    /// 今天多看 / 少看：今天最少 5 分钟，最多多看 3 小时。多看每天最多 maxGrants 次，用完了返回 false
+    @discardableResult
+    mutating func adjust(_ minutes: Int) -> Bool {
+        if minutes > 0 {
+            guard grants < Self.maxGrants else { return false }
+            grants += 1
+        }
         extra = min(180, max(5 - limit, extra + minutes))
+        return true
     }
 
     mutating func setLimit(_ value: Int) {
@@ -119,7 +131,7 @@ struct Usage: Codable {
 
     /// 给 Safari 扩展的：App 自己记的时间和设置（Safari 的时间以扩展那边为准）
     var snapshot: [String: Any] {
-        ["used": used, "appUsed": appUsed, "limit": limit, "extra": extra, "dayStartHour": dayStartHour, "sites": sites,
+        ["used": used, "appUsed": appUsed, "limit": limit, "extra": extra, "grants": grants, "dayStartHour": dayStartHour, "sites": sites,
          "ai": AISettings.load().ready]
     }
 }

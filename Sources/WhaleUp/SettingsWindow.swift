@@ -22,7 +22,7 @@ final class SettingsModel: ObservableObject {
     /// 让桌宠用当前选的声音说一句
     var previewVoice: () -> Void = {}
     /// 强制关闭：今天已经看了多久、今天一共能看多久、今天调整了多少（秒）
-    @Published var forceToday: (used: Double, limit: Double, extra: Double) = (0, 0, 0)
+    @Published var forceToday: (used: Double, limit: Double, extra: Double, grantsLeft: Int) = (0, 0, 0, 2)
     /// 今天多看（正）或少看（负）几分钟
     var adjustForce: (Double) -> Void = { _ in }
     /// 恢复成每天的时长
@@ -209,7 +209,7 @@ struct RuleListEditor: View {
 struct ForceSettings: View {
     @Binding var config: Config
     let browserURL: String?
-    var today: (used: Double, limit: Double, extra: Double) = (0, 0, 0)
+    var today: (used: Double, limit: Double, extra: Double, grantsLeft: Int) = (0, 0, 0, 2)
     var adjust: (Double) -> Void = { _ in }
     var reset: () -> Void = {}
 
@@ -239,6 +239,7 @@ struct ForceSettings: View {
                         .foregroundStyle(extra > 0 ? Color.orange : extra < 0 ? Color.accentColor : Color.primary)
                         .frame(minWidth: 64)
                     Button("＋5") { adjust(5) }
+                        .disabled(today.grantsLeft == 0)
                     Text("今天一共 \(formatDuration(today.limit))").foregroundStyle(.secondary)
                     Spacer()
                     if extra != 0 {
@@ -246,7 +247,7 @@ struct ForceSettings: View {
                     }
                 }
                 .font(.callout)
-                Text("只管今天，明天凌晨 \(config.dayStartHour) 点自动归零；今天最少 5 分钟。")
+                Text("只管今天，明天凌晨 \(config.dayStartHour) 点自动归零；今天最少 5 分钟。多看要输一串随机码，每天最多 \(ForceCloser.maxGrants) 次（今天还剩 \(today.grantsLeft) 次）；少看随时可以。")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Divider()

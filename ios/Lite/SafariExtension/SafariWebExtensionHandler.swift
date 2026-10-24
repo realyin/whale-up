@@ -13,7 +13,9 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
 
         if let settings = message["settings"] as? [String: Any] {
             if let limit = (settings["limit"] as? NSNumber)?.intValue { u.setLimit(limit) }
-            if let extra = (settings["extra"] as? NSNumber)?.intValue { u.extra = 0; u.adjust(extra) }
+            // 扩展那边已经输过随机码、数过次数了，这里直接记下
+            if let extra = (settings["extra"] as? NSNumber)?.intValue { u.extra = min(180, max(5 - u.limit, extra)) }
+            if let grants = (settings["grants"] as? NSNumber)?.intValue { u.grants = max(u.grants, grants) }
             if let sites = settings["sites"] as? [String], !sites.isEmpty { u.sites = sites }
             changed = true
         }

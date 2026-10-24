@@ -36,7 +36,7 @@ async function loadMirror() {
   // 上一版存的日期没补零（"2026-10-5"）
   if (m.day) m.day = m.day.replace(/-(\d)(?=-|$)/g, "-0$1");
   const today = dayKey(m.dayStartHour);
-  if (m.day !== today) Object.assign(m, { day: today, appUsed: 0, web: {}, good: {}, extra: 0 });
+  if (m.day !== today) Object.assign(m, { day: today, appUsed: 0, web: {}, good: {}, extra: 0, grants: 0 });
   return m;
 }
 
@@ -88,7 +88,7 @@ async function judgeContent(key, info) {
 async function changeLocal(change) {
   const m = await loadMirror();
   change(m);
-  m.dirty = { limit: m.limit, extra: m.extra, sites: m.sites };
+  m.dirty = { limit: m.limit, extra: m.extra, sites: m.sites, grants: m.grants || 0 };
   await saveMirror(m);
   return m;
 }
@@ -107,7 +107,8 @@ function sync() {
       if (!r || r.error || typeof r.appUsed !== "number") return null;
       // Safari 的时间以这边为准；只从 App 那边拿它自己记的时间和设置
       const now = await loadMirror();
-      Object.assign(now, { appUsed: r.appUsed, limit: r.limit, extra: r.extra, dayStartHour: r.dayStartHour, sites: r.sites,
+      Object.assign(now, { appUsed: r.appUsed, limit: r.limit, extra: r.extra, grants: Math.max(now.grants || 0, r.grants || 0),
+                           dayStartHour: r.dayStartHour, sites: r.sites,
                            lastSync: Date.now() });
       if (dirty && JSON.stringify(now.dirty) === JSON.stringify(dirty)) now.dirty = null;
       await saveMirror(now);

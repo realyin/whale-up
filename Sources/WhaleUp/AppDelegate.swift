@@ -258,7 +258,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// 设置页上显示的“今天已看 / 今天能看”
     private func refreshForceToday() {
         guard let settings = main?.model.settings else { return }
-        let value = (used: forceUsedToday, limit: forceCloser.limitSeconds(config: config), extra: forceCloser.extraSeconds)
+        let value = (used: forceUsedToday, limit: forceCloser.limitSeconds(config: config), extra: forceCloser.extraSeconds,
+                     grantsLeft: forceCloser.grantsLeft())
         if settings.forceToday != value { settings.forceToday = value }
     }
 
@@ -460,7 +461,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func loadConfig() {
         let oldInterval = config.checkIntervalSeconds
-        (config, configError) = Config.load()
+        let (loaded, error) = Config.load()
+        // 直接改配置文件来放松管控：不生效，写回原来的（要放松得在设置里输随机码）
+        if configLoaded, error == nil, !loaded.loosenings(from: config).isEmpty, !CodeGate.isUnlocked {
+            config.save()
+            configModifiedAt = modificationDate(of: Config.fileURL)
+            toast.show("🔒 配置文件里放松管控的改动没有生效\n要放松，请在设置里改（需要输随机码）")
+            return
+        }
+        (config, configError) = (loaded, error)
+        configLoaded = true
         LogicalDay.startHour = config.dayStartHour
         configModifiedAt = modificationDate(of: Config.fileURL)
         if timer != nil, config.checkIntervalSeconds != oldInterval { scheduleTimer() }
@@ -476,8 +486,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return nil
     }
 
-    /// 设置页或菜单改了配置：保存并立即生效
+    /// 启动时读过一次配置以后，再读到的放松改动都要输随机码
+    private var configLoaded = false
+
+    /// 设置页或菜单改了配置：保存并立即生效。放松管控的改动要先输随机码
     private func applyConfig(_ new: Config) {
+        let loosened = new.loosenings(from: config)
+        if !loosened.isEmpty && !CodeGate.isUnlocked {
+            // 先把界面改回去，再弹随机码（不在 SwiftUI 改值的过程里弹窗）
+            main?.model.settings.replace(with: config)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, CodeGate.confirm(loosened) else { return }
+                self.applyConfig(new)
+                self.toast.show("🔓 已经改了：\(loosened.joined(separator: "；"))")
+            }
+            return
+        }
         let oldInterval = config.checkIntervalSeconds
         config = new
         configError = nil
@@ -734,9 +758,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         var new = config
         new.forceCloseEnabled.toggle()
         applyConfig(new)
-        toast.show(config.forceCloseEnabled
-                   ? "🔒 强制关闭已开启：\(config.forceCloseSites.joined(separator: "、")) 连续看 \(Int(config.forceCloseMinutes)) 分钟会被自动关掉"
-                   : "🔓 强制关闭已关闭")
+        // 关掉要输随机码，结果由 applyConfig 提示
+        if new.forceCloseEnabled {
+            toast.show("🔒 强制关闭已开启：\(config.forceCloseSites.joined(separator: "、")) 每天累计看 \(Int(config.forceCloseMinutes)) 分钟会被自动关掉")
+        }
     }
 
     @objc private func pauseOneHour() {
@@ -783,12 +808,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             settings.labelerStatus = labelerStatus
             settings.adjustForce = { [weak self] minutes in
                 guard let self else { return }
+                if minutes > 0 {
+                    // 多看：每天最多 2 次，还要输随机码
+                    guard self.forceCloser.grantsLeft() > 0 else {
+                        self.toast.show("今天已经多看过 \(ForceCloser.maxGrants) 次了，不能再加了。明天见～")
+                        return
+                    }
+                    let left = self.forceCloser.grantsLeft()
+                    DispatchQueue.main.async {
+                        guard CodeGate.confirm(["今天多看 \(Int(minutes)) 分钟（今天还能多看 \(left) 次）"]) else { return }
+                        self.forceCloser.adjust(minutes: minutes, config: self.config)
+                        self.saveTracker()
+                        self.refreshForceToday()
+                    }
+                    return
+                }
                 self.forceCloser.adjust(minutes: minutes, config: self.config)
                 self.saveTracker()
                 self.refreshForceToday()
             }
             settings.resetForce = { [weak self] in
                 guard let self else { return }
+                // 少看了再恢复，等于放松：也要输随机码
+                if self.forceCloser.extraSeconds < 0 {
+                    DispatchQueue.main.async {
+                        guard CodeGate.confirm(["恢复成每天的 \(Int(self.config.forceCloseMinutes)) 分钟"]) else { return }
+                        self.forceCloser.resetToday()
+                        self.saveTracker()
+                        self.refreshForceToday()
+                    }
+                    return
+                }
                 self.forceCloser.resetToday()
                 self.saveTracker()
                 self.refreshForceToday()

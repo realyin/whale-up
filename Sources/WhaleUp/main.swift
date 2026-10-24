@@ -16,11 +16,19 @@ MainActor.assumeIsolated {
                               to: URL(fileURLWithPath: dir).appendingPathComponent("nudge-friction.png"))
         exit(0)
     }
+    if let path = ProcessInfo.processInfo.environment["WHALEUP_RENDER_CODE"] {
+        // 开发用：把随机码图片存成 PNG 看看清不清楚
+        let img = CodeGate.image(of: RandomCode.make(), width: 380, height: 56)
+        if let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+            try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+        }
+        exit(0)
+    }
     if let dir = ProcessInfo.processInfo.environment["WHALEUP_RENDER_SETTINGS"] {
         let model = SettingsModel(config: Config.load().0) { _ in }
         model.browserURL = "https://www.zhihu.com/question/123"
         model.config.forceCloseEnabled = true
-        model.forceToday = (used: 12 * 60, limit: (model.config.forceCloseMinutes - 5) * 60, extra: -5 * 60)
+        model.forceToday = (used: 12 * 60, limit: (model.config.forceCloseMinutes - 5) * 60, extra: -5 * 60, grantsLeft: 1)
         for tab in SettingsTab.allCases {
             SettingsWindow.renderPNG(model: model, tab: tab,
                                      to: URL(fileURLWithPath: dir).appendingPathComponent("settings-\(tab).png"))

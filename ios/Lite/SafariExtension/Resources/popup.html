@@ -41,6 +41,17 @@
     <h3>要管的网站（一行一个）</h3>
     <textarea id="sites"></textarea>
   </div>
+  <!-- 放松管控前的随机码：画在 canvas 上不能复制，输入框不能粘贴 -->
+  <div id="gate" hidden style="position:fixed;inset:0;background:rgba(233,240,252,.97);padding:16px;overflow:auto">
+    <div style="text-align:center"><img src="images/pose-heart.png" style="width:120px"></div>
+    <h3 style="text-align:center;margin:6px 0">真的需要吗？</h3>
+    <div class="hint" id="gateWhat" style="text-align:center"></div>
+    <canvas id="gateCode" width="560" height="84" style="width:100%;margin:12px 0;border-radius:12px"></canvas>
+    <input id="gateInput" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="在这里一个一个字打"
+           style="width:100%;box-sizing:border-box;font:600 17px ui-monospace,monospace;padding:10px;border:2px solid var(--ink);border-radius:12px;color:var(--ink);background:#fff">
+    <div class="hint" id="gateMsg" style="color:#eb6834"></div>
+    <div class="row" style="margin-top:12px"><button id="gateCancel">算了，不改了</button><span style="flex:1"></span><button id="gateOk" style="background:#3d6fd6;color:#fff">确定</button></div>
+  </div>
   <script src="shared.js"></script>
   <script src="popup.js"></script>
 </body></html>

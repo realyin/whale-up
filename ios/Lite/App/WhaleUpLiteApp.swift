@@ -93,6 +93,8 @@ struct WhaleShortcuts: AppShortcutsProvider {
 struct HomeView: View {
     @State private var usage = Usage.load()
     @State private var breathe = false
+    /// 正在等输随机码的放松操作
+    @State private var gate: CodeRequest?
     @Environment(\.scenePhase) private var phase
     private let ticker = Timer.publish(every: 15, on: .main, in: .common).autoconnect()
 
@@ -122,6 +124,9 @@ struct HomeView: View {
         }
         // 自己的配色，不跟系统深色模式变
         .preferredColorScheme(.light)
+        .sheet(item: $gate) { req in
+            CodeSheet(request: req) { gate = nil }
+        }
         .onReceive(ticker) { _ in usage = Usage.load() }
         .onChange(of: phase) { _, p in if p == .active { usage = Usage.load() } }
         .task { _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) }
@@ -207,7 +212,10 @@ struct HomeView: View {
                     Text("分钟").font(.system(size: 16, weight: .bold, design: .rounded)).foregroundColor(Theme.muted)
                 }
                 Spacer()
-                RoundButton(symbol: "plus") { setLimit(usage.limit + 5) }
+                RoundButton(symbol: "plus") {
+                    // 调大每天的时长要先输随机码
+                    gate = CodeRequest(what: "每天从 \(usage.limit) 分钟调到 \(min(240, usage.limit + 5)) 分钟") { setLimit(usage.limit + 5) }
+                }
             }
             Text("抖音等 App 和 Safari 里刷视频一起算，Safari 扩展的面板里改的也是这一个。")
                 .font(.system(size: 13, design: .rounded)).foregroundColor(Theme.muted)
@@ -232,12 +240,24 @@ struct HomeView: View {
                         .font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundColor(Theme.muted)
                 }
                 Spacer()
-                RoundButton(symbol: "plus") { adjust(5) }
+                RoundButton(symbol: "plus") {
+                    // 多看：每天最多 2 次，还要输随机码
+                    if usage.grantsLeft > 0 {
+                        gate = CodeRequest(what: "今天多看 5 分钟（今天还能多看 \(usage.grantsLeft) 次）") { adjust(5) }
+                    }
+                }
+                .opacity(usage.grantsLeft == 0 ? 0.35 : 1)
             }
-            Text("只管今天，明天凌晨 \(usage.dayStartHour) 点自动归零。想今天管得狠一点，就往少了调。")
+            Text("只管今天，明天凌晨 \(usage.dayStartHour) 点自动归零。少看随时可以；多看要输一串随机码，每天最多 \(Usage.maxGrants) 次（今天还剩 \(usage.grantsLeft) 次）。")
                 .font(.system(size: 13, design: .rounded)).foregroundColor(Theme.muted)
-            if usage.extra != 0 {
-                Button("恢复成每天的 \(usage.limit) 分钟") { adjust(-usage.extra) }
+            if usage.extra < 0 {
+                // 少看了：恢复等于放松，也要输随机码（多看的恢复是收紧，随时可以）
+                Button("恢复成每天的 \(usage.limit) 分钟") {
+                    gate = CodeRequest(what: "恢复成每天的 \(usage.limit) 分钟") { usage.extra = 0; usage.save() }
+                }
+                    .buttonStyle(Pill(small: true))
+            } else if usage.extra > 0 {
+                Button("恢复成每天的 \(usage.limit) 分钟") { usage.extra = 0; usage.save() }
                     .buttonStyle(Pill(small: true))
             }
         }
@@ -408,5 +428,77 @@ struct Pill: ButtonStyle {
                 .overlay(Capsule().stroke(Theme.ink, lineWidth: 2))
                 .shadow(color: Theme.ink, radius: 0, y: configuration.isPressed ? 0 : 3))
             .offset(y: configuration.isPressed ? 3 : 0)
+    }
+}
+
+// MARK: - 随机码
+
+/// 一次放松操作：输对随机码以后执行 action
+struct CodeRequest: Identifiable {
+    let id = UUID()
+    let what: String
+    let action: () -> Void
+}
+
+/// 照着打一遍随机码：码画在格子里（不能选中复制），输入框里粘贴会被清掉，3 分钟内有效
+struct CodeSheet: View {
+    let request: CodeRequest
+    let done: () -> Void
+    @State private var code = CodeSheet.make()
+    @State private var input = ""
+    @State private var started = Date()
+    @State private var message: String?
+
+    static func make() -> String {
+        let alphabet = Array("ACDEFHJKMNPQRTUVWXY34679")  // 去掉了容易看混的字符
+        let chars = (0..<20).map { _ in alphabet.randomElement()! }
+        return stride(from: 0, to: 20, by: 4).map { String(chars[$0..<$0 + 4]) }.joined(separator: "-")
+    }
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Image(uiImage: UIImage(named: "pose-heart") ?? UIImage()).resizable().scaledToFit().frame(height: 110)
+            Text("真的需要吗？").font(.system(size: 22, weight: .heavy, design: .rounded)).foregroundColor(Theme.ink)
+            Text("要改的：\(request.what)\n照着打一遍下面这串码再决定（不能复制粘贴，3 分钟内有效）。")
+                .font(.system(size: 14, design: .rounded)).foregroundColor(Theme.muted).multilineTextAlignment(.center)
+            // 一个字一个格子画出来，没法长按选中
+            let chars = Array(code)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 12), spacing: 6) {
+                ForEach(Array(chars.enumerated()), id: \.offset) { _, ch in
+                    Text(String(ch)).font(.system(size: 19, weight: .heavy, design: .monospaced)).foregroundColor(Theme.ink)
+                        .frame(maxWidth: .infinity, minHeight: 32)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(ch == "-" ? Color.clear : Theme.soft))
+                }
+            }
+            .allowsHitTesting(false)
+            TextField("在这里一个一个字打", text: $input)
+                .font(.system(size: 18, weight: .semibold, design: .monospaced)).foregroundColor(Theme.ink)
+                .textInputAutocapitalization(.characters).autocorrectionDisabled()
+                .padding(12).background(RoundedRectangle(cornerRadius: 12).fill(Theme.soft))
+                .onChange(of: input) { old, new in
+                    // 一次多出来好几个字：是粘贴，退回去
+                    if new.count - old.count > 1 { input = old; message = "要一个字一个字打哦" }
+                }
+            if let message { Text(message).font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundColor(Theme.junk) }
+            HStack(spacing: 12) {
+                Button("算了，不改了") { done() }.buttonStyle(Pill(small: true))
+                Button("确定") { check() }.buttonStyle(Pill())
+            }
+        }
+        .padding(24)
+        .background(SkyBackground())
+        .preferredColorScheme(.light)
+    }
+
+    private func check() {
+        if Date().timeIntervalSince(started) > 180 {
+            code = Self.make(); input = ""; started = Date()
+            message = "超过 3 分钟了，换了一串新的码"
+            return
+        }
+        let norm = { (s: String) in s.uppercased().filter { $0.isLetter || $0.isNumber } }
+        guard !input.isEmpty, norm(input) == norm(code) else { message = "打得不对，再看仔细一点"; return }
+        request.action()
+        done()
     }
 }
