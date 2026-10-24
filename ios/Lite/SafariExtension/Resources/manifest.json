@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "鲸醒",
+  "version": "0.1.0",
+  "description": "在 Safari 里刷短视频时，大肥鱼帮你计时；今天刷够了就把视频关掉。数据只存在手机上。",
+  "icons": { "48": "images/icon-48.png", "128": "images/icon-128.png" },
+  "action": { "default_popup": "popup.html", "default_icon": "images/icon-48.png" },
+  "permissions": ["storage"],
+  "content_scripts": [{ "matches": ["<all_urls>"], "js": ["shared.js", "content.js"], "run_at": "document_idle" }],
+  "web_accessible_resources": [{ "resources": ["images/*", "rest.html"], "matches": ["<all_urls>"] }]
+}

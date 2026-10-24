@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --ink: #1f2b5e; --paper: #fffdf9; --accent: #3d6fd6; --soft: #e9f0fc; }
+  body { margin: 0; padding: 16px; background: var(--soft); color: var(--ink); font-family: -apple-system, "PingFang SC", sans-serif; min-width: 280px; }
+  .top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .top img { width: 60px; height: 60px; border-radius: 50%; border: 3px solid var(--ink); background: var(--paper); }
+  .top b { font-size: 20px; }
+  .card { background: var(--paper); border: 2.5px solid var(--ink); border-radius: 18px; padding: 12px 14px; margin-bottom: 12px; }
+  .card h3 { margin: 0 0 8px; font-size: 15px; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .row .num { flex: 1; font-size: 20px; font-weight: 800; }
+  button { border: 2px solid var(--ink); border-radius: 999px; background: var(--soft); color: var(--ink); font-size: 15px; font-weight: 800;
+           padding: 6px 14px; box-shadow: 0 2px 0 var(--ink); }
+  button:active { transform: translateY(2px); box-shadow: none; }
+  .hint { font-size: 12px; color: #5a6383; margin-top: 8px; line-height: 1.5; }
+  textarea { width: 100%; box-sizing: border-box; height: 110px; border: 2px solid var(--ink); border-radius: 12px; padding: 8px; font-size: 13px; }
+  .bar { height: 10px; border-radius: 6px; background: #f1e3dc; overflow: hidden; margin-top: 6px; }
+  .bar i { display: block; height: 100%; background: #eb6834; }
+</style></head>
+<body>
+  <div class="top"><img id="face" src="images/head-watching.png"><div><b id="used"></b><div class="hint" id="left"></div></div></div>
+  <div class="bar"><i id="bar"></i></div>
+  <div style="height:12px"></div>
+  <div class="card">
+    <h3>每天一共能刷</h3>
+    <div class="row"><button id="minus">－5</button><span class="num" id="limit"></span><button id="plus">＋5</button></div>
+  </div>
+  <div class="card">
+    <h3>今天再多看</h3>
+    <div class="row"><button data-extra="5">5 分钟</button><button data-extra="10">10 分钟</button><button data-extra="30">30 分钟</button></div>
+    <div class="hint">真想多看才点。只管今天，用完还会锁上。</div>
+  </div>
+  <div class="card">
+    <h3>要管的网站（一行一个）</h3>
+    <textarea id="sites"></textarea>
+  </div>
+  <script src="shared.js"></script>
+  <script src="popup.js"></script>
+</body></html>

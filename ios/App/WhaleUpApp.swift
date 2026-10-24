@@ -96,7 +96,8 @@ struct HomeView: View {
                 .overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.ink, lineWidth: 2.5))
                 .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.accent.opacity(0.35), style: StrokeStyle(lineWidth: 1.2, dash: [5, 4])).padding(5))
             // 没设置好时比心求你设置，平时喝着奶茶陪你，用完了就抱着抱枕睡觉
-            Image(shielded ? "pose-sleep_curl" : authorized && !settings.isEmpty ? "pose-milktea" : "pose-heart")
+            // 她的图是包里的普通 PNG（不在素材目录里），要用 UIImage 读
+            Image(uiImage: UIImage(named: shielded ? "pose-sleep_curl" : authorized && !settings.isEmpty ? "pose-milktea" : "pose-heart") ?? UIImage())
                 .resizable().scaledToFit().frame(height: 200)
                 .scaleEffect(x: breathe ? 1.006 : 1, y: breathe ? 1.02 : 1, anchor: .bottom)
                 .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: breathe)
@@ -184,9 +185,10 @@ struct Pill: ButtonStyle {
             .font(.system(small ? .subheadline : .headline, design: .rounded).weight(.bold))
             .foregroundColor(small ? Theme.ink : .white)
             .padding(.horizontal, small ? 14 : 20).padding(.vertical, small ? 8 : 14)
-            .background(Capsule().fill(small ? Theme.soft : Theme.accent))
-            .overlay(Capsule().stroke(Theme.ink, lineWidth: 2))
-            .shadow(color: Theme.ink, radius: 0, y: configuration.isPressed ? 0 : 3)
+            // 阴影只给底下的胶囊，不然字也会带一道重影
+            .background(Capsule().fill(small ? Theme.soft : Theme.accent)
+                .overlay(Capsule().stroke(Theme.ink, lineWidth: 2))
+                .shadow(color: Theme.ink, radius: 0, y: configuration.isPressed ? 0 : 3))
             .offset(y: configuration.isPressed ? 3 : 0)
     }
 }

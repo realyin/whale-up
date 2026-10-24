@@ -18,6 +18,8 @@
 |---|---|
 | ![右键圆环](docs/images/ring.png) | ![今天页](docs/images/today.png) |
 
+还有 iPhone 版（免费账号就能装：快捷指令自动化 + Safari 扩展），见 [`ios/`](ios/README.md)。
+
 宣传短片的源码在 [`promo/`](promo/)（Remotion 写的，`npm run render` 导出）。
 
 ## 它怎么判断
@@ -222,7 +224,7 @@ WHALEUP_MASCOT_SEQ=dance WHALEUP_MASCOT_DEMO=/tmp build/WhaleUp.app/Contents/Mac
 
 - Firefox 不支持读取网址，只能按 App 判断
 - AI 判断、小结只覆盖装了扩展的浏览器；抖音等桌面 App 只按名字判断
-- 手机还没有，见 [路线图](docs/roadmap.md)
+- iPhone 版刚开始，见 [`ios/`](ios/README.md)；安卓还没有
 
 ## 从「专注守护 / FocusGuard」升级
 
