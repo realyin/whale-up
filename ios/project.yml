@@ -1,0 +1,117 @@
+# 用 XcodeGen 生成 Xcode 工程：xcodegen generate
+name: WhaleUpPhone
+options:
+  bundleIdPrefix: io.github.realyin.whaleup
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    # 换成你自己的开发者团队 ID（钥匙串里 Apple Development 证书的 OU）
+    DEVELOPMENT_TEAM: 79DV8NKV89
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: 0.1.0
+    CURRENT_PROJECT_VERSION: 1
+    TARGETED_DEVICE_FAMILY: "1"
+
+# 主 App 和所有扩展共用的权限：屏幕使用时间 + 共享设置的 App Group
+entitlementsBase: &entitlements
+  com.apple.developer.family-controls: true
+  com.apple.security.application-groups:
+    - group.io.github.realyin.whaleup
+
+targets:
+  WhaleUp:
+    type: application
+    platform: iOS
+    sources: [App, Shared]
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: 鲸醒
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+    entitlements:
+      path: App/WhaleUp.entitlements
+      properties: *entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.realyin.whaleup.ios
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    dependencies:
+      - target: Monitor
+      - target: ShieldConfig
+      - target: ShieldAction
+      - target: Report
+
+  Monitor:
+    type: app-extension
+    platform: iOS
+    sources: [Monitor, Shared]
+    info:
+      path: Monitor/Info.plist
+      properties:
+        CFBundleDisplayName: 鲸醒计时
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.deviceactivity.monitor-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).Monitor
+    entitlements:
+      path: Monitor/Monitor.entitlements
+      properties: *entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.realyin.whaleup.ios.monitor
+
+  ShieldConfig:
+    type: app-extension
+    platform: iOS
+    sources: [ShieldConfig, Shared]
+    info:
+      path: ShieldConfig/Info.plist
+      properties:
+        CFBundleDisplayName: 鲸醒锁屏
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.ManagedSettingsUI.shield-configuration-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShieldConfig
+    entitlements:
+      path: ShieldConfig/ShieldConfig.entitlements
+      properties: *entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.realyin.whaleup.ios.shield
+
+  ShieldAction:
+    type: app-extension
+    platform: iOS
+    sources: [ShieldAction, Shared]
+    info:
+      path: ShieldAction/Info.plist
+      properties:
+        CFBundleDisplayName: 鲸醒锁屏按钮
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.ManagedSettings.shield-action-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShieldActionHandler
+    entitlements:
+      path: ShieldAction/ShieldAction.entitlements
+      properties: *entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.realyin.whaleup.ios.shieldaction
+
+  Report:
+    type: app-extension
+    platform: iOS
+    sources: [Report, Shared]
+    info:
+      path: Report/Info.plist
+      properties:
+        CFBundleDisplayName: 鲸醒统计
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.deviceactivityui.report-extension
+    entitlements:
+      path: Report/Report.entitlements
+      properties: *entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.realyin.whaleup.ios.report
