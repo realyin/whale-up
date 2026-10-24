@@ -278,7 +278,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .close:
             if let id = current?.bundleID {
                 let url = current?.url
-                closeWithMagic(line: "看了这么久了还不关！", bundleID: id) { [weak self] in
+                // 暂停只停提醒，强制关闭照关：这时让她说清楚，免得以为暂停坏了
+                let line = pausedUntil != nil ? "暂停只停提醒，强制关闭还是要关的哦！" : "看了这么久了还不关！"
+                closeWithMagic(line: line, bundleID: id) { [weak self] in
                     guard let self else { return }
                     self.monitor.closeJunk(bundleID: id, nudgedURL: url, rules: self.config.forceCloseSites)
                 }
@@ -558,7 +560,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             Item(id: "today", title: "今天", icon: "📊"),
             Item(id: "lists", title: "加入名单", icon: "📌", disabled: rule == nil, children: lists,
                  note: rule.map { "把 \($0) 加入…" }),
-            pausedUntil == nil ? Item(id: "pause", title: "暂停 1 小时", icon: "⏸️") : Item(id: "resume", title: "恢复监测", icon: "▶️"),
+            pausedUntil == nil ? Item(id: "pause", title: "暂停提醒", icon: "⏸️") : Item(id: "resume", title: "恢复监测", icon: "▶️"),
             Item(id: "more", title: "更多", icon: "💭", children: more),
         ]
         mascot.openRing(items, status: todayStatus())
@@ -583,7 +585,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case "add:junk": if let rule { addJunkSite(rule) }
         case "add:force": if let rule { addForceSite(rule) }
         case "add:sensitive": if let rule { addSensitiveSite(rule) }
-        case "pause": pauseOneHour(); mascot.remark("好，我先歇一个小时，不管你啦～", seconds: 3)
+        case "pause":
+            pauseOneHour()
+            mascot.remark(config.forceCloseEnabled ? "好，这一个小时我不唠叨你～不过强制关闭还是照关哦。" : "好，这一个小时我不唠叨你～", seconds: 4)
         case "resume": resume(); mascot.remark("我回来盯着你啦！", seconds: 3)
         case "main": openMain()
         case "settings": openSettings()
@@ -705,7 +709,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
-        _ = pausedUntil != nil ? action("恢复监测", #selector(resume)) : action("暂停 1 小时", #selector(pauseOneHour))
+        _ = pausedUntil != nil ? action("恢复监测", #selector(resume)) : action("暂停提醒 1 小时", #selector(pauseOneHour))
         let force = action("强制关闭模式", #selector(toggleForceClose))
         force.state = config.forceCloseEnabled ? .on : .off
 

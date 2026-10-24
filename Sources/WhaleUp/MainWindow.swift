@@ -288,7 +288,7 @@ struct TodayPage: View {
         let digest = model.digestWriter?.digest(for: today)
 
         PageScaffold(title: "今天", subtitle: Date().formatted(.dateTime.month().day().weekday(.wide))) {
-            Button(model.pausedUntil == nil ? "暂停 1 小时" : "恢复监测") { model.togglePause() }
+            Button(model.pausedUntil == nil ? "暂停提醒 1 小时" : "恢复监测") { model.togglePause() }
         } content: {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {

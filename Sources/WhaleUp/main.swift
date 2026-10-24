@@ -236,7 +236,7 @@ func runMascotDemo(to dir: String) {
                      Item(id: "today", title: "今天", icon: "📊"),
                      Item(id: "lists", title: "加入名单", icon: "📌", children: [Item(id: "a", title: "没营养", icon: "🍿", on: true)],
                           note: "把 bilibili.com 加入…"),
-                     Item(id: "pause", title: "暂停 1 小时", icon: "⏸️"),
+                     Item(id: "pause", title: "暂停提醒", icon: "⏸️"),
                      Item(id: "more", title: "更多", icon: "💭", children: [Item(id: "main", title: "主窗口", icon: "🏠"),
                          Item(id: "settings", title: "设置", icon: "⚙️"), Item(id: "force", title: "强制关闭", icon: "🛡️", on: true),
                          Item(id: "hide", title: "隐藏她", icon: "🙈"), Item(id: "quit", title: "退出", icon: "🚪")])]
