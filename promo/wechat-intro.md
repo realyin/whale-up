@@ -27,6 +27,6 @@
 
 目前支持 macOS，配合 Chrome 扩展（Safari 也可以）。项目开源在 GitHub：
 
-**👉 [GitHub 地址]**
+**👉 https://github.com/realyin/whale-up**
 
 少刷一点，多陪陪自己～
