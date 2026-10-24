@@ -49,7 +49,7 @@ final class ForceCloserTests: XCTestCase {
     func testGrantGivesExtraTimeOnlyForToday() {
         var f = ForceCloser()
         XCTAssertEqual(f.record(onSite: true, usedToday: 12 * 60, now: at(20, 21), config: config, calendar: cal), .close)
-        f.grant(minutes: 10, now: at(20, 21), calendar: cal)
+        f.adjust(minutes: 10, config: config, now: at(20, 21), calendar: cal)
         XCTAssertNil(f.record(onSite: true, usedToday: 12 * 60, now: at(20, 21, 1), config: config, calendar: cal))
         XCTAssertEqual(f.record(onSite: true, usedToday: 20 * 60, now: at(20, 21, 9), config: config, calendar: cal), .close)
         // 第二天（凌晨 4 点以后）加的时间清零
@@ -61,8 +61,28 @@ final class ForceCloserTests: XCTestCase {
     /// 凌晨 4 点前还算前一天，加的时间还在
     func testGrantSurvivesPastMidnightUntilDayStart() {
         var f = ForceCloser()
-        f.grant(minutes: 10, now: at(20, 23), calendar: cal)
+        f.adjust(minutes: 10, config: config, now: at(20, 23), calendar: cal)
         XCTAssertNil(f.record(onSite: true, usedToday: 15 * 60, now: at(21, 1), config: config, calendar: cal))
         XCTAssertEqual(f.extraSeconds, 600)
+    }
+
+    /// 少看：今天的时长变短，提前关；最少 5 分钟
+    func testReduceTodayClosesEarlier() {
+        var f = ForceCloser()
+        f.adjust(minutes: -5, config: config, now: at(20, 20), calendar: cal)
+        XCTAssertEqual(f.limitSeconds(config: config), 5 * 60)
+        XCTAssertEqual(f.record(onSite: true, usedToday: 6 * 60, now: at(20, 20, 1), config: config, calendar: cal), .close)
+        // 再往少了调也不会低于 5 分钟
+        f.adjust(minutes: -30, config: config, now: at(20, 20, 2), calendar: cal)
+        XCTAssertEqual(f.limitSeconds(config: config), 5 * 60)
+    }
+
+    func testResetGoesBackToDailyLimit() {
+        var f = ForceCloser()
+        f.adjust(minutes: 30, config: config, now: at(20, 20), calendar: cal)
+        XCTAssertEqual(f.limitSeconds(config: config), 40 * 60)
+        f.resetToday(now: at(20, 21), calendar: cal)
+        XCTAssertEqual(f.limitSeconds(config: config), 10 * 60)
+        XCTAssertEqual(f.extraSeconds, 0)
     }
 }

@@ -21,10 +21,12 @@ final class SettingsModel: ObservableObject {
     var previewMascot: () -> Void = {}
     /// 让桌宠用当前选的声音说一句
     var previewVoice: () -> Void = {}
-    /// 强制关闭：今天已经看了多久、今天一共能看多久（秒）
-    @Published var forceToday: (used: Double, limit: Double) = (0, 0)
-    /// 给今天多加几分钟
-    var grantForce: (Double) -> Void = { _ in }
+    /// 强制关闭：今天已经看了多久、今天一共能看多久、今天调整了多少（秒）
+    @Published var forceToday: (used: Double, limit: Double, extra: Double) = (0, 0, 0)
+    /// 今天多看（正）或少看（负）几分钟
+    var adjustForce: (Double) -> Void = { _ in }
+    /// 恢复成每天的时长
+    var resetForce: () -> Void = {}
     private let onChange: (Config) -> Void
     private var replacing = false
 
@@ -98,7 +100,7 @@ struct SettingsView: View {
                         rules: $model.config.junkApps, browserURL: nil, isSite: false)
                 case .force:
                     ForceSettings(config: $model.config, browserURL: model.browserURL,
-                                  today: model.forceToday, grant: model.grantForce)
+                                  today: model.forceToday, adjust: model.adjustForce, reset: model.resetForce)
                 case .reminders:
                     ReminderSettings(config: $model.config, previewMascot: model.previewMascot, previewVoice: model.previewVoice)
                 case .content:
@@ -207,8 +209,9 @@ struct RuleListEditor: View {
 struct ForceSettings: View {
     @Binding var config: Config
     let browserURL: String?
-    var today: (used: Double, limit: Double) = (0, 0)
-    var grant: (Double) -> Void = { _ in }
+    var today: (used: Double, limit: Double, extra: Double) = (0, 0, 0)
+    var adjust: (Double) -> Void = { _ in }
+    var reset: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -221,18 +224,30 @@ struct ForceSettings: View {
             Text("看满后马上关掉当前网页，当天不管什么时候再打开都会被关掉。新的一天从凌晨 \(config.dayStartHour) 点开始算。")
                 .font(.callout).foregroundStyle(.secondary)
             if config.forceCloseEnabled {
+                let over = today.used >= today.limit
+                Text("今天已看 \(formatDuration(today.used)) / \(formatDuration(today.limit))")
+                    .font(.callout)
+                    .foregroundStyle(over ? Color.orange : Color.secondary)
+                // 想多看或者今天想管得更狠，只能在这里手动调，而且只管今天
                 HStack(spacing: 10) {
-                    let over = today.used >= today.limit
-                    Text("今天已看 \(formatDuration(today.used)) / \(formatDuration(today.limit))")
-                        .foregroundStyle(over ? Color.orange : Color.secondary)
+                    Text("今天多看 / 少看").foregroundStyle(.secondary)
+                    Button("－5") { adjust(-5) }
+                        .disabled(today.limit <= 5 * 60)
+                    let extra = Int(today.extra / 60)
+                    Text(extra == 0 ? "±0 分钟" : extra > 0 ? "+\(extra) 分钟" : "−\(-extra) 分钟")
+                        .monospacedDigit()
+                        .foregroundStyle(extra > 0 ? Color.orange : extra < 0 ? Color.accentColor : Color.primary)
+                        .frame(minWidth: 64)
+                    Button("＋5") { adjust(5) }
+                    Text("今天一共 \(formatDuration(today.limit))").foregroundStyle(.secondary)
                     Spacer()
-                    // 真的要多看，只能在这里手动加，而且只管今天
-                    Text("今天再多看").foregroundStyle(.secondary)
-                    ForEach([5.0, 10, 30], id: \.self) { m in
-                        Button("\(Int(m)) 分钟") { grant(m) }
+                    if extra != 0 {
+                        Button("恢复成每天的 \(Int(config.forceCloseMinutes)) 分钟") { reset() }
                     }
                 }
                 .font(.callout)
+                Text("只管今天，明天凌晨 \(config.dayStartHour) 点自动归零；今天最少 5 分钟。")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Divider()
             RuleListEditor(

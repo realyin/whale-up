@@ -258,7 +258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// 设置页上显示的“今天已看 / 今天能看”
     private func refreshForceToday() {
         guard let settings = main?.model.settings else { return }
-        let value = (used: forceUsedToday, limit: forceCloser.limitSeconds(config: config))
+        let value = (used: forceUsedToday, limit: forceCloser.limitSeconds(config: config), extra: forceCloser.extraSeconds)
         if settings.forceToday != value { settings.forceToday = value }
     }
 
@@ -777,12 +777,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             settings.extensionLastSeen = server?.lastReportAt
             settings.serverError = server?.error ?? (contentStore == nil ? "内容数据库打开失败" : nil)
             settings.labelerStatus = labelerStatus
-            settings.grantForce = { [weak self] minutes in
+            settings.adjustForce = { [weak self] minutes in
                 guard let self else { return }
-                self.forceCloser.grant(minutes: minutes)
+                self.forceCloser.adjust(minutes: minutes, config: self.config)
                 self.saveTracker()
                 self.refreshForceToday()
-                self.toast.show("⏳ 今天多给你 \(Int(minutes)) 分钟，用完还会关")
+            }
+            settings.resetForce = { [weak self] in
+                guard let self else { return }
+                self.forceCloser.resetToday()
+                self.saveTracker()
+                self.refreshForceToday()
             }
             settings.previewVoice = { [weak self] in
                 guard let self, let mascot = self.mascot else { return }

@@ -11,7 +11,7 @@ public enum ForceAction: Equatable {
 /// 之后当天不管什么时候再打开都立刻关掉。想多看只能手动给今天加时间（grant），不会过一会儿自己放开。
 /// 累计时长由调用方从使用统计里算好传进来（和界面上看到的数字一致）。纯逻辑，不依赖系统 API。
 public struct ForceCloser: Codable, Equatable {
-    /// 今天手动加的时间（秒）
+    /// 今天手动调整的时间（秒）：正的是多看，负的是少看
     public private(set) var extraSeconds: Double = 0
     var day = ""
     var warned = false
@@ -20,8 +20,14 @@ public struct ForceCloser: Codable, Equatable {
 
     public init() {}
 
-    /// 今天能看多久（秒）
-    public func limitSeconds(config: Config) -> Double { config.forceCloseMinutes * 60 + extraSeconds }
+    /// 今天能看多久（秒）：每天的时长加上今天的调整，最少 5 分钟
+    public func limitSeconds(config: Config) -> Double {
+        max(Self.minimumSeconds, config.forceCloseMinutes * 60 + extraSeconds)
+    }
+
+    /// 今天最少能看 5 分钟、最多多看 3 小时
+    static let minimumSeconds: Double = 5 * 60
+    static let maximumExtraSeconds: Double = 3 * 3600
 
     /// 今天的时间用完了没有
     public func isBlocked(usedToday: Double, config: Config) -> Bool {
@@ -42,10 +48,18 @@ public struct ForceCloser: Codable, Equatable {
         return nil
     }
 
-    /// 手动给今天加时间
-    public mutating func grant(minutes: Double, now: Date = Date(), calendar: Calendar = .current) {
+    /// 今天多看（正）或少看（负）几分钟，只管今天
+    public mutating func adjust(minutes: Double, config: Config, now: Date = Date(), calendar: Calendar = .current) {
         rollDay(now, calendar)
-        extraSeconds += minutes * 60
+        let lowest = Self.minimumSeconds - config.forceCloseMinutes * 60
+        extraSeconds = min(Self.maximumExtraSeconds, max(lowest, extraSeconds + minutes * 60))
+        warned = false
+    }
+
+    /// 恢复成每天的时长
+    public mutating func resetToday(now: Date = Date(), calendar: Calendar = .current) {
+        rollDay(now, calendar)
+        extraSeconds = 0
         warned = false
     }
 
