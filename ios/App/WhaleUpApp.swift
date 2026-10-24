@@ -43,7 +43,7 @@ struct HomeView: View {
                             HStack {
                                 Text(selectionSummary).foregroundColor(Theme.ink)
                                 Spacer()
-                                Image(systemName: "chevron.right").foregroundColor(.secondary)
+                                Image(systemName: "chevron.right").foregroundColor(Theme.muted)
                             }
                         }
                     }
@@ -52,7 +52,7 @@ struct HomeView: View {
                             Text("\(settings.dailyMinutes) 分钟").font(.system(.title3, design: .rounded).bold())
                         }
                         Text("看满就锁上，当天不管什么时候再打开都会被关掉。一天从凌晨 \(settings.dayStartHour) 点开始算。")
-                            .font(.footnote).foregroundColor(.secondary)
+                            .font(.footnote).foregroundColor(Theme.muted)
                     }
                     card("今天再多看") {
                         HStack(spacing: 10) {
@@ -61,7 +61,7 @@ struct HomeView: View {
                             }
                         }
                         Text(settings.todayExtra > 0 ? "今天已经多加了 \(settings.todayExtra) 分钟，用完还会锁上。" : "真想多看才点。加的时间只管今天，用完还会锁上。")
-                            .font(.footnote).foregroundColor(.secondary)
+                            .font(.footnote).foregroundColor(Theme.muted)
                     }
                     card(nil) {
                         DeviceActivityReport(.today, filter: filter).frame(minHeight: 260)
@@ -71,7 +71,9 @@ struct HomeView: View {
             }
             .padding(20)
         }
-        .background(Theme.soft.ignoresSafeArea())
+        .background(SkyBackground())
+        // 自己的配色，不跟系统深色模式变
+        .preferredColorScheme(.light)
         .familyActivityPicker(isPresented: $picking, selection: $settings.selection)
         .onChange(of: settings) { _ in apply() }
         .onChange(of: phase) { p in

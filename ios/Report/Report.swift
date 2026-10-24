@@ -55,7 +55,7 @@ struct TodayView: View {
                 Text(formatMinutes(summary.total)).font(.system(.title3, design: .rounded).bold()).foregroundColor(Theme.junk)
             }
             if summary.apps.isEmpty {
-                Text("今天还没刷，真棒～").foregroundColor(.secondary)
+                Text("今天还没刷，真棒～").foregroundColor(Theme.muted)
             }
             let longest = summary.apps.first?.seconds ?? 1
             ForEach(summary.apps) { app in
@@ -63,7 +63,7 @@ struct TodayView: View {
                     HStack {
                         Text(app.name).font(.subheadline.weight(.semibold))
                         Spacer()
-                        Text(formatMinutes(app.seconds)).font(.subheadline).foregroundColor(.secondary)
+                        Text(formatMinutes(app.seconds)).font(.subheadline).foregroundColor(Theme.muted)
                     }
                     GeometryReader { geo in
                         Capsule().fill(Theme.junk.opacity(0.85))

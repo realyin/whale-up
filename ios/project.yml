@@ -32,6 +32,7 @@ targets:
         CFBundleDisplayName: 鲸醒
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIUserInterfaceStyle: Light
     entitlements:
       path: App/WhaleUp.entitlements
       properties: *entitlements

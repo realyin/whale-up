@@ -30,6 +30,14 @@ struct Usage: Codable {
     private static let key = "usage"
 
     static func load() -> Usage {
+        // 开发用：用 -demo 启动时给一份示例数据，截图看界面
+        if ProcessInfo.processInfo.arguments.contains("-demo") {
+            var d = Usage()
+            d.day = d.dayKey(); d.extraDay = d.day
+            d.seconds = ["抖音": 14 * 60, "小红书": 5 * 60]
+            d.open = ["B 站": Date().addingTimeInterval(-3 * 60)]
+            return d
+        }
         var u = UserDefaults.standard.data(forKey: key).flatMap { try? JSONDecoder().decode(Usage.self, from: $0) } ?? Usage()
         let today = u.dayKey()
         if u.day != today {
@@ -154,145 +162,218 @@ struct WhaleShortcuts: AppShortcutsProvider {
 struct HomeView: View {
     @State private var usage = Usage.load()
     @State private var breathe = false
-    @State private var showSetup = false
     @Environment(\.scenePhase) private var phase
     private let ticker = Timer.publish(every: 15, on: .main, in: .common).autoconnect()
 
     private var line: String {
-        if usage.isOver { return "今天刷够了哦！\n先放下手机，明天凌晨 \(usage.dayStartHour) 点再见～" }
-        if usage.used == 0 { return "今天还没刷，真棒～\n每天 \(usage.limit + usage.extra) 分钟，用完我就拦着你。" }
-        return "今天刷了 \(formatMinutes(usage.used))，还能刷 \(formatMinutes(usage.leftSeconds))。"
+        if usage.isOver { return "今天刷够了哦！先放下手机～\n明天凌晨 \(usage.dayStartHour) 点再见。" }
+        if usage.used < 60 { return "今天还没刷，真棒～\n每天 \(usage.limit + usage.extra) 分钟，用完我就拦着你。" }
+        if usage.leftSeconds <= 300 { return "只剩 \(formatMinutes(usage.leftSeconds)) 了，\n看完这个就停吧！" }
+        return "我盯着你呢。\n今天还能刷 \(formatMinutes(usage.leftSeconds))。"
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 18) {
-                VStack(spacing: 6) {
-                    Text(line)
-                        .font(.system(.callout, design: .rounded).weight(.semibold))
-                        .multilineTextAlignment(.center)
-                        .foregroundColor(Theme.ink)
-                        .padding(.horizontal, 18).padding(.vertical, 12)
-                        .background(RoundedRectangle(cornerRadius: 18).fill(Theme.paper))
-                        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.ink, lineWidth: 2.5))
-                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.accent.opacity(0.35), style: StrokeStyle(lineWidth: 1.2, dash: [5, 4])).padding(5))
-                    // 刷够了抱着抱枕睡觉，平时喝着奶茶陪你
-                    // 她的图是包里的普通 PNG（不在素材目录里），要用 UIImage 读
-                    Image(uiImage: UIImage(named: usage.isOver ? "pose-sleep_curl" : "pose-milktea") ?? UIImage())
-                        .resizable().scaledToFit().frame(height: 210)
-                        .scaleEffect(x: breathe ? 1.006 : 1, y: breathe ? 1.02 : 1, anchor: .bottom)
-                        .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: breathe)
-                        .onAppear { breathe = true }
+        ZStack {
+            SkyBackground()
+            ScrollView {
+                VStack(spacing: 16) {
+                    header
+                    hero
+                    todayCard
+                    limitCard
+                    extraCard
+                    SetupCard()
                 }
-
-                card("今天") {
-                    let apps = Set(usage.seconds.keys).union(usage.open.keys).sorted { usage.usedSeconds($0) > usage.usedSeconds($1) }
-                    ProgressView(value: min(1, usage.used / max(1, usage.limitSeconds)))
-                        .tint(usage.isOver ? Theme.junk : Theme.accent)
-                    if apps.isEmpty {
-                        Text("还没有记录。按下面的步骤设好快捷指令，打开抖音时就会开始计时。")
-                            .font(.footnote).foregroundColor(.secondary)
-                    }
-                    ForEach(apps, id: \.self) { app in
-                        HStack {
-                            Text(app).font(.subheadline.weight(.semibold))
-                            if usage.open[app] != nil { Text("正在刷").font(.caption2.bold()).foregroundColor(Theme.junk) }
-                            Spacer()
-                            Text(formatMinutes(usage.usedSeconds(app))).font(.subheadline).foregroundColor(.secondary)
-                        }
-                    }
-                }
-
-                card("每天一共能刷") {
-                    Stepper(value: Binding(get: { usage.limit }, set: { usage.limit = $0; usage.save() }), in: 5...240, step: 5) {
-                        Text("\(usage.limit) 分钟").font(.system(.title3, design: .rounded).bold())
-                    }
-                    Text("抖音等 App 和 Safari 分开算：Safari 里的时长在 Safari 扩展的面板里设。")
-                        .font(.footnote).foregroundColor(.secondary)
-                }
-
-                card("今天再多看") {
-                    HStack(spacing: 10) {
-                        ForEach([5, 10, 30], id: \.self) { m in
-                            Button("\(m) 分钟") {
-                                usage.extra += m
-                                usage.save()
-                            }
-                            .buttonStyle(Pill(small: true))
-                        }
-                    }
-                    Text(usage.extra > 0 ? "今天已经多加了 \(usage.extra) 分钟，用完还会拦着你。" : "真想多看才点。只管今天，用完还会拦着你。")
-                        .font(.footnote).foregroundColor(.secondary)
-                }
-
-                card("怎么设置") {
-                    DisclosureGroup(isExpanded: $showSetup) {
-                        SetupGuide().padding(.top, 8)
-                    } label: {
-                        Text("两步：快捷指令自动化 + Safari 扩展").font(.subheadline).foregroundColor(Theme.ink)
-                    }
-                }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 30)
             }
-            .padding(20)
         }
-        .background(Theme.soft.ignoresSafeArea())
+        // 自己的配色，不跟系统深色模式变
+        .preferredColorScheme(.light)
         .onReceive(ticker) { _ in usage = Usage.load() }
         .onChange(of: phase) { _, p in if p == .active { usage = Usage.load() } }
         .task { _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) }
     }
 
-    private func card<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.system(.headline, design: .rounded)).foregroundColor(Theme.ink)
-            content()
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text("鲸醒").font(.system(size: 30, weight: .heavy, design: .rounded)).foregroundColor(Theme.ink)
+            Text("WhaleUp").font(.system(size: 15, weight: .bold, design: .rounded)).foregroundColor(Theme.accent)
+            Spacer()
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 20).fill(Theme.paper))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Theme.ink, lineWidth: 2))
+        .padding(.top, 6)
+    }
+
+    /// 大肥鱼和她的气泡：刷够了抱着抱枕睡觉，平时喝着奶茶陪你
+    private var hero: some View {
+        VStack(spacing: 2) {
+            SpeechBubble(text: line)
+            Image(uiImage: UIImage(named: usage.isOver ? "pose-sleep_curl" : "pose-milktea") ?? UIImage())
+                .resizable().scaledToFit().frame(height: 200)
+                .scaleEffect(x: breathe ? 1.006 : 1, y: breathe ? 1.02 : 1, anchor: .bottom)
+                .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: breathe)
+                .onAppear { breathe = true }
+        }
+    }
+
+    private var todayCard: some View {
+        CardBox(title: "今天", icon: "chart.pie.fill") {
+            HStack(spacing: 20) {
+                UsageRing(used: usage.used, total: usage.limitSeconds)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(usage.isOver ? "今天用完啦" : "还能刷")
+                        .font(.system(size: 14, weight: .semibold, design: .rounded)).foregroundColor(Theme.muted)
+                    Text(usage.isOver ? "明天见" : formatMinutes(usage.leftSeconds))
+                        .font(.system(size: 26, weight: .heavy, design: .rounded))
+                        .foregroundColor(usage.isOver ? Theme.junk : Theme.ink)
+                    if usage.extra > 0 {
+                        Text("含今天多加的 \(usage.extra) 分钟")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded)).foregroundColor(Theme.accent)
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Capsule().fill(Theme.soft))
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            let apps = Set(usage.seconds.keys).union(usage.open.keys).sorted { usage.usedSeconds($0) > usage.usedSeconds($1) }
+            if apps.isEmpty {
+                Text("还没有记录。按下面“怎么设置”设好快捷指令，打开抖音时就会开始计时。")
+                    .font(.system(size: 13, design: .rounded)).foregroundColor(Theme.muted)
+            } else {
+                Divider().overlay(Theme.track)
+                ForEach(apps, id: \.self) { app in
+                    HStack(spacing: 8) {
+                        Text(app).font(.system(size: 15, weight: .semibold, design: .rounded)).foregroundColor(Theme.ink)
+                        if usage.open[app] != nil {
+                            Text("正在刷").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundColor(.white)
+                                .padding(.horizontal, 6).padding(.vertical, 2).background(Capsule().fill(Theme.junk))
+                        }
+                        Spacer()
+                        Text(formatMinutes(usage.usedSeconds(app)))
+                            .font(.system(size: 15, weight: .semibold, design: .rounded)).foregroundColor(Theme.muted)
+                    }
+                }
+            }
+        }
+    }
+
+    private var limitCard: some View {
+        CardBox(title: "每天一共能刷", icon: "hourglass") {
+            HStack {
+                RoundButton(symbol: "minus") { setLimit(usage.limit - 5) }
+                Spacer()
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text("\(usage.limit)").font(.system(size: 40, weight: .heavy, design: .rounded)).foregroundColor(Theme.ink)
+                    Text("分钟").font(.system(size: 16, weight: .bold, design: .rounded)).foregroundColor(Theme.muted)
+                }
+                Spacer()
+                RoundButton(symbol: "plus") { setLimit(usage.limit + 5) }
+            }
+            Text("抖音等 App 在这里算；Safari 里刷视频的时长在 Safari 扩展的面板里设。")
+                .font(.system(size: 13, design: .rounded)).foregroundColor(Theme.muted)
+        }
+    }
+
+    private var extraCard: some View {
+        CardBox(title: "今天再多看", icon: "plus.circle.fill") {
+            HStack(spacing: 10) {
+                ForEach([5, 10, 30], id: \.self) { m in
+                    Button("+\(m) 分钟") {
+                        usage.extra += m
+                        usage.save()
+                    }
+                    .buttonStyle(Pill(small: true))
+                }
+            }
+            Text("真想多看才点。只管今天，用完还会拦着你。")
+                .font(.system(size: 13, design: .rounded)).foregroundColor(Theme.muted)
+        }
+    }
+
+    private func setLimit(_ value: Int) {
+        usage.limit = min(240, max(5, value))
+        usage.save()
     }
 }
 
-/// 设置步骤
-struct SetupGuide: View {
+/// 圆形的 − / ＋ 按钮
+struct RoundButton: View {
+    let symbol: String
+    let action: () -> Void
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("① 抖音等 App：快捷指令自动化").font(.subheadline.bold())
-            VStack(alignment: .leading, spacing: 6) {
-                step("打开“快捷指令” → 底部“自动化” → 右上角 ＋ → “App”")
-                step("选抖音（可以多选：快手、小红书、B 站……），勾“已打开”，选“立即运行”")
-                step("下一步里选 App“鲸醒”的动作“开始刷”，App 名字填“抖音”")
-                step("再建一个：同样选这些 App，勾“已关闭”，动作选“刷完了”")
-            }
-            Button("打开快捷指令") { UIApplication.shared.open(URL(string: "shortcuts://")!) }.buttonStyle(Pill(small: true))
-
-            Text("② Safari 里刷视频：Safari 扩展").font(.subheadline.bold()).padding(.top, 4)
-            VStack(alignment: .leading, spacing: 6) {
-                step("打开“设置” → “App” → “Safari 浏览器” → “扩展”")
-                step("打开“鲸醒”，网站权限选“允许”")
-                step("在 Safari 地址栏点扩展图标，就能看到今天刷了多久、设时长")
-            }
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 20, weight: .heavy))
+                .foregroundColor(Theme.ink)
+                .frame(width: 52, height: 52)
+                .background(Circle().fill(Theme.soft))
+                .overlay(Circle().stroke(Theme.ink, lineWidth: 2))
         }
-        .foregroundColor(Theme.ink)
-    }
-
-    private func step(_ text: String) -> some View {
-        HStack(alignment: .top, spacing: 6) {
-            Text("•")
-            Text(text).font(.footnote)
-        }
+        .buttonStyle(.plain)
     }
 }
 
-/// 女仆装风格的按钮
+/// 设置步骤：编号圆点 + 一句话
+struct SetupCard: View {
+    @State private var open = false
+
+    var body: some View {
+        CardBox(title: "怎么设置", icon: "wand.and.stars") {
+            Button { withAnimation(.easeInOut(duration: 0.2)) { open.toggle() } } label: {
+                HStack {
+                    Text("两步：快捷指令自动化 + Safari 扩展")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded)).foregroundColor(Theme.ink)
+                    Spacer()
+                    Image(systemName: "chevron.down").font(.system(size: 14, weight: .bold)).foregroundColor(Theme.muted)
+                        .rotationEffect(.degrees(open ? 180 : 0))
+                }
+            }
+            .buttonStyle(.plain)
+            if open {
+                section("抖音等 App", icon: "app.badge.fill", steps: [
+                    "打开“快捷指令”，点底部“自动化”，再点右上角 ＋，选“App”",
+                    "选抖音（可以多选快手、小红书、B 站），勾“已打开”，选“立即运行”",
+                    "动作选 App“鲸醒”里的“开始刷”，App 名字填“抖音”",
+                    "再建一个：同样的 App，勾“已关闭”，动作选“刷完了”",
+                ])
+                Button("打开快捷指令") { UIApplication.shared.open(URL(string: "shortcuts://")!) }
+                    .buttonStyle(Pill(small: true))
+                section("Safari 里刷视频", icon: "safari.fill", steps: [
+                    "打开“设置” → “App” → “Safari 浏览器” → “扩展”",
+                    "打开“鲸醒”，网站权限选“允许”",
+                    "在 Safari 地址栏点扩展图标，看今天刷了多久、设每天的时长",
+                ])
+            }
+        }
+    }
+
+    private func section(_ title: String, icon: String, steps: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(title, systemImage: icon)
+                .font(.system(size: 15, weight: .bold, design: .rounded)).foregroundColor(Theme.ink)
+            ForEach(Array(steps.enumerated()), id: \.offset) { i, text in
+                HStack(alignment: .top, spacing: 10) {
+                    Text("\(i + 1)")
+                        .font(.system(size: 12, weight: .heavy, design: .rounded)).foregroundColor(.white)
+                        .frame(width: 22, height: 22).background(Circle().fill(Theme.accent))
+                    Text(text).font(.system(size: 14, design: .rounded)).foregroundColor(Theme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(.top, 4)
+    }
+}
+
+/// 女仆装风格的按钮：深蓝描边、底下一道实色阴影
 struct Pill: ButtonStyle {
     var small = false
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(small ? .subheadline : .headline, design: .rounded).weight(.bold))
+            .font(.system(size: small ? 15 : 17, weight: .bold, design: .rounded))
             .foregroundColor(small ? Theme.ink : .white)
-            .padding(.horizontal, small ? 14 : 20).padding(.vertical, small ? 8 : 14)
-            // 阴影只给底下的胶囊，不然字也会带一道重影
+            .padding(.horizontal, small ? 14 : 20).padding(.vertical, small ? 9 : 14)
             .background(Capsule().fill(small ? Theme.soft : Theme.accent)
                 .overlay(Capsule().stroke(Theme.ink, lineWidth: 2))
                 .shadow(color: Theme.ink, radius: 0, y: configuration.isPressed ? 0 : 3))

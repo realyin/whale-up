@@ -30,6 +30,8 @@ targets:
         CFBundleDisplayName: 鲸醒
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        # 自己的浅色配色，不跟系统深色模式变
+        UIUserInterfaceStyle: Light
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.realyin.whaleup.lite

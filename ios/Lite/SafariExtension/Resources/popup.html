@@ -1,7 +1,9 @@
 <!doctype html>
 <html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  :root { --ink: #1f2b5e; --paper: #fffdf9; --accent: #3d6fd6; --soft: #e9f0fc; }
+  /* 不跟系统深色模式变：输入框等控件也按浅色画 */
+  :root { --ink: #1f2b5e; --paper: #fffdf9; --accent: #3d6fd6; --soft: #e9f0fc; color-scheme: light; }
+  textarea { color: var(--ink); background: #fff; }
   body { margin: 0; padding: 16px; background: var(--soft); color: var(--ink); font-family: -apple-system, "PingFang SC", sans-serif; min-width: 280px; }
   .top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
   .top img { width: 60px; height: 60px; border-radius: 50%; border: 3px solid var(--ink); background: var(--paper); }
