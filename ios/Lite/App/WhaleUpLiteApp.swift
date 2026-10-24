@@ -23,6 +23,7 @@ struct Usage: Codable {
     /// 正在刷的 App 和开始时间（还没收到“刷完了”）
     var open: [String: Date] = [:]
     var extraDay = ""
+    /// 今天多看（正）或少看（负）几分钟，只管今天
     var extra = 0
 
     /// 一次最多算 2 小时：手机重启、自动化没跑等情况下，不会一直算下去
@@ -67,7 +68,9 @@ struct Usage: Codable {
         Set(seconds.keys).union(open.keys).reduce(0) { $0 + usedSeconds($1) }
     }
 
-    var limitSeconds: Double { Double(limit + extra) * 60 }
+    /// 今天一共能刷几分钟（每天的时长加上今天的调整，最少 5 分钟）
+    var todayLimit: Int { max(5, limit + extra) }
+    var limitSeconds: Double { Double(todayLimit) * 60 }
     var isOver: Bool { used >= limitSeconds }
     var leftSeconds: Double { max(0, limitSeconds - used) }
 
@@ -127,7 +130,7 @@ struct StartIntent: AppIntent, ForegroundContinuableIntent {
         }
         u.start(app)
         u.save()
-        Whisper.schedule(left: u.leftSeconds, limitMinutes: u.limit + u.extra, startHour: u.dayStartHour)
+        Whisper.schedule(left: u.leftSeconds, limitMinutes: u.todayLimit, startHour: u.dayStartHour)
         return .result()
     }
 }
@@ -167,7 +170,7 @@ struct HomeView: View {
 
     private var line: String {
         if usage.isOver { return "今天刷够了哦！先放下手机～\n明天凌晨 \(usage.dayStartHour) 点再见。" }
-        if usage.used < 60 { return "今天还没刷，真棒～\n每天 \(usage.limit + usage.extra) 分钟，用完我就拦着你。" }
+        if usage.used < 60 { return "今天还没刷，真棒～\n今天 \(usage.todayLimit) 分钟，用完我就拦着你。" }
         if usage.leftSeconds <= 300 { return "只剩 \(formatMinutes(usage.leftSeconds)) 了，\n看完这个就停吧！" }
         return "我盯着你呢。\n今天还能刷 \(formatMinutes(usage.leftSeconds))。"
     }
@@ -181,7 +184,7 @@ struct HomeView: View {
                     hero
                     todayCard
                     limitCard
-                    extraCard
+                    adjustCard
                     SetupCard()
                 }
                 .padding(.horizontal, 18)
@@ -226,8 +229,8 @@ struct HomeView: View {
                     Text(usage.isOver ? "明天见" : formatMinutes(usage.leftSeconds))
                         .font(.system(size: 26, weight: .heavy, design: .rounded))
                         .foregroundColor(usage.isOver ? Theme.junk : Theme.ink)
-                    if usage.extra > 0 {
-                        Text("含今天多加的 \(usage.extra) 分钟")
+                    if usage.extra != 0 {
+                        Text(usage.extra > 0 ? "含今天多加的 \(usage.extra) 分钟" : "今天少看了 \(-usage.extra) 分钟")
                             .font(.system(size: 12, weight: .semibold, design: .rounded)).foregroundColor(Theme.accent)
                             .padding(.horizontal, 8).padding(.vertical, 3)
                             .background(Capsule().fill(Theme.soft))
@@ -274,24 +277,48 @@ struct HomeView: View {
         }
     }
 
-    private var extraCard: some View {
-        CardBox(title: "今天再多看", icon: "plus.circle.fill") {
-            HStack(spacing: 10) {
-                ForEach([5, 10, 30], id: \.self) { m in
-                    Button("+\(m) 分钟") {
-                        usage.extra += m
-                        usage.save()
+    /// 今天多看 / 少看：每次 5 分钟，只管今天，明天凌晨 4 点归零
+    private var adjustCard: some View {
+        CardBox(title: "今天多看 / 少看", icon: "plusminus.circle.fill") {
+            HStack {
+                RoundButton(symbol: "minus") { adjust(-5) }
+                    .opacity(usage.limit + usage.extra <= 5 ? 0.35 : 1)
+                Spacer()
+                VStack(spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(usage.extra == 0 ? "±0" : usage.extra > 0 ? "+\(usage.extra)" : "−\(-usage.extra)")
+                            .font(.system(size: 34, weight: .heavy, design: .rounded))
+                            .foregroundColor(usage.extra > 0 ? Theme.junk : usage.extra < 0 ? Theme.accent : Theme.ink)
+                        Text("分钟").font(.system(size: 15, weight: .bold, design: .rounded)).foregroundColor(Theme.muted)
                     }
-                    .buttonStyle(Pill(small: true))
+                    Text("今天一共 \(usage.todayLimit) 分钟")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundColor(Theme.muted)
                 }
+                Spacer()
+                RoundButton(symbol: "plus") { adjust(5) }
             }
-            Text("真想多看才点。只管今天，用完还会拦着你。")
+            Text("只管今天，明天凌晨 \(usage.dayStartHour) 点自动归零。想今天管得狠一点，就往少了调。")
                 .font(.system(size: 13, design: .rounded)).foregroundColor(Theme.muted)
+            if usage.extra != 0 {
+                Button("恢复成每天的 \(usage.limit) 分钟") { adjust(-usage.extra) }
+                    .buttonStyle(Pill(small: true))
+            }
+        }
+    }
+
+    private func adjust(_ minutes: Int) {
+        // 今天最少 5 分钟，最多多看 3 小时
+        usage.extra = min(180, max(5 - usage.limit, usage.extra + minutes))
+        usage.save()
+        // 正在刷：按新的时间重新排提醒
+        if !usage.open.isEmpty {
+            Whisper.schedule(left: usage.leftSeconds, limitMinutes: usage.todayLimit, startHour: usage.dayStartHour)
         }
     }
 
     private func setLimit(_ value: Int) {
         usage.limit = min(240, max(5, value))
+        usage.extra = max(5 - usage.limit, usage.extra)
         usage.save()
     }
 }

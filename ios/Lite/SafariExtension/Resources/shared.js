@@ -7,7 +7,7 @@ const DEFAULTS = {
   sites: ["douyin.com", "bilibili.com", "b23.tv", "youtube.com", "kuaishou.com", "xiaohongshu.com",
           "weibo.com", "weibo.cn", "tiktok.com", "ixigua.com", "toutiao.com"],
   day: "", used: 0,   // 今天是哪天、今天刷了多少秒
-  extraDay: "", extra: 0,  // 今天手动加的分钟
+  extraDay: "", extra: 0,  // 今天多看（正）或少看（负）几分钟，只管今天
 };
 
 /** 某个时刻算哪一天：凌晨 dayStartHour 点以前算前一天 */
@@ -27,8 +27,11 @@ async function loadState() {
 
 function saveState(s) { return api.storage.local.set({ whaleup: s }); }
 
+/** 今天一共能刷几分钟（每天的时长加上今天的调整，最少 5 分钟） */
+function todayLimit(s) { return Math.max(5, s.limit + s.extra); }
+
 /** 今天一共能刷多少秒 */
-function limitSeconds(s) { return (s.limit + s.extra) * 60; }
+function limitSeconds(s) { return todayLimit(s) * 60; }
 
 function isWatchedSite(s, host) {
   return s.sites.some((x) => host === x || host.endsWith("." + x));

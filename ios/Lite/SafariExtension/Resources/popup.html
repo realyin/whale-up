@@ -29,9 +29,10 @@
     <div class="row"><button id="minus">－5</button><span class="num" id="limit"></span><button id="plus">＋5</button></div>
   </div>
   <div class="card">
-    <h3>今天再多看</h3>
-    <div class="row"><button data-extra="5">5 分钟</button><button data-extra="10">10 分钟</button><button data-extra="30">30 分钟</button></div>
-    <div class="hint">真想多看才点。只管今天，用完还会锁上。</div>
+    <h3>今天多看 / 少看</h3>
+    <div class="row"><button id="less">－5</button><span class="num" id="extra"></span><button id="more">＋5</button></div>
+    <div class="hint" id="extraHint"></div>
+    <button id="reset" hidden style="margin-top:8px">恢复成每天的时长</button>
   </div>
   <div class="card">
     <h3>要管的网站（一行一个）</h3>

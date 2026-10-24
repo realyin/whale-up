@@ -62,7 +62,7 @@
   // 锁上以后，页面上所有视频一直停着
   let pauser = null;
   function lock(s) {
-    $(".lock h2").textContent = `今天的 ${s.limit + s.extra} 分钟用完啦`;
+    $(".lock h2").textContent = `今天的 ${todayLimit(s)} 分钟用完啦`;
     $(".lock .start").textContent = s.dayStartHour;
     $(".lock").hidden = false;
     $(".buddy").style.display = "none";
@@ -80,7 +80,7 @@
 
   function render(s) {
     const left = limitSeconds(s) - s.used;
-    $(".count").textContent = `${Math.floor(s.used / 60)}/${s.limit + s.extra}′`;
+    $(".count").textContent = `${Math.floor(s.used / 60)}/${todayLimit(s)}′`;
     if (left <= 0) return lock(s);
     if (!$(".lock").hidden) unlock();
     if (left <= 300 && !warned) {
