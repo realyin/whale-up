@@ -22,4 +22,5 @@ done < voice-lines.txt
 [ -f public/sfx/pop.mp3 ] || ffmpeg -y -loglevel error -f lavfi -i "aevalsrc='0.6*sin(2*PI*(500+2400*t)*t)*exp(-22*t)':s=44100:d=0.2" public/sfx/pop.mp3
 [ -f public/sfx/sparkle.mp3 ] || ffmpeg -y -loglevel error -f lavfi -i "aevalsrc='0.25*sin(2*PI*2093*t)*exp(-7*t)+0.22*sin(2*PI*2637*t)*exp(-7*(t-0.09))*gte(t,0.09)+0.2*sin(2*PI*3136*t)*exp(-7*(t-0.18))*gte(t,0.18)+0.18*sin(2*PI*4186*t)*exp(-7*(t-0.27))*gte(t,0.27)':s=44100:d=0.9" public/sfx/sparkle.mp3
 [ -f public/sfx/boom.mp3 ] || ffmpeg -y -loglevel error -f lavfi -i "aevalsrc='0.9*sin(2*PI*(90-40*t)*t)*exp(-5*t)+0.5*(random(0)*2-1)*exp(-9*t)':s=44100:d=0.7" -af "lowpass=f=900" public/sfx/boom.mp3
+[ -f public/sfx/bgm.mp3 ] || { python3 scripts/bgm.py public/sfx/bgm.wav 66 && ffmpeg -y -loglevel error -i public/sfx/bgm.wav -b:a 160k public/sfx/bgm.mp3 && rm public/sfx/bgm.wav; }
 echo "素材准备好了"

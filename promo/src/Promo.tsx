@@ -9,9 +9,9 @@ import { Whale } from "./Whale";
 const S = {
   night: [0, 150], peek: [150, 120], no: [270, 90], magic: [360, 210], title: [570, 135],
   ring: [705, 117], stats: [822, 120], ai: [942, 132], digest: [1074, 123], force: [1197, 147],
-  eat: [1344, 108], stretch: [1452, 45], swim: [1497, 45], dance: [1542, 123], bye: [1665, 160],
+  eat: [1344, 108], stretch: [1452, 75], swim: [1527, 75], dance: [1602, 123], bye: [1725, 190],
 } as const;
-export const TOTAL = 1825;
+export const TOTAL = 1915;
 
 const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 const Voice = ({ id, at }: { id: string; at: number }) => (
@@ -80,7 +80,7 @@ const NightScene = () => {
       {/* 气泡和按钮 */}
       {local >= peekFrom + 12 && local < S.no[0] + 15 && (
         <>
-          <Bubble text="……你已经刷了 47 分钟了哦。" x={HOME.x - 160} y={HOME.y - 330} width={480} from={peekFrom + 12} />
+          <Bubble text="……你已经刷了 47 分钟了哦。" x={HOME.x - 200} y={HOME.y - 330} width={560} from={peekFrom + 12} />
           <div style={{ position: "absolute", left: btn.x - 230, top: btn.y + 170, display: "flex", gap: 14,
             opacity: interpolate(local, [peekFrom + 40, peekFrom + 50], [0, 1], clamp) }}>
             <div style={{ background: C.accent, color: "#fff", fontWeight: 800, fontSize: 26, padding: "10px 22px", borderRadius: 30,
@@ -138,7 +138,7 @@ const TitleScene = () => {
         <Logo />
         <div style={{ marginTop: 34, fontFamily: ROUND, fontSize: 58, fontWeight: 700, color: C.ink, opacity: sub,
           background: C.paper, border: `4px solid ${C.ink}`, borderRadius: 60, padding: "12px 44px", boxShadow: `0 6px 0 ${C.ink}` }}>
-          会施魔法的上网小助手
+          一条会施法的大肥鱼
         </div>
       </div>
       <Whale pose="idle" x={1530 + (1 - sub) * 400} y={1000} height={340} />
@@ -327,7 +327,7 @@ const EatScene = () => {
 };
 const StretchScene = () => {
   const frame = useCurrentFrame();
-  const s = 1 + 0.07 * Math.sin(Math.PI * Math.min(1, frame / 40));
+  const s = 1 + 0.07 * Math.sin(Math.PI * Math.min(1, frame / 60));
   return (
     <Montage title="坐久了，伸个懒腰">
       <Whale pose="pose-stretch_stand" x={960} y={1000} height={560} scaleY={s} scaleX={2 - s} />
@@ -336,7 +336,7 @@ const StretchScene = () => {
 };
 const SwimScene = () => {
   const frame = useCurrentFrame();
-  const x = interpolate(frame, [0, 45], [-300, 2200]);
+  const x = interpolate(frame, [0, 75], [-200, 2150]);
   const f = Math.floor(frame / 8) % 2 ? "pose-swim2" : "pose-swim1";
   return (
     <Montage title="无聊了，在屏幕里游个泳">
@@ -377,10 +377,15 @@ const ByeScene = () => {
       })}
       <Whale pose="pose-heart" x={960 - logo * 420} y={1010} height={520} />
       <Bubble text="少刷一点，多陪陪自己～" x={960 - logo * 420} y={500} width={460} from={8} />
-      <div style={{ position: "absolute", left: 980, top: 300, transform: `scale(${logo})`, transformOrigin: "0 50%", display: "flex", flexDirection: "column", gap: 30 }}>
+      <div style={{ position: "absolute", left: 900, top: 230, transform: `scale(${logo})`, transformOrigin: "0 50%", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 28 }}>
         <Logo size={200} />
-        <div style={{ fontFamily: ROUND, fontSize: 56, fontWeight: 700, color: C.ink }}>别刷啦，鲸鲸盯着你哦</div>
-        <div style={{ fontSize: 34, fontWeight: 700, color: "#4b5a8a" }}>macOS 菜单栏小助手 + Chrome 扩展</div>
+        <div style={{ fontFamily: ROUND, fontSize: 60, fontWeight: 700, color: C.ink }}>别刷啦，鲸鲸盯着你哦</div>
+        <div style={{ fontSize: 40, fontWeight: 700, color: "#4b5a8a" }}>Mac 版 · 开源免费</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, background: C.ink, color: C.paper, fontSize: 44, fontWeight: 800,
+          padding: "14px 30px", borderRadius: 20, boxShadow: "0 8px 0 rgba(31,43,94,.35)", fontFamily: `"SF Mono", Menlo, monospace` }}>
+          <svg width="44" height="44" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          github.com/realyin/whale-up
+        </div>
       </div>
     </AbsoluteFill>
   );
@@ -391,20 +396,34 @@ const ByeScene = () => {
 const at = (k: keyof typeof S) => S[k][0];
 const len = (k: keyof typeof S) => S[k][1];
 
+/** 转场：新场景从中间一个圆里撑开（动画里常见的“圈入”） */
+const Iris = ({ children }: { children: React.ReactNode }) => {
+  const frame = useCurrentFrame();
+  const r = interpolate(frame, [0, 10], [0, 120], { ...clamp, easing: (t) => 1 - Math.pow(1 - t, 3) });
+  return <AbsoluteFill style={{ clipPath: frame < 10 ? `circle(${r}% at 50% 55%)` : undefined }}>{children}</AbsoluteFill>;
+};
+const Scene = ({ k, children }: { k: keyof typeof S; children: React.ReactNode }) => (
+  <Sequence from={at(k)} durationInFrames={len(k)}>{k === "night" ? children : <Iris>{children}</Iris>}</Sequence>
+);
+
 export const Promo = () => (
-  <AbsoluteFill style={{ background: "#000" }}>
+  <AbsoluteFill style={{ background: C.ink }}>
     <Sequence durationInFrames={at("title")}><NightScene /></Sequence>
-    <Sequence from={at("title")} durationInFrames={len("title")}><TitleScene /></Sequence>
-    <Sequence from={at("ring")} durationInFrames={len("ring")}><RingScene /></Sequence>
-    <Sequence from={at("stats")} durationInFrames={len("stats")}><StatsScene /></Sequence>
-    <Sequence from={at("ai")} durationInFrames={len("ai")}><AiScene /></Sequence>
-    <Sequence from={at("digest")} durationInFrames={len("digest")}><DigestScene /></Sequence>
-    <Sequence from={at("force")} durationInFrames={len("force")}><ForceScene /></Sequence>
-    <Sequence from={at("eat")} durationInFrames={len("eat")}><EatScene /></Sequence>
-    <Sequence from={at("stretch")} durationInFrames={len("stretch")}><StretchScene /></Sequence>
-    <Sequence from={at("swim")} durationInFrames={len("swim")}><SwimScene /></Sequence>
-    <Sequence from={at("dance")} durationInFrames={len("dance")}><DanceScene /></Sequence>
-    <Sequence from={at("bye")} durationInFrames={len("bye")}><ByeScene /></Sequence>
+    <Scene k="title"><TitleScene /></Scene>
+    <Scene k="ring"><RingScene /></Scene>
+    <Scene k="stats"><StatsScene /></Scene>
+    <Scene k="ai"><AiScene /></Scene>
+    <Scene k="digest"><DigestScene /></Scene>
+    <Scene k="force"><ForceScene /></Scene>
+    <Scene k="eat"><EatScene /></Scene>
+    <Scene k="stretch"><StretchScene /></Scene>
+    <Scene k="swim"><SwimScene /></Scene>
+    <Scene k="dance"><DanceScene /></Scene>
+    <Scene k="bye"><ByeScene /></Scene>
+
+    {/* 背景音乐：深夜那段轻一点，标题出来后正常，结尾淡出；压在配音下面 */}
+    <Audio src={staticFile("sfx/bgm.mp3")} volume={(f) =>
+      interpolate(f, [0, 30, at("title") - 10, at("title"), TOTAL - 45, TOTAL - 1], [0, 0.1, 0.1, 0.24, 0.24, 0], clamp)} />
 
     {/* 音效 */}
     {[at("peek") + 10, at("peek") + 22, at("no") + 15, at("magic") + 25, at("magic") + 120, at("title") + 4,
