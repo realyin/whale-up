@@ -106,8 +106,15 @@ struct Usage: Codable {
         extra = max(5 - limit, extra)
     }
 
-    /// 给 Safari 扩展的：今天的情况
+    static let safariPrefix = "Safari · "
+
+    /// App 自己记的秒数（抖音等 App，不含 Safari 扩展报过来的网页时间）
+    var appUsed: Double {
+        Set(seconds.keys).union(open.keys).filter { !$0.hasPrefix(Self.safariPrefix) }.reduce(0) { $0 + usedSeconds($1) }
+    }
+
+    /// 给 Safari 扩展的：App 自己记的时间和设置（Safari 的时间以扩展那边为准）
     var snapshot: [String: Any] {
-        ["used": used, "limit": limit, "extra": extra, "dayStartHour": dayStartHour, "sites": sites]
+        ["used": used, "appUsed": appUsed, "limit": limit, "extra": extra, "dayStartHour": dayStartHour, "sites": sites]
     }
 }

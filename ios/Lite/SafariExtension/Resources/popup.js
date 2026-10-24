@@ -13,6 +13,12 @@ function render(s, connected) {
   document.getElementById("extra").textContent = s.extra === 0 ? "±0 分钟" : `${s.extra > 0 ? "+" : "−"}${Math.abs(s.extra)} 分钟`;
   document.getElementById("extraHint").textContent = `今天一共 ${total} 分钟。只管今天，明天凌晨 ${s.dayStartHour} 点自动归零。`;
   document.getElementById("reset").hidden = s.extra === 0;
+  // 和 App 同步的状态：方便看出是不是连不上
+  const ago = s.lastSync ? Math.round((Date.now() - s.lastSync) / 1000) : null;
+  const status = document.getElementById("syncStatus");
+  status.textContent = connected === undefined ? "正在和鲸醒 App 同步…"
+    : connected ? "和鲸醒 App 同步：刚刚"
+    : ago === null ? "还没连上鲸醒 App（Safari 这边照样计时）" : `上次和鲸醒 App 同步：${ago < 60 ? `${ago} 秒` : `${Math.round(ago / 60)} 分钟`}前`;
   document.getElementById("offline").hidden = connected !== false;
   const box = document.getElementById("sites");
   if (document.activeElement !== box) box.value = s.sites.join("\n");
