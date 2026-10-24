@@ -1,6 +1,6 @@
 // 在短视频网站上：右下角趴着大肥鱼的小脑袋，显示今天刷了几分钟；快到时限提醒；到了就盖上锁屏卡片、把视频停掉
 (async () => {
-  let state = await loadState();
+  let state = await call("get");
   if (!isWatchedSite(state, location.hostname)) return;
 
   const img = (name) => api.runtime.getURL(`images/${name}.png`);
@@ -94,23 +94,21 @@
   if (limitSeconds(state) - state.used > 300) {
     say(`我盯着你呢。今天还能刷 ${Math.ceil((limitSeconds(state) - state.used) / 60)} 分钟。`, "head-watching", 4);
   }
-  $(".head").onclick = () => say(`今天在这些网站上刷了 ${Math.floor(state.used / 60)} 分钟啦。`, "head-shy", 4);
+  $(".head").onclick = () => say(`今天一共刷了 ${Math.floor(state.used / 60)} 分钟啦（App 和网页一起算）。`, "head-shy", 4);
 
-  // 每 5 秒记一次：页面在前台才算
+  // 每 5 秒记一次：页面在前台才算。回来的是和鲸醒 App 合在一起的今天总时长
+  const site = state.sites.find((x) => location.hostname === x || location.hostname.endsWith("." + x)) || location.hostname;
   setInterval(async () => {
     if (document.visibilityState !== "visible") return;
-    state = await loadState();
-    if (state.used < limitSeconds(state)) {
-      state.used += 5;
-      await saveState(state);
-    }
+    state = await call("tick", { seconds: 5, site });
     render(state);
   }, 5000);
 
-  // 在弹出面板里加了时间、改了时长：马上生效
-  api.storage.onChanged.addListener(async () => {
-    state = await loadState();
-    warned = limitSeconds(state) - state.used <= 300 && warned;
+  // 切回这个页面时马上刷新一次（可能在 App 或弹出面板里改了设置）
+  document.addEventListener("visibilitychange", async () => {
+    if (document.visibilityState !== "visible") return;
+    state = await call("get");
+    if (limitSeconds(state) - state.used > 300) warned = false;
     render(state);
   });
 })();

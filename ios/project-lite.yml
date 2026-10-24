@@ -21,6 +21,7 @@ targets:
     platform: iOS
     sources:
       - Lite/App
+      - Lite/Shared
       - path: Shared/Theme.swift
       - path: App/Resources
       - path: App/Assets.xcassets
@@ -32,6 +33,10 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         # 自己的浅色配色，不跟系统深色模式变
         UIUserInterfaceStyle: Light
+    entitlements:
+      path: Lite/App/WhaleUpLite.entitlements
+      properties:
+        com.apple.security.application-groups: [group.io.github.realyin.whaleup.lite]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.realyin.whaleup.lite
@@ -44,6 +49,7 @@ targets:
     platform: iOS
     sources:
       - path: Lite/SafariExtension/SafariWebExtensionHandler.swift
+      - path: Lite/Shared/Usage.swift
       # 扩展的网页文件放在扩展包的根目录（包里不能有叫 Resources 的文件夹），图片保留 images/ 子目录
       - path: Lite/SafariExtension/Resources
         excludes: ["images/**"]
@@ -58,6 +64,10 @@ targets:
         NSExtension:
           NSExtensionPointIdentifier: com.apple.Safari.web-extension
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SafariWebExtensionHandler
+    entitlements:
+      path: Lite/SafariExtension/SafariExtension.entitlements
+      properties:
+        com.apple.security.application-groups: [group.io.github.realyin.whaleup.lite]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.realyin.whaleup.lite.safari

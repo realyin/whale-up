@@ -4,84 +4,12 @@ import UserNotifications
 
 // 免费版：抖音这类 App 靠“快捷指令”的个人自动化计时——打开 App 时运行“开始刷”，关掉时运行“刷完了”。
 // 今天刷够了以后再打开，“开始刷”会直接把鲸醒叫到前台，大肥鱼拦着你。
+// Safari 里刷视频由 Safari 扩展计时，和 App 共用同一份设置和今天的总时长（存在 App Group 里，见 Usage.swift）。
 
 @main
 struct WhaleUpLiteApp: App {
     var body: some Scene {
         WindowGroup { HomeView() }
-    }
-}
-
-// MARK: - 用量
-
-/// 今天每个 App 刷了多久；存在 App 自己的设置里
-struct Usage: Codable {
-    var limit = 30
-    var dayStartHour = 4
-    var day = ""
-    var seconds: [String: Double] = [:]
-    /// 正在刷的 App 和开始时间（还没收到“刷完了”）
-    var open: [String: Date] = [:]
-    var extraDay = ""
-    /// 今天多看（正）或少看（负）几分钟，只管今天
-    var extra = 0
-
-    /// 一次最多算 2 小时：手机重启、自动化没跑等情况下，不会一直算下去
-    static let maxSession: Double = 2 * 3600
-    private static let key = "usage"
-
-    static func load() -> Usage {
-        // 开发用：用 -demo 启动时给一份示例数据，截图看界面
-        if ProcessInfo.processInfo.arguments.contains("-demo") {
-            var d = Usage()
-            d.day = d.dayKey(); d.extraDay = d.day
-            d.seconds = ["抖音": 14 * 60, "小红书": 5 * 60]
-            d.open = ["B 站": Date().addingTimeInterval(-3 * 60)]
-            return d
-        }
-        var u = UserDefaults.standard.data(forKey: key).flatMap { try? JSONDecoder().decode(Usage.self, from: $0) } ?? Usage()
-        let today = u.dayKey()
-        if u.day != today {
-            u.day = today
-            u.seconds = [:]
-            u.open = [:]
-        }
-        if u.extraDay != today { u.extraDay = today; u.extra = 0 }
-        return u
-    }
-
-    func save() {
-        if let data = try? JSONEncoder().encode(self) { UserDefaults.standard.set(data, forKey: Self.key) }
-    }
-
-    /// 凌晨 dayStartHour 点以前算前一天
-    func dayKey(_ date: Date = Date()) -> String {
-        let c = Calendar.current.dateComponents([.year, .month, .day], from: date.addingTimeInterval(-Double(dayStartHour) * 3600))
-        return String(format: "%04d-%02d-%02d", c.year!, c.month!, c.day!)
-    }
-
-    func usedSeconds(_ app: String, now: Date = Date()) -> Double {
-        (seconds[app] ?? 0) + (open[app].map { min(Self.maxSession, now.timeIntervalSince($0)) } ?? 0)
-    }
-
-    var used: Double {
-        Set(seconds.keys).union(open.keys).reduce(0) { $0 + usedSeconds($1) }
-    }
-
-    /// 今天一共能刷几分钟（每天的时长加上今天的调整，最少 5 分钟）
-    var todayLimit: Int { max(5, limit + extra) }
-    var limitSeconds: Double { Double(todayLimit) * 60 }
-    var isOver: Bool { used >= limitSeconds }
-    var leftSeconds: Double { max(0, limitSeconds - used) }
-
-    mutating func start(_ app: String) {
-        stop(app)
-        open[app] = Date()
-    }
-
-    mutating func stop(_ app: String) {
-        guard let started = open.removeValue(forKey: app) else { return }
-        seconds[app, default: 0] += min(Self.maxSession, Date().timeIntervalSince(started))
     }
 }
 
@@ -272,7 +200,7 @@ struct HomeView: View {
                 Spacer()
                 RoundButton(symbol: "plus") { setLimit(usage.limit + 5) }
             }
-            Text("抖音等 App 在这里算；Safari 里刷视频的时长在 Safari 扩展的面板里设。")
+            Text("抖音等 App 和 Safari 里刷视频一起算，Safari 扩展的面板里改的也是这一个。")
                 .font(.system(size: 13, design: .rounded)).foregroundColor(Theme.muted)
         }
     }
@@ -307,8 +235,7 @@ struct HomeView: View {
     }
 
     private func adjust(_ minutes: Int) {
-        // 今天最少 5 分钟，最多多看 3 小时
-        usage.extra = min(180, max(5 - usage.limit, usage.extra + minutes))
+        usage.adjust(minutes)
         usage.save()
         // 正在刷：按新的时间重新排提醒
         if !usage.open.isEmpty {
@@ -317,8 +244,7 @@ struct HomeView: View {
     }
 
     private func setLimit(_ value: Int) {
-        usage.limit = min(240, max(5, value))
-        usage.extra = max(5 - usage.limit, usage.extra)
+        usage.setLimit(value)
         usage.save()
     }
 }
