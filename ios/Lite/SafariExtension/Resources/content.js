@@ -30,6 +30,7 @@
       .tag[hidden] { display: none; }
       .tag.good { background: #3d6fd6; color: #fff; }
       .tag.junk { background: #eb6834; color: #fff; }
+      .count.free { background: #3d6fd6; }
       .count { position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); background: var(--ink); color: var(--paper);
                font-size: 11px; font-weight: 800; padding: 1px 7px 2px; border-radius: 8px; white-space: nowrap; }
       .bubble { pointer-events: auto; max-width: 230px; background: var(--paper); color: var(--ink); border: 2.5px solid var(--ink); border-radius: 16px;
@@ -104,7 +105,9 @@
   function render(s) {
     // 万一还是算出了不是数字的东西：按用完了算，宁可锁上也不放过
     const left = Number.isFinite(limitSeconds(s) - usedOf(s)) ? limitSeconds(s) - usedOf(s) : 0;
-    $(".count").textContent = `${Math.floor(usedOf(s) / 60)}/${todayLimit(s)}′`;
+    // 看有营养的视频时不计时：数字换成“不计时”，免得看着像卡住了
+    $(".count").textContent = isGood() ? "不计时" : `${Math.floor(usedOf(s) / 60)}/${todayLimit(s)}′`;
+    $(".count").classList.toggle("free", isGood());
     // 头顶的小标签：AI 判断的结果
     const tag = $(".tag");
     tag.hidden = !verdict || verdict.off;
@@ -175,7 +178,9 @@
     drag = null;
     head.classList.remove("dragging");
     if (!moved) {
-      say(`今天一共刷了 ${Math.floor(usedOf(state) / 60)} 分钟啦（App 和网页一起算）。`, "head-shy", 4);
+      const goodMin = Math.floor(Object.values(state.good || {}).reduce((a, b) => a + num(b), 0) / 60);
+      say(`没营养的今天刷了 ${Math.floor(usedOf(state) / 60)} 分钟（上限 ${todayLimit(state)} 分钟，App 和网页一起算）`
+        + (goodMin > 0 ? `；有营养的看了 ${goodMin} 分钟，不算时间～` : "。"), "head-shy", 5);
       return;
     }
     pos = { side: e.clientX < window.innerWidth / 2 ? "left" : "right", y: e.clientY / window.innerHeight };
