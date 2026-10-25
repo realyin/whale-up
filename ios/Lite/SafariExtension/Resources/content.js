@@ -39,6 +39,7 @@
       .card p { margin: 0 0 16px; font-size: 14px; line-height: 1.6; color: #44507a; }
       .card button { width: 100%; border: 2.5px solid var(--ink); border-radius: 999px; background: var(--accent); color: #fff; font-size: 16px;
                      font-weight: 800; padding: 12px; box-shadow: 0 3px 0 var(--ink); }
+      .card button.home { background: var(--paper); color: var(--ink); margin-bottom: 10px; }
     </style>
     <div class="buddy">
       <div class="bubble" hidden></div>
@@ -48,8 +49,9 @@
       <div class="card">
         <img src="${img("pose-sleep_curl")}">
         <h2></h2>
-        <p>大肥鱼已经把视频关掉了，明天凌晨 <b class="start"></b> 点再见～<br>真想多看，点地址栏里的鲸醒图标，自己加时间。</p>
-        <button>好吧，去做点别的</button>
+        <p>这个视频大肥鱼不让看了，明天凌晨 <b class="start"></b> 点再见～<br>有营养的照样能看：回首页找找。真想多看，点地址栏里的鲸醒图标，自己加时间。</p>
+        <button class="home">回首页找点有营养的</button>
+        <button class="rest">好吧，去做点别的</button>
       </div>
     </div>`;
   document.documentElement.appendChild(host);
@@ -87,7 +89,9 @@
     clearInterval(pauser);
     pauser = null;
   }
-  $(".lock button").onclick = () => location.replace(api.runtime.getURL("rest.html"));
+  $(".lock button.rest").onclick = () => location.replace(api.runtime.getURL("rest.html"));
+  $(".lock button.home").onclick = () => location.assign(location.origin + "/");
+  let toldBrowse = false;
 
   function render(s) {
     // 万一还是算出了不是数字的东西：按用完了算，宁可锁上也不放过
@@ -101,6 +105,12 @@
     if (tag.hidden) tag.className = "tag";
     // 有营养的内容不计时，也不锁
     if (isGood()) { if (!$(".lock").hidden) unlock(); return; }
+    // 首页、搜索这类“逛”的页面不锁：得能去找有营养的视频
+    if (left <= 0 && isBrowsePage()) {
+      if (!$(".lock").hidden) unlock();
+      if (!toldBrowse) { toldBrowse = true; say("今天的时间用完啦，只能看有营养的哦～", "head-angry", 6); }
+      return;
+    }
     if (left <= 0) return lock(s);
     if (!$(".lock").hidden) unlock();
     if (left <= 300 && !warned) {

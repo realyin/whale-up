@@ -78,3 +78,31 @@ function identity(video) {
   }
   return url;
 }
+
+/**
+ * 视频网站上“逛”的页面：首页、搜索、个人主页……额度用完以后也不锁，不然连找有营养的视频都没法找。
+ * 抖音、快手、TikTok 的首页就是自动播放的视频流，不算。（和 Mac 版 PageKind.isBrowsePage 是同一套规则）
+ */
+function isBrowsePage(href = location.href) {
+  let u;
+  try { u = new URL(href); } catch (e) { return false; }
+  const host = u.hostname.toLowerCase();
+  const path = (u.pathname || "/").toLowerCase();
+  const on = (d) => host === d || host.endsWith("." + d);
+  const starts = (list) => list.some((p) => path.startsWith(p));
+
+  if (on("bilibili.com")) {
+    if (host.startsWith("search.") || host.startsWith("space.") || host.startsWith("t.")) return true;
+    if (starts(["/video/", "/bangumi/", "/cheese/", "/list/", "/festival/"])) return false;
+    return path === "/" || starts(["/v/", "/c/", "/search", "/channel", "/anime", "/movie", "/guochuang", "/tv"]);
+  }
+  if (on("youtube.com")) {
+    if (starts(["/watch", "/shorts", "/live/"])) return false;
+    return path === "/" || starts(["/results", "/feed/", "/@", "/channel/", "/c/", "/user/", "/playlist"]);
+  }
+  if (on("douyin.com") || on("kuaishou.com") || on("tiktok.com")) return starts(["/search", "/user/", "/profile", "/@"]);
+  if (on("xiaohongshu.com")) {
+    return path === "/" || path === "/explore" || path === "/explore/" || starts(["/search_result", "/user/profile"]);
+  }
+  return false;
+}

@@ -270,7 +270,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func enforce(idle: Bool, now: Date, elapsed: Double) {
         let rule = current?.url.flatMap { Classifier.matchSite($0, rules: config.forceCloseSites) }
         // 强制关闭只针对名单里的网站；大模型判断为有营养的内容不管
-        let onSite = rule != nil && JunkJudge.isJunk(siteRuleMatched: true, label: currentLabel, config: config)
+        // 首页、搜索这类“逛”的页面不关：额度用完了也得能去找有营养的视频
+        let browsing = current?.url.map(PageKind.isBrowsePage) ?? false
+        let onSite = rule != nil && !browsing && JunkJudge.isJunk(siteRuleMatched: true, label: currentLabel, config: config)
         let action = forceCloser.record(onSite: onSite, usedToday: forceUsedToday, now: now, config: config)
         refreshForceToday()
         switch action {
@@ -294,7 +296,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         // 每日额度用完且设置了直接关闭：刷没营养的网页就关掉（10 秒内只关一次）
-        if config.budgetCloses, currentReason != nil, let activity = current, activity.url != nil,
+        if config.budgetCloses, currentReason != nil, !browsing, let activity = current, activity.url != nil,
            config.budgetRemainingSeconds(usedToday: tracker.todaySeconds) == 0,
            now.timeIntervalSince(lastBudgetCloseAt) > 10, let id = activity.bundleID {
             lastBudgetCloseAt = now
