@@ -38,30 +38,37 @@ function renderSite(s) {
   card.hidden = false;
   document.getElementById("site").textContent = currentSite;
   const listed = s.sites.find((x) => currentSite === x || currentSite.endsWith("." + x));
-  const whole = listed && (s.wholeSites || []).includes(listed);
-  document.getElementById("addContent").hidden = !!listed;
-  document.getElementById("addWhole").hidden = !!whole;
-  document.getElementById("siteState").textContent = !listed ? "" : whole ? `已经在管了（${listed}，整站管）` : `已经在管了（${listed}，按内容管）`;
+  const mode = !listed ? null : (s.wholeSites || []).includes(listed) ? "whole" : (s.videoOnlySites || []).includes(listed) ? "videoOnly" : "content";
+  // 面板里只能加网站或收紧：没加的三个都能选；按内容管的能改成整站；只拦视频的能改成按内容或整站
+  document.getElementById("addContent").hidden = mode === "content" || mode === "whole";
+  document.getElementById("addVideo").hidden = !!mode;
+  document.getElementById("addWhole").hidden = mode === "whole";
+  const names = { content: "按内容管", videoOnly: "只拦视频", whole: "整站管" };
+  document.getElementById("siteState").textContent = mode ? `已经在管了（${listed}，${names[mode]}）` : "";
 }
 
-/** 加入名单（或改成整站管）：先改本地，马上生效；再告诉鲸醒 App */
-async function addSite(whole) {
+/** 加入名单（或收紧管法）：先改本地，马上生效；再告诉鲸醒 App。mode：content / videoOnly / whole */
+async function addSite(mode) {
   const m = await loadMirror();
   const listed = m.sites.find((x) => currentSite === x || currentSite.endsWith("." + x)) || currentSite;
   if (!m.sites.includes(listed)) m.sites.push(listed);
-  if (whole && !(m.wholeSites || []).includes(listed)) (m.wholeSites ||= []).push(listed);
+  m.wholeSites = (m.wholeSites || []).filter((x) => x !== listed);
+  m.videoOnlySites = (m.videoOnlySites || []).filter((x) => x !== listed);
+  if (mode === "whole") m.wholeSites.push(listed);
+  if (mode === "videoOnly") m.videoOnlySites.push(listed);
   await saveMirror(m);
   render(m, undefined);
   try {
-    await api.runtime.sendMessage({ to: "native", type: "addSite", site: listed, whole });
+    await api.runtime.sendMessage({ to: "native", type: "addSite", site: listed, mode });
   } catch (e) { /* 连不上 App：这边已经生效，下次同步时 App 那边的名单为准，所以提示打开一次 App */ }
   const synced = await sync();
   render(synced || await loadMirror(), !!synced);
   document.getElementById("siteState").textContent += "　刷新一下网页就生效";
 }
 
-document.getElementById("addContent").onclick = () => addSite(false);
-document.getElementById("addWhole").onclick = () => addSite(true);
+document.getElementById("addContent").onclick = () => addSite("content");
+document.getElementById("addVideo").onclick = () => addSite("videoOnly");
+document.getElementById("addWhole").onclick = () => addSite("whole");
 
 (async () => {
   currentSite = await findSite();

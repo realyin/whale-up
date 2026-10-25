@@ -23,6 +23,19 @@ struct Usage: Codable {
     static let maxGrants = 2
     /// 整站都算的网站（如虎扑）：不看 AI 判断、首页也锁
     var wholeSites: [String] = []
+    /// 只拦视频的网站（如推特）：不计时；点开没营养的视频就退回去
+    var videoOnlySites: [String] = []
+
+    enum SiteMode: String { case content, videoOnly, whole }
+    func mode(of site: String) -> SiteMode {
+        wholeSites.contains(site) ? .whole : videoOnlySites.contains(site) ? .videoOnly : .content
+    }
+    mutating func setMode(_ m: SiteMode, for site: String) {
+        wholeSites.removeAll { $0 == site }
+        videoOnlySites.removeAll { $0 == site }
+        if m == .whole { wholeSites.append(site) }
+        if m == .videoOnly { videoOnlySites.append(site) }
+    }
     /// Safari 扩展管哪些网站
     var sites = ["douyin.com", "bilibili.com", "b23.tv", "youtube.com", "kuaishou.com", "xiaohongshu.com",
                  "weibo.com", "weibo.cn", "tiktok.com", "ixigua.com", "toutiao.com"]
@@ -47,6 +60,7 @@ struct Usage: Codable {
         grants = try c.decodeIfPresent(Int.self, forKey: .grants) ?? d.grants
         sites = try c.decodeIfPresent([String].self, forKey: .sites) ?? d.sites
         wholeSites = try c.decodeIfPresent([String].self, forKey: .wholeSites) ?? d.wholeSites
+        videoOnlySites = try c.decodeIfPresent([String].self, forKey: .videoOnlySites) ?? d.videoOnlySites
         good = try c.decodeIfPresent([String: Double].self, forKey: .good) ?? d.good
     }
 
@@ -136,7 +150,7 @@ struct Usage: Codable {
 
     /// 给 Safari 扩展的：App 自己记的时间和设置（Safari 的时间以扩展那边为准）
     var snapshot: [String: Any] {
-        ["used": used, "appUsed": appUsed, "limit": limit, "extra": extra, "grants": grants, "dayStartHour": dayStartHour, "sites": sites, "wholeSites": wholeSites,
+        ["used": used, "appUsed": appUsed, "limit": limit, "extra": extra, "grants": grants, "dayStartHour": dayStartHour, "sites": sites, "wholeSites": wholeSites, "videoOnlySites": videoOnlySites,
          "ai": AISettings.load().ready]
     }
 }

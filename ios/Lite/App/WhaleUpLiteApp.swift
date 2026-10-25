@@ -277,13 +277,30 @@ struct HomeView: View {
     @State private var siteError: String?
     @State private var siteNotice: String?
 
+    private static let modeNames: [Usage.SiteMode: String] = [.content: "看内容", .videoOnly: "只拦视频", .whole: "整站"]
+
+    /// 换管法：改成整站、从只拦视频改回看内容是收紧，马上生效；离开整站、改成只拦视频（不再计时）是放松，要输随机码
+    private func switchMode(_ site: String, to mode: Usage.SiteMode) {
+        let from = usage.mode(of: site)
+        let apply = {
+            usage.setMode(mode, for: site)
+            usage.save()
+            siteNotice = "\(site) 已改成\(Self.modeNames[mode]!)，马上生效"
+        }
+        let tightening = mode == .whole || (mode == .content && from == .videoOnly)
+        if tightening { apply() }
+        else {
+            gate = CodeRequest(what: "\(site) 从\(Self.modeNames[from]!)改成\(Self.modeNames[mode]!)（取消的话不变）", action: apply)
+        }
+    }
+
     /// 管法的一个选项：选中的高亮；点已选中的那个什么也不做
     private func modeOption(_ title: String, selected: Bool, color: Color, action: @escaping () -> Void) -> some View {
         Button { if !selected { action() } } label: {
             Text(title)
                 .font(.system(size: 12, weight: .bold, design: .rounded))
                 .foregroundColor(selected ? .white : Theme.muted)
-                .padding(.horizontal, 10).padding(.vertical, 5)
+                .padding(.horizontal, 8).padding(.vertical, 5)
                 .background(Capsule().fill(selected ? color : Color.clear))
         }
         .buttonStyle(.plain)
@@ -297,28 +314,19 @@ struct HomeView: View {
                     HStack {
                         Text(site).font(.system(size: 15, weight: .semibold, design: .rounded)).foregroundColor(Theme.ink)
                         Spacer()
-                        // 管法：看内容（AI 判断、首页不锁）/ 整站（全算、首页也锁）。两个选项并排，点已选中的那个没反应；
-                        // 改成整站马上生效，改回看内容等于放松，要输随机码
-                        let whole = usage.wholeSites.contains(site)
+                        // 管法三选一，点已选中的那个没反应；收紧马上生效，放松要输随机码（见 switchMode）
+                        let current = usage.mode(of: site)
                         HStack(spacing: 0) {
-                            modeOption("看内容", selected: !whole, color: Theme.accent) {
-                                gate = CodeRequest(what: "\(site) 从整站改回按内容判断（取消的话保持整站不变）") {
-                                    usage.wholeSites.removeAll { $0 == site }
-                                    usage.save()
-                                    siteNotice = "\(site) 已改回看内容"
-                                }
-                            }
-                            modeOption("整站", selected: whole, color: Theme.junk) {
-                                usage.wholeSites.append(site)
-                                usage.save()
-                                siteNotice = "\(site) 已改成整站，马上生效"
-                            }
+                            modeOption("看内容", selected: current == .content, color: Theme.accent) { switchMode(site, to: .content) }
+                            modeOption("只拦视频", selected: current == .videoOnly, color: Color(red: 0.45, green: 0.36, blue: 0.82)) { switchMode(site, to: .videoOnly) }
+                            modeOption("整站", selected: current == .whole, color: Theme.junk) { switchMode(site, to: .whole) }
                         }
                         .background(Capsule().fill(Theme.soft))
                         Button {
                             gate = CodeRequest(what: "从名单里删掉 \(site)") {
                                 usage.sites.removeAll { $0 == site }
                                 usage.wholeSites.removeAll { $0 == site }
+                                usage.videoOnlySites.removeAll { $0 == site }
                                 usage.save()
                             }
                         } label: {
@@ -345,7 +353,7 @@ struct HomeView: View {
             if let siteError {
                 Text(siteError).font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundColor(Theme.junk)
             }
-            Text("点网站右边切换管法：“看内容”是每个视频 / 帖子由 AI 判断，有营养的不计时，首页不锁；“整站”是整个网站都算（适合虎扑这种几乎全是消遣的），首页也锁。加网站、改成整站随时生效；删网站、改回看内容要输随机码。")
+            Text("点网站右边选管法：\n“看内容”：每个视频 / 帖子由 AI 判断，有营养的不计时，首页不锁。\n“只拦视频”：不计时，只在点开视频时让 AI 判断，没营养的自动退回（适合推特这种大部分内容都要看的）。\n“整站”：整个网站都算，首页也锁（适合虎扑这种几乎全是消遣的）。\n收紧随时生效；放松（离开整站、改成只拦视频、删网站）要输随机码。")
                 .font(.system(size: 13, design: .rounded)).foregroundColor(Theme.muted)
         }
     }

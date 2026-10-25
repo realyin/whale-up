@@ -71,6 +71,8 @@
   // 当前内容的 AI 判断：undefined 还没看、"pending" 判断中、{isJunk,...}、{off:true} 没开 AI、null 判断失败
   let verdict;
   const isGood = () => !isWhole() && !!verdict && typeof verdict === "object" && !verdict.off && verdict.isJunk === false;
+  // 只拦视频的网站（如推特）：不计时、不锁；点开带视频的内容时让 AI 判断，没营养的就退回去
+  const isVideoOnly = () => !isWhole() && (state.videoOnlySites || []).some((x) => location.hostname === x || location.hostname.endsWith("." + x));
   // 整站都算的网站（如虎扑）：不问 AI、首页也锁、锁屏卡片上不放“回首页”
   const isWhole = () => (state.wholeSites || []).some((x) => location.hostname === x || location.hostname.endsWith("." + x));
   let bubbleTimer = null;
@@ -120,8 +122,8 @@
     tag.className = "tag" + (verdict === "pending" ? "" : verdict && verdict.isJunk ? " junk" : " good");
     tag.textContent = verdict === "pending" ? "判断中…" : verdict && !verdict.off ? (verdict.isJunk ? "没营养" : "✓ 有营养") : "";
     if (tag.hidden) tag.className = "tag";
-    // 有营养的内容不计时，也不锁
-    if (isGood()) { if (!$(".lock").hidden) unlock(); return; }
+    // 有营养的内容不计时，也不锁；只拦视频的网站也不锁（没营养的视频直接退回）
+    if (isGood() || isVideoOnly()) { if (!$(".lock").hidden) unlock(); if (isVideoOnly() && !isGood()) $(".count").textContent = "拦视频"; return; }
     // 首页、搜索这类“逛”的页面不锁：得能去找有营养的视频
     if (left <= 0 && isBrowsePage() && !isWhole()) {
       if (!$(".lock").hidden) unlock();
@@ -138,7 +140,9 @@
 
   $(".head").style.backgroundImage = `url(${img("head-watching")})`;
   render(state);
-  if (limitSeconds(state) - usedOf(state) > 300) {
+  if (isVideoOnly()) {
+    say("这里我不计时，只盯着你点开的视频～", "head-watching", 4);
+  } else if (limitSeconds(state) - usedOf(state) > 300) {
     say(`我盯着你呢。今天还能刷 ${Math.ceil((limitSeconds(state) - usedOf(state)) / 60)} 分钟。`, "head-watching", 4);
   }
   // ---- 拖动她：按住滑到别处，松手贴到最近的左边或右边；位置记住，换网页也一样 ----
@@ -201,6 +205,7 @@
   let contentKey = null;
   function checkContent() {
     if (isWhole()) { verdict = undefined; return; }
+    if (isVideoOnly()) return checkVideo();
     const video = largestVideo();
     const key = site + "|" + identity(video);
     if (key === contentKey) return;
@@ -216,6 +221,47 @@
         if (isGood()) say(`这个是${verdict.category || "有营养的"}，不算时间，好好看～`, "head-shy", 4);
       });
   }
+
+  // ---- 只拦视频：点开一条带视频的内容（推特的 /status/ 页）时问 AI，没营养的暂停、3 秒后退回 ----
+  let videoKey = null;
+  let backTimer = null;
+  function checkVideo() {
+    const video = largestVideo();
+    if (isBrowsePage() || !video) {
+      // 回到时间线 / 没有视频：不管
+      if (videoKey) { videoKey = null; verdict = undefined; clearTimeout(backTimer); render(state); }
+      return;
+    }
+    const key = site + "|" + identity(video);
+    if (key === videoKey) return;
+    videoKey = key;
+    clearTimeout(backTimer);
+    const info = extract(video);
+    // 推文只有视频、一个字都没有：AI 没东西可判断，宁可放过，别误伤要看的内容
+    if (info.title.startsWith("（这条推文没有文字")) { verdict = undefined; render(state); return; }
+    verdict = "pending";
+    render(state);
+    judgeContent(key, { site, title: info.title, author: info.author, tags: info.tags.join("、"), description: info.description })
+      .then((v) => {
+        if (key !== videoKey) return;
+        verdict = v;
+        render(state);
+        if (isGood()) { say(`这个视频是${verdict.category || "有营养的"}，看吧～`, "head-shy", 4); return; }
+        // 判断不了（没开 AI、没网）就不拦：只拦视频的网站宁可放过，也别误伤要看的内容
+        if (!v || v.off || v.isJunk !== true) { verdict = undefined; render(state); return; }
+        document.querySelectorAll("video").forEach((x) => x.pause());
+        say(`这个视频没什么营养（${v.reason || v.category || "消遣"}），3 秒后帮你退回去～`, "head-angry", 4);
+        backTimer = setTimeout(() => {
+          if (key !== videoKey) return;
+          if (history.length > 1) history.back();
+          else location.assign(location.origin + "/home");
+        }, 3000);
+      });
+  }
+  // 只拦视频的网站切页面不刷新网页（单页应用），每秒看一眼，点开视频能马上判断
+  setInterval(() => {
+    if (document.visibilityState === "visible" && isVideoOnly()) { try { checkVideo(); } catch (e) { /* 不影响别的 */ } }
+  }, 1000);
 
   // 每 5 秒：页面在前台、还没锁上，就先在本地记 5 秒、马上判断；再顺带和 App 同步（同步卡住也不影响计时）
   async function refresh(synced) {
@@ -235,7 +281,9 @@
     if (document.visibilityState !== "visible") return;
     try { checkContent(); } catch (e) { /* 取不到视频信息不影响计时 */ }
     try {
-      if ($(".lock").hidden) state = await addLocal(site, 5, isGood());
+      // 只拦视频的网站不计时
+      if (isVideoOnly()) state = await loadMirror();
+      else if ($(".lock").hidden) state = await addLocal(site, 5, isGood());
       else state = await loadMirror();
       broken = false;
     } catch (e) {

@@ -13,8 +13,16 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
 
         // 在 Safari 面板里点了“把这个网站加入管控”：加入名单（整站管的再记进整站名单）。加入是收紧，不用随机码
         if message["type"] as? String == "addSite", let site = message["site"] as? String, site.contains(".") {
-            if !u.sites.contains(site) { u.sites.append(site); changed = true }
-            if message["whole"] as? Bool == true, !u.wholeSites.contains(site) { u.wholeSites.append(site); changed = true }
+            // mode：content / videoOnly / whole。面板里只会发“新加入”或“收紧”的改动（放松要在 App 里输随机码）
+            let mode = Usage.SiteMode(rawValue: message["mode"] as? String ?? "") ?? (message["whole"] as? Bool == true ? .whole : .content)
+            if !u.sites.contains(site) {
+                u.sites.append(site)
+                u.setMode(mode, for: site)
+                changed = true
+            } else if mode == .whole || (mode == .content && u.mode(of: site) == .videoOnly) {
+                u.setMode(mode, for: site)
+                changed = true
+            }
         }
 
         if let settings = message["settings"] as? [String: Any] {

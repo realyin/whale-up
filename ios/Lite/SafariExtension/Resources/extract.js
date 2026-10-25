@@ -48,6 +48,13 @@ function extract(video) {
     d.title = d.title.replace(/\s*(展开|收起)\s*$/, "");
     d.author = d.author.replace(/^@/, "");
     d.tags = (d.title.match(/#[^\s#]+/g) || []).map((t) => t.slice(1));
+  } else if (host === "x.com" || host.endsWith(".x.com") || host.endsWith("twitter.com")) {
+    // 推文详情页：第一条就是点开的那条
+    const tweet = document.querySelector('article[data-testid="tweet"]') || document.querySelector("article");
+    d.title = tweet?.querySelector('[data-testid="tweetText"]')?.innerText?.trim() || "";
+    d.author = (tweet?.querySelector('[data-testid="User-Name"]')?.innerText || "").split("\n").slice(0, 2).join(" ");
+    d.tags = (d.title.match(/#[^\s#]+/g) || []).map((t) => t.slice(1));
+    if (!d.title) d.title = "（这条推文没有文字，只有视频）";
   } else if (host.endsWith("youtube.com")) {
     d.title = text("ytd-reel-video-renderer[is-active] h2") || text("h1.ytd-watch-metadata") || text(".slim-video-metadata-header h2")
       || text("ytm-shorts-lockup-view-model h3");
@@ -72,6 +79,9 @@ function extract(video) {
 /** 什么时候算“换了一个内容”：网址变了；抖音信息流网址不变，按视频描述 / 片源区分 */
 function identity(video) {
   const url = location.href.split("#")[0];
+  // 推特：/用户/status/编号/video/1 和 /用户/status/编号 是同一条
+  const tweet = location.pathname.match(/^\/[^/]+\/status\/\d+/);
+  if (tweet) return location.origin + tweet[0];
   if (location.hostname.endsWith("douyin.com") && video) {
     const desc = nearText(video, ['[data-e2e="video-desc"]']);
     return url + "|" + (desc || (video.currentSrc || "").split("?")[0]);
@@ -101,6 +111,10 @@ function isBrowsePage(href = location.href) {
     return path === "/" || starts(["/results", "/feed/", "/@", "/channel/", "/c/", "/user/", "/playlist"]);
   }
   if (on("douyin.com") || on("kuaishou.com") || on("tiktok.com")) return starts(["/search", "/user/", "/profile", "/@"]);
+  if (on("x.com") || on("twitter.com")) {
+    // 只有点开的单条推文（/用户/status/编号）算内容，时间线、搜索、通知、个人主页都是逛
+    return !/^\/[^/]+\/status\/\d+/.test(path);
+  }
   if (on("xiaohongshu.com")) {
     return path === "/" || path === "/explore" || path === "/explore/" || starts(["/search_result", "/user/profile"]);
   }
