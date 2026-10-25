@@ -1,7 +1,15 @@
 // 在短视频网站上：右下角趴着大肥鱼的小脑袋，显示今天刷了几分钟；快到时限提醒；到了就盖上锁屏卡片、把视频停掉
 (async () => {
   let state = await loadMirror();
-  if (!isWatchedSite(state, location.hostname)) return;
+  // 这边记的名单可能还是旧的（刚在鲸醒 App 里加了网站）：不在名单里时先和 App 同步一次再判断，
+  // 不然新加的网站永远等不到同步、永远不生效
+  if (!isWatchedSite(state, location.hostname)) {
+    // 一分钟内同步过就不再同步（不在名单里的网页很多，别每个都去问 App）
+    if (Date.now() - num(state.lastSync) > 60000) {
+      try { state = (await sync()) || state; } catch (e) { /* 连不上就按旧名单 */ }
+    }
+    if (!isWatchedSite(state, location.hostname)) return;
+  }
 
   // 图片先读进来存成 data: 地址：扩展更新后，已经打开的网页里扩展地址会失效，头像就成了空白
   const pictures = {};
