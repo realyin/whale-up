@@ -275,6 +275,19 @@ struct HomeView: View {
 
     @State private var newSite = ""
     @State private var siteError: String?
+    @State private var siteNotice: String?
+
+    /// 管法的一个选项：选中的高亮；点已选中的那个什么也不做
+    private func modeOption(_ title: String, selected: Bool, color: Color, action: @escaping () -> Void) -> some View {
+        Button { if !selected { action() } } label: {
+            Text(title)
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundColor(selected ? .white : Theme.muted)
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .background(Capsule().fill(selected ? color : Color.clear))
+        }
+        .buttonStyle(.plain)
+    }
 
     /// 要管的网站：Safari 扩展按这个名单计时、锁；加随时可以，删要输随机码
     private var sitesCard: some View {
@@ -284,26 +297,24 @@ struct HomeView: View {
                     HStack {
                         Text(site).font(.system(size: 15, weight: .semibold, design: .rounded)).foregroundColor(Theme.ink)
                         Spacer()
-                        // 管法：看内容（AI 判断、首页不锁）/ 整站（全算、首页也锁）。整站改成看内容等于放松，要输随机码
+                        // 管法：看内容（AI 判断、首页不锁）/ 整站（全算、首页也锁）。两个选项并排，点已选中的那个没反应；
+                        // 改成整站马上生效，改回看内容等于放松，要输随机码
                         let whole = usage.wholeSites.contains(site)
-                        Button {
-                            if whole {
-                                gate = CodeRequest(what: "\(site) 改成按内容判断") {
+                        HStack(spacing: 0) {
+                            modeOption("看内容", selected: !whole, color: Theme.accent) {
+                                gate = CodeRequest(what: "\(site) 从整站改回按内容判断（取消的话保持整站不变）") {
                                     usage.wholeSites.removeAll { $0 == site }
                                     usage.save()
+                                    siteNotice = "\(site) 已改回看内容"
                                 }
-                            } else {
+                            }
+                            modeOption("整站", selected: whole, color: Theme.junk) {
                                 usage.wholeSites.append(site)
                                 usage.save()
+                                siteNotice = "\(site) 已改成整站，马上生效"
                             }
-                        } label: {
-                            Text(whole ? "整站" : "看内容")
-                                .font(.system(size: 12, weight: .bold, design: .rounded))
-                                .foregroundColor(whole ? .white : Theme.accent)
-                                .padding(.horizontal, 10).padding(.vertical, 5)
-                                .background(Capsule().fill(whole ? Theme.junk : Theme.soft))
                         }
-                        .buttonStyle(.plain)
+                        .background(Capsule().fill(Theme.soft))
                         Button {
                             gate = CodeRequest(what: "从名单里删掉 \(site)") {
                                 usage.sites.removeAll { $0 == site }
@@ -327,6 +338,9 @@ struct HomeView: View {
                     .background(RoundedRectangle(cornerRadius: 12).fill(Theme.soft))
                     .onSubmit(addSite)
                 Button("添加", action: addSite).buttonStyle(Pill(small: true))
+            }
+            if let siteNotice {
+                Text(siteNotice).font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundColor(Theme.accent)
             }
             if let siteError {
                 Text(siteError).font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundColor(Theme.junk)
@@ -565,6 +579,8 @@ struct CodeSheet: View {
             }
         }
         .padding(24)
+        // 背景铺满整个弹窗（不然上面留一块白）
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(SkyBackground())
         .preferredColorScheme(.light)
     }
