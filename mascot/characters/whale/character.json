@@ -193,7 +193,7 @@
     "lace": "#ffffff"
   },
   "icons": {
-    "today": "icons/today.png",
+    "today": "icons/today.png", "chat": "icons/chat.png",
     "act:dance": "icons/dance.png",
     "act:work": "icons/work.png",
     "cast": "icons/cast.png",

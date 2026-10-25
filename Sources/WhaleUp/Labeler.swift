@@ -84,10 +84,13 @@ final class Labeler {
                     onChange()
                 } catch LLMError.missingAPIKey {
                     lastError = LLMError.missingAPIKey.description
+                    try? store.addEvent(AppEvent(kind: .error, detail: "AI 判断用不了：\(LLMError.missingAPIKey.description)"))
                     onChange()
                     return  // 没有 Key，后面的也不用试了
                 } catch {
                     lastError = "\(error)"
+                    try? store.addEvent(AppEvent(kind: .error, site: view.site, url: view.url, title: view.title,
+                                                 detail: "AI 判断有没有营养失败：\(error)"))
                     try? store.markLabelAttempt(viewId: view.viewId)
                     onChange()
                 }

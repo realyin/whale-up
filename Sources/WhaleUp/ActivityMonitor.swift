@@ -146,11 +146,15 @@ final class ActivityMonitor {
         """
     }
 
+    /// 浏览器脚本出错时（常见：没给“自动化”权限）
+    var onError: ((String) -> Void)?
+
     private func run(_ source: String) -> String? {
         var error: NSDictionary?
         let result = NSAppleScript(source: source)?.executeAndReturnError(&error)
         if let error {
             NSLog("WhaleUp: AppleScript 出错 %@", error)
+            onError?(error[NSAppleScript.errorMessage] as? String ?? "\(error)")
             return nil
         }
         return result?.stringValue

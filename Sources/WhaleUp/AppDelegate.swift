@@ -66,6 +66,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return l
     }
     private var pausedUntil: Date?
+    /// 问问大肥鱼：第一次打开对话窗口时才建
+    private lazy var agent = Agent(host: self)
+    private lazy var chat = ChatWindow(agent: agent)
+    private var lastScriptError: (message: String, at: Date)?
     /// 最近一次提醒时在前台的 App，点“去休息”时把它隐藏
     private var nudgedBundleID: String?
     private var nudgedURL: String?
@@ -88,6 +92,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.delegate = self
         statusItem.menu = menu
 
+        // 浏览器脚本出错多半是一直出同一个错（如没给权限）：同样的错 10 分钟只记一次
+        monitor.onError = { [weak self] message in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if let last = self.lastScriptError, last.message == message, Date().timeIntervalSince(last.at) < 600 { return }
+                self.lastScriptError = (message, Date())
+                self.log(.error, url: self.current?.url, "读取或控制浏览器的脚本出错：\(message)（多半是没在“系统设置 → 隐私与安全性 → 自动化”里允许鲸醒控制浏览器）")
+            }
+        }
         ExtensionFiles.install()
         updateMascot()
         enableLaunchAtLoginOnFirstInstall()
@@ -281,8 +294,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // 整站都算的网站首页也关
         let browsing = current?.url.map { PageKind.isBrowsePage($0) && !config.isWholeSite($0) } ?? false
         let waiting = awaitingLabel(now: now)
-        let onSite = rule != nil && !browsing && !waiting && JunkJudge.isJunk(siteRuleMatched: true, label: currentLabel, config: config)
-        let action = forceCloser.record(onSite: onSite, usedToday: forceUsedToday, now: now, config: config)
+        let decision = ForceDecision.make(rule: rule, browsing: browsing, awaitingLabel: waiting, label: currentLabel,
+                                          config: config, used: forceUsedToday, limit: forceCloser.limitSeconds(config: config))
+        logDecision(decision, now: now)
+        let action = forceCloser.record(onSite: decision.isJunkOnListedSite, usedToday: forceUsedToday, now: now, config: config)
         refreshForceToday()
         switch action {
         case .warn:
@@ -294,7 +309,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 let line = pausedUntil != nil ? "暂停只停提醒，强制关闭还是要关的哦！" : "看了这么久了还不关！"
                 closeWithMagic(line: line, bundleID: id) { [weak self] in
                     guard let self else { return }
-                    self.monitor.closeJunk(bundleID: id, nudgedURL: url, rules: self.config.forceCloseSites)
+                    let closed = self.monitor.closeJunk(bundleID: id, nudgedURL: url, rules: self.config.forceCloseSites)
+                    self.log(.action, url: url, title: self.current?.title,
+                             closed ? "强制关闭：关掉了这个网页。\(decision.explanation)" : "强制关闭：想关这个网页，但没关掉（浏览器脚本失败或网页已经换了）")
                 }
             }
             nudgeWindow.close()
@@ -312,12 +329,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let site = currentReason ?? "这个网页"
             closeWithMagic(line: "今天的额度用完啦！", bundleID: id) { [weak self] in
                 guard let self else { return }
-                if self.monitor.closeJunk(bundleID: id, nudgedURL: activity.url, rules: self.config.junkSites + self.config.forceCloseSites) {
+                let closed = self.monitor.closeJunk(bundleID: id, nudgedURL: activity.url, rules: self.config.junkSites + self.config.forceCloseSites)
+                self.log(.action, url: activity.url, title: activity.title,
+                         closed ? "每日额度（\(Int(self.config.dailyBudgetMinutes)) 分钟）用完，关掉了这个没营养的网页" : "每日额度用完，想关这个网页但没关掉")
+                if closed {
                     self.nudgeWindow.close()
                     self.toast.show("⛽️ 今天 \(Int(self.config.dailyBudgetMinutes)) 分钟的额度用完了，已关掉 \(site)")
                 }
             }
         }
+    }
+
+    /// 上一次记下的判断：同一个网页判断没变就不重复记
+    private var lastDecision: (url: String, code: String)?
+
+    /// 强制关闭对当前网页的判断变了就记一条（只记名单网站和算没营养的网页，别的网页太多）
+    private func logDecision(_ d: ForceDecision, now: Date) {
+        guard let url = current?.url?.components(separatedBy: "#")[0] else { return }
+        guard d != .notListed || currentReason != nil else { return }
+        if lastDecision?.url == url && lastDecision?.code == d.code { return }
+        lastDecision = (url, d.code)
+        var detail = d.explanation
+        if d == .notListed, let reason = currentReason { detail = "算没营养（\(reason)），但\(detail)，只计时和提醒" }
+        log(.decision, url: url, title: current?.title, detail)
+    }
+
+    /// 写一条自己的记录（给“问问大肥鱼”查）
+    func log(_ kind: AppEvent.Kind, url: String? = nil, title: String? = nil, _ detail: String) {
+        let site = url.flatMap(Classifier.siteRule(from:)) ?? ""
+        try? contentStore?.addEvent(AppEvent(kind: kind, site: site, url: url ?? "", title: title ?? "", detail: detail))
     }
 
     /// 每个网页（去掉 # 后的网址）第一次打开的时间：判断出来以前先不关。按第一次算，来回切标签页也不会重新等
@@ -350,6 +390,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         lastBlockedVideo = (url, Date())
         pendingBack = url
         let line = "这个视频没什么营养（\(label.reason)），帮你退回去啦"
+        log(.action, url: url, title: current?.title, "只拦视频：AI 判为没营养（\(label.category)：\(label.reason)），退回上一页")
         if let mascot, mascot.isShown { mascot.remark(line, mood: .angry, seconds: 4) } else { toast.show("🐳 " + line) }
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
             MainActor.assumeIsolated {
@@ -562,6 +603,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         let oldInterval = config.checkIntervalSeconds
+        let changes = Self.describeChanges(from: config, to: new)
+        if !changes.isEmpty { log(.setting, changes.joined(separator: "；")) }
         config = new
         configError = nil
         LogicalDay.startHour = config.dayStartHour
@@ -641,6 +684,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             Item(id: "actions", title: "动作", icon: "🎀", children: actions),
             Item(id: "cast", title: "施魔法", icon: "🪄"),
             Item(id: "today", title: "今天", icon: "📊"),
+            Item(id: "chat", title: "问问她", icon: "💬"),
             Item(id: "lists", title: "加入名单", icon: "📌", disabled: rule == nil, children: lists,
                  note: rule.map { "把 \($0) 加入…" }),
             pausedUntil == nil ? Item(id: "pause", title: "暂停提醒", icon: "⏸️") : Item(id: "resume", title: "恢复监测", icon: "▶️"),
@@ -661,6 +705,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let rule = lastBrowserURL.flatMap(Classifier.siteRule(from:))
         switch id {
         case "cast": mascotCast()
+        case "chat": openChat()
         case "today":
             var line = todayStatus()
             if let reason = currentReason { line += "。现在在看 \(reason)，已经连续 \(formatDuration(tracker.sessionSeconds)) 了" }
@@ -770,6 +815,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             _ = action("⚠️ 读不到 \(monitor.deniedBrowsers.sorted().joined(separator: "、")) 的网址，去授权…", #selector(openAutomationSettings))
         }
         if let configError { info("⚠️ \(configError)") }
+        _ = action("💬 问问大肥鱼…", #selector(openChat))
 
         menu.addItem(.separator())
         _ = action("打开鲸醒", #selector(openMain), key: "o")
@@ -824,13 +870,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func pauseOneHour() {
-        pausedUntil = Date().addingTimeInterval(3600)
+        pause(minutes: 60)
+    }
+
+    func pause(minutes: Double) {
+        pausedUntil = Date().addingTimeInterval(minutes * 60)
+        log(.setting, "暂停提醒 \(Int(minutes)) 分钟（强制关闭照常）")
         tick()
     }
 
-    @objc private func resume() {
+    @objc func resume() {
         pausedUntil = nil
+        log(.setting, "恢复监测")
         tick()
+    }
+
+    /// 设置改了哪些（写进记录）：名单增删、几个开关和时长
+    private static func describeChanges(from old: Config, to new: Config) -> [String] {
+        var out: [String] = []
+        let lists: [(String, [String], [String])] = [
+            ("没营养网站", old.junkSites, new.junkSites), ("强制关闭网站", old.forceCloseSites, new.forceCloseSites),
+            ("整站都算", old.wholeSites, new.wholeSites), ("只拦视频", old.videoOnlySites, new.videoOnlySites),
+            ("不记录的网站", old.sensitiveSites, new.sensitiveSites), ("没营养 App", old.junkApps, new.junkApps),
+        ]
+        for (name, a, b) in lists {
+            let added = b.filter { !a.contains($0) }, removed = a.filter { !b.contains($0) }
+            if !added.isEmpty { out.append("\(name)加了 \(added.joined(separator: "、"))") }
+            if !removed.isEmpty { out.append("\(name)删了 \(removed.joined(separator: "、"))") }
+        }
+        if old.forceCloseEnabled != new.forceCloseEnabled { out.append(new.forceCloseEnabled ? "开了强制关闭" : "关了强制关闭") }
+        if old.forceCloseMinutes != new.forceCloseMinutes { out.append("强制关闭每天 \(Int(old.forceCloseMinutes)) → \(Int(new.forceCloseMinutes)) 分钟") }
+        if old.dailyBudgetMinutes != new.dailyBudgetMinutes { out.append("每日额度 \(Int(old.dailyBudgetMinutes)) → \(Int(new.dailyBudgetMinutes)) 分钟") }
+        if old.budgetCloses != new.budgetCloses { out.append(new.budgetCloses ? "额度用完直接关" : "额度用完不再直接关") }
+        if old.llm.enabled != new.llm.enabled { out.append(new.llm.enabled ? "开了 AI 判断" : "关了 AI 判断") }
+        if old.llm.preferences != new.llm.preferences { out.append("改了“有营养 / 没营养”的标准") }
+        return out
     }
 
 
@@ -847,6 +921,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         stats.removeSite(site)
         saveStats()
         main?.model.version += 1
+    }
+
+    @objc private func openChat() {
+        chat.show(character: config.mascotCharacter)
     }
 
     @objc private func openMain() {
@@ -877,12 +955,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     DispatchQueue.main.async {
                         guard CodeGate.confirm(["今天多看 \(Int(minutes)) 分钟（今天还能多看 \(left) 次）"]) else { return }
                         self.forceCloser.adjust(minutes: minutes, config: self.config)
+                        self.log(.setting, "今天多看 \(Int(minutes)) 分钟（输了随机码）")
                         self.saveTracker()
                         self.refreshForceToday()
                     }
                     return
                 }
                 self.forceCloser.adjust(minutes: minutes, config: self.config)
+                self.log(.setting, "今天少看 \(Int(-minutes)) 分钟")
                 self.saveTracker()
                 self.refreshForceToday()
             }
@@ -979,5 +1059,166 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func quit() {
         NSApp.terminate(nil)
+    }
+}
+
+// MARK: - 问问大肥鱼
+
+extension AppDelegate {
+    /// 开发用：不启动监测（不会关网页），只读配置和数据，在终端里依次问大肥鱼几个问题并打印过程
+    func askFromTerminal(_ questions: [String]) {
+        loadConfig()
+        // 计时状态在装好的鲸醒那边，借来用
+        let installed = UserDefaults(suiteName: "io.github.realyin.whaleup")
+        if let data = installed?.data(forKey: "forceCloser"), let saved = try? JSONDecoder().decode(ForceCloser.self, from: data) { forceCloser = saved }
+        if let data = installed?.data(forKey: "tracker"), let saved = try? JSONDecoder().decode(Tracker.self, from: data) { tracker = saved }
+        let agent = Agent(host: self)
+        Task { @MainActor in
+            var shown = 0
+            for q in questions {
+                agent.send(q)
+                while agent.busy || shown < agent.lines.count {
+                    while shown < agent.lines.count {
+                        let line = agent.lines[shown]
+                        let tag = ["user": "【问】", "her": "【大肥鱼】", "step": "  · ", "error": "【出错】"]["\(line.role)"] ?? ""
+                        print(tag + line.text)
+                        fflush(stdout)
+                        shown += 1
+                    }
+                    try? await Task.sleep(nanoseconds: 200_000_000)
+                }
+                print("")
+            }
+            exit(0)
+        }
+    }
+}
+
+extension AppDelegate: AgentHost {
+    var agentConfig: Config { config }
+    var agentStore: ContentStore? { contentStore }
+    var agentStats: UsageStats { stats }
+
+    func agentStatus() -> String {
+        var lines: [String] = []
+        if let a = current {
+            var now = "前台：\(a.appName)"
+            if let url = a.url { now += "，网页《\(a.title ?? "")》\(url)" }
+            lines.append(now)
+            if a.url != nil, let d = lastDecision, d.url == a.url?.components(separatedBy: "#")[0] {
+                lines.append("对当前网页的判断：\(d.code)")
+            }
+        }
+        lines.append(todayStatus())
+        let limit = forceCloser.limitSeconds(config: config)
+        lines.append("强制关闭：\(config.forceCloseEnabled ? "开" : "关")，名单 \(config.forceCloseSites.joined(separator: "、"))；"
+                     + "今天在名单网站上已看 \(AgentToolbox.minutes(forceUsedToday))，今天上限 \(AgentToolbox.minutes(limit))"
+                     + "（每天 \(Int(config.forceCloseMinutes)) 分钟，今天调整 \(Int(forceCloser.extraSeconds / 60)) 分钟，还能多看 \(forceCloser.grantsLeft()) 次）")
+        if config.dailyBudgetMinutes > 0 {
+            lines.append("每日额度 \(Int(config.dailyBudgetMinutes)) 分钟，用完\(config.budgetCloses ? "直接关" : "只提醒")")
+        }
+        lines.append(pausedUntil.map { "提醒暂停到 \($0.formatted(date: .omitted, time: .shortened))" } ?? "提醒没暂停")
+        lines.append("AI 判断：\(config.llm.enabled ? "开（\(config.llm.provider.rawValue) \(config.llm.taggingModel)）" : "关")"
+                     + (labeler?.lastError.map { "，最近一次出错：\($0)" } ?? ""))
+        lines.append("没营养网站：\(config.junkSites.joined(separator: "、"))")
+        if !config.wholeSites.isEmpty { lines.append("整站都算：\(config.wholeSites.joined(separator: "、"))") }
+        if !config.videoOnlySites.isEmpty { lines.append("只拦视频：\(config.videoOnlySites.joined(separator: "、"))") }
+        lines.append("没营养 App：\(config.junkApps.joined(separator: "、"))")
+        lines.append("不记录的网站：\(config.sensitiveSites.count) 个")
+        return lines.joined(separator: "\n")
+    }
+
+    func agentExplain(url: String) -> String {
+        var out: [String] = ["网址：\(url)"]
+        guard let site = Classifier.siteRule(from: url) else { return "看不懂这个网址：\(url)" }
+        let whole = config.isWholeSite(url)
+        var inLists: [String] = []
+        if Classifier.matchSite(url, rules: config.junkSites) != nil { inLists.append("没营养网站") }
+        if let r = Classifier.matchSite(url, rules: config.forceCloseSites) { inLists.append("强制关闭网站（规则 \(r)）") }
+        if whole { inLists.append("整站都算") }
+        if config.isVideoOnlySite(url) { inLists.append("只拦视频") }
+        if Classifier.matchSite(url, rules: config.sensitiveSites) != nil { inLists.append("不记录") }
+        out.append("\(site) 在：\(inLists.isEmpty ? "哪个名单都不在" : inLists.joined(separator: "、"))")
+        let browsing = PageKind.isBrowsePage(url) && !whole
+        if PageKind.isBrowsePage(url) { out.append("这是“逛”的页面（首页 / 搜索 / 时间线）") }
+        let label = config.llm.enabled && !whole ? (try? contentStore?.label(forURL: url)) ?? nil : nil
+        if let label {
+            out.append("AI 判断：\(label.isJunk ? "没营养" : "有营养")，\(label.category)，\(label.reason)（营养分 \(label.nutrition)，\(label.model)）")
+        } else if config.llm.enabled && !whole {
+            out.append("AI 还没判断过这个网址（可能还没停留够 5 秒、浏览器扩展没上报，或判断失败）。打开后最多等 30 秒，判断不出来按没营养算")
+        }
+        let rule = Classifier.matchSite(url, rules: config.forceCloseSites)
+        let decision = ForceDecision.make(rule: rule, browsing: browsing, awaitingLabel: false, label: label, config: config,
+                                          used: forceUsedToday, limit: forceCloser.limitSeconds(config: config))
+        out.append("强制关闭（按现在）：\(decision.explanation)")
+        let counts = Classifier.junkReason(for: Activity(appName: "浏览器", bundleID: nil, url: url), config: config) != nil
+        let junkNow = JunkJudge.isJunk(siteRuleMatched: counts, label: label, config: config)
+        if config.isVideoOnlySite(url) {
+            out.append("只拦视频的网站不计时；点开的视频 AI 判为没营养就退回上一页")
+        } else {
+            out.append(junkNow ? "计时：算没营养，会计时、刷久了提醒" : "计时：不算没营养，不计时")
+        }
+        return out.joined(separator: "\n")
+    }
+
+    func agentApply(_ what: String, _ change: (inout Config) -> Void) -> String {
+        var new = config
+        change(&new)
+        guard new != config else { return "本来就是这样，不用改" }
+        recentlyAdded = recentlyAdded.filter { Date().timeIntervalSince($0.value) < 600 }
+        var loosened = new.loosenings(from: config, recentlyAdded: Set(recentlyAdded.keys))
+        // 对话里改比设置页更容易，这两样也算放松：不再算没营养、不再记录
+        let unJunked = Set(config.junkSites).subtracting(new.junkSites).subtracting(recentlyAdded.keys)
+        if !unJunked.isEmpty { loosened.append("\(unJunked.sorted().joined(separator: "、")) 不再算没营养") }
+        let hidden = Set(new.sensitiveSites).subtracting(config.sensitiveSites)
+        if !hidden.isEmpty { loosened.append("以后不记录 \(hidden.sorted().joined(separator: "、"))") }
+        if !loosened.isEmpty {
+            if !CodeGate.confirm(loosened) {
+                log(.setting, "大肥鱼想帮你\(what)，要输随机码，没输 / 取消了，没改")
+                return "这是放松（\(loosened.joined(separator: "；"))），主人没输对随机码或取消了，没有改"
+            }
+        }
+        let changes = Self.describeChanges(from: config, to: new)
+        applyConfig(new)
+        return config == new ? "改好了：\(changes.joined(separator: "；"))" : "没改成（设置没有保存上）"
+    }
+
+    func agentAdjustToday(minutes: Double) -> String {
+        if minutes > 0 {
+            guard forceCloser.grantsLeft() > 0 else { return "今天已经多看过 \(ForceCloser.maxGrants) 次了，不能再加" }
+            guard CodeGate.confirm(["今天多看 \(Int(minutes)) 分钟（今天还能多看 \(forceCloser.grantsLeft()) 次）"]) else {
+                return "主人没输对随机码或取消了，没加"
+            }
+        }
+        guard forceCloser.adjust(minutes: minutes, config: config) else { return "没改成" }
+        log(.setting, minutes > 0 ? "今天多看 \(Int(minutes)) 分钟（输了随机码，在对话里）" : "今天少看 \(Int(-minutes)) 分钟（在对话里）")
+        saveTracker()
+        refreshForceToday()
+        return "好了，今天的上限现在是 \(AgentToolbox.minutes(forceCloser.limitSeconds(config: config)))，已经看了 \(AgentToolbox.minutes(forceUsedToday))"
+    }
+
+    func agentPause(minutes: Double) -> String {
+        pause(minutes: minutes)
+        return "暂停提醒到 \(pausedUntil?.formatted(date: .omitted, time: .shortened) ?? "")（强制关闭照常）"
+    }
+
+    func agentResume() -> String {
+        resume()
+        return "恢复监测了"
+    }
+
+    func agentRelabel(url: String, isJunk: Bool, reason: String) -> String {
+        guard let store = contentStore else { return "内容数据库打不开" }
+        let old = try? store.label(forURL: url)
+        if !isJunk, old?.isJunk != false {
+            guard CodeGate.confirm(["把这个网页改判为有营养（不计时、不强制关闭）：\(url)"]) else {
+                return "改成有营养是放松，主人没输对随机码或取消了，没改"
+            }
+        }
+        let label = ContentLabel(isJunk: isJunk, nutrition: isJunk ? 1 : 4, category: old?.category ?? (isJunk ? "消遣" : "学习"),
+                                 reason: reason, model: "主人改的")
+        do { try store.setLabel(forURL: url, label: label) } catch { return "没改成：\(error)" }
+        log(.setting, url: url, "主人把这个网页改判为\(isJunk ? "没营养" : "有营养")：\(reason)")
+        return "改好了：以后这个网页按\(isJunk ? "没营养" : "有营养")算（原来是\(old.map { $0.isJunk ? "没营养" : "有营养" } ?? "没判断过")）。只改这个网址，以后同样标题的内容也会沿用"
     }
 }

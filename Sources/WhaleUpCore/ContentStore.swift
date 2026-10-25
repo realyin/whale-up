@@ -142,6 +142,7 @@ public final class ContentStore {
             );
             """)
         try exec(Self.favoritesSchema)
+        try exec(Self.eventsSchema)
         // 升级旧数据库：补上后来加的列
         let columns = try query("PRAGMA table_info(views)", []) { Self.text($0, 1) ?? "" }
         for (name, type) in [("background_seconds", "REAL NOT NULL DEFAULT 0"), ("label", "TEXT"),
@@ -187,7 +188,7 @@ public final class ContentStore {
             """, [from.timeIntervalSince1970, to.timeIntervalSince1970], row: Self.viewRow)
     }
 
-    private static func viewRow(_ s: OpaquePointer?) -> ContentView {
+    static func viewRow(_ s: OpaquePointer?) -> ContentView {
         let tagsJSON = text(s, 4) ?? "[]"
         return ContentView(
             viewId: text(s, 0)!, url: text(s, 1)!, title: text(s, 2)!,
@@ -201,7 +202,7 @@ public final class ContentStore {
             .with(label: decodeLabel(text(s, 14)))
     }
 
-    private static let viewColumns = """
+    static let viewColumns = """
         view_id, url, title, author, tags, description, kind, browser,
         started_at, ended_at, active_seconds, watched_seconds, media_duration, background_seconds, label
         """
@@ -295,17 +296,21 @@ public final class ContentStore {
         try run("DELETE FROM reasons WHERE at >= ? AND at < ?", range)
         try run("DELETE FROM nudges WHERE at >= ? AND at < ?", range)
         try run("DELETE FROM digests WHERE day = ?", [dayKey])
+        try run("DELETE FROM events WHERE at >= ? AND at < ?", range)
     }
 
     /// 删除某个网站的全部观看记录
     public func deleteSite(_ site: String) throws {
         try run("DELETE FROM views WHERE site = ?", [site])
+        try run("DELETE FROM events WHERE site = ?", [site])
     }
 
     public func prune(before date: Date) throws {
         try run("DELETE FROM views WHERE started_at < ?", [date.timeIntervalSince1970])
         try run("DELETE FROM reasons WHERE at < ?", [date.timeIntervalSince1970])
         try run("DELETE FROM nudges WHERE at < ?", [date.timeIntervalSince1970])
+        // 自己的记录只留 30 天：查问题够用了
+        try run("DELETE FROM events WHERE at < ?", [max(date, Date().addingTimeInterval(-30 * 86400)).timeIntervalSince1970])
     }
 
     // MARK: - SQLite 小工具
