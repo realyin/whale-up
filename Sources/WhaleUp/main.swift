@@ -120,17 +120,35 @@ MainActor.assumeIsolated {
         // 开发用：把对话窗口画成 PNG（空的和聊过几句的）
         let delegate = AppDelegate()
         let agent = Agent(host: delegate)
-        let avatar = ChatWindow.avatar(character: "whale")
-        ChatWindow.renderPNG(agent: agent, avatar: avatar, to: URL(fileURLWithPath: dir).appendingPathComponent("chat-empty.png"))
+        ChatWindow.renderPNG(ChatWindow.makeView(agent: agent, character: "whale"), to: URL(fileURLWithPath: dir).appendingPathComponent("chat-empty.png"))
         agent.showDemo([
             .init(role: .user, text: "那个学英语的视频为什么被关了？"),
             .init(role: .step, text: "推一遍判断"),
             .init(role: .step, text: "翻自己的记录"),
             .init(role: .her, text: "先说结论：**按现在的规则它不会被关**，AI 判它有营养（学习：英语听力方法）。\n\n- 22:25 你点开它时，今天的 10 分钟已经用完\n- 那时 AI 还没判断完，旧版本没等判断就关了——这个 bug 已经修好\n\n现在再打开，我会先等 AI 判断，有营养的就不关～"),
+            .init(role: .user, text: "大肥鱼你是不是又胖了"),
+            .init(role: .her, text: "啊啊啊——你再说一遍？！(╯°□°）╯\n我这是**鲸鱼体型**！脂肪是保暖用的！……哼，转移话题也没用，B 站今天照样不开。"),
             .init(role: .user, text: "把虎扑设成整站都算"),
         ], doing: "在改名单…")
-        ChatWindow.renderPNG(agent: agent, avatar: avatar, to: URL(fileURLWithPath: dir).appendingPathComponent("chat-talk.png"))
+        ChatWindow.renderPNG(ChatWindow.makeView(agent: agent, character: "whale"), to: URL(fileURLWithPath: dir).appendingPathComponent("chat-talk.png"))
         exit(0)
+    }
+    if ProcessInfo.processInfo.environment["WHALEUP_SHOW_CHAT"] != nil {
+        // 开发用：只打开对话窗口，打印窗口状态（是不是普通程序、光标在不在输入框里）
+        let app = NSApplication.shared
+        app.setActivationPolicy(.accessory)
+        let delegate = AppDelegate()
+        let chat = ChatWindow(agent: Agent(host: delegate))
+        chat.show(character: "whale")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            let w = NSApp.windows.first { $0.title == "问问大肥鱼" }
+            print("policy regular:", NSApp.activationPolicy() == .regular, "active:", NSApp.isActive,
+                  "key:", w?.isKeyWindow ?? false, "firstResponder:", w?.firstResponder.map { String(describing: type(of: $0)) } ?? "nil")
+            w?.close()
+            print("after close accessory:", NSApp.activationPolicy() == .accessory)
+            exit(0)
+        }
+        app.run()
     }
     if let questions = ProcessInfo.processInfo.environment["WHALEUP_ASK"] {
         // 开发用：在终端里问大肥鱼，几个问题用 | 隔开（同一段对话里接着问）
