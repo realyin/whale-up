@@ -106,7 +106,8 @@ async function judgeContent(key, info) {
 async function changeLocal(change) {
   const m = await loadMirror();
   change(m);
-  m.dirty = { limit: m.limit, extra: m.extra, sites: m.sites, grants: m.grants || 0 };
+  // 名单只在鲸醒 App 里改：不发回去，免得旧名单盖掉 App 里刚改的
+  m.dirty = { limit: m.limit, extra: m.extra, grants: m.grants || 0 };
   await saveMirror(m);
   return m;
 }

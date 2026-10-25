@@ -20,8 +20,6 @@ function render(s, connected) {
     : connected ? "和鲸醒 App 同步：刚刚"
     : ago === null ? "还没连上鲸醒 App（Safari 这边照样计时）" : `上次和鲸醒 App 同步：${ago < 60 ? `${ago} 秒` : `${Math.round(ago / 60)} 分钟`}前`;
   document.getElementById("offline").hidden = connected !== false;
-  const box = document.getElementById("sites");
-  if (document.activeElement !== box) box.value = s.sites.join("\n");
 }
 
 async function update(change) {
@@ -86,13 +84,5 @@ document.getElementById("reset").onclick = async () => {
   const s = await loadMirror();
   if (s.extra < 0) gate(`恢复成每天的 ${s.limit} 分钟`, () => update((m) => { m.extra = 0; }));
   else update((m) => { m.extra = 0; });
-};
-document.getElementById("sites").onchange = async (e) => {
-  const sites = e.target.value.split(/\s+/).map((x) => x.trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "")).filter(Boolean);
-  const s = await loadMirror();
-  const removed = s.sites.filter((x) => !sites.includes(x));
-  // 加网站随时可以；删网站要输随机码
-  if (removed.length) gate(`从名单里删掉 ${removed.join("、")}`, () => update((m) => { m.sites = sites; }));
-  else update((m) => { m.sites = sites; });
 };
 update(null);

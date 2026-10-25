@@ -115,6 +115,7 @@ struct HomeView: View {
                     todayCard
                     limitCard
                     adjustCard
+                    sitesCard
                     AICard()
                     SetupCard()
                 }
@@ -270,6 +271,63 @@ struct HomeView: View {
         if !usage.open.isEmpty {
             Whisper.schedule(left: usage.leftSeconds, limitMinutes: usage.todayLimit, startHour: usage.dayStartHour)
         }
+    }
+
+    @State private var newSite = ""
+    @State private var siteError: String?
+
+    /// 要管的网站：Safari 扩展按这个名单计时、锁；加随时可以，删要输随机码
+    private var sitesCard: some View {
+        CardBox(title: "要管的网站", icon: "globe") {
+            VStack(spacing: 0) {
+                ForEach(usage.sites, id: \.self) { site in
+                    HStack {
+                        Text(site).font(.system(size: 15, weight: .semibold, design: .rounded)).foregroundColor(Theme.ink)
+                        Spacer()
+                        Button {
+                            gate = CodeRequest(what: "从名单里删掉 \(site)") {
+                                usage.sites.removeAll { $0 == site }
+                                usage.save()
+                            }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill").font(.system(size: 20)).foregroundColor(Theme.muted.opacity(0.6))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.vertical, 9)
+                    if site != usage.sites.last { Divider().overlay(Theme.track) }
+                }
+            }
+            HStack(spacing: 10) {
+                TextField("输入网址或域名，如 douyin.com", text: $newSite)
+                    .font(.system(size: 15, design: .rounded)).foregroundColor(Theme.ink)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                    .padding(.horizontal, 12).padding(.vertical, 10)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Theme.soft))
+                    .onSubmit(addSite)
+                Button("添加", action: addSite).buttonStyle(Pill(small: true))
+            }
+            if let siteError {
+                Text(siteError).font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundColor(Theme.junk)
+            }
+            Text("Safari 里打开这些网站时，大肥鱼就会出来计时，到点锁上。加网站随时生效，删网站要输随机码。")
+                .font(.system(size: 13, design: .rounded)).foregroundColor(Theme.muted)
+        }
+    }
+
+    /// 从输入里取出域名：去掉 http(s)://、www.、路径
+    private func addSite() {
+        var s = newSite.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if let range = s.range(of: "://") { s = String(s[range.upperBound...]) }
+        s = String(s.split(separator: "/").first ?? "")
+        if s.hasPrefix("www.") { s.removeFirst(4) }
+        if s.hasPrefix("m.") { s.removeFirst(2) }
+        guard s.contains("."), !s.contains(" ") else { siteError = "这看起来不像网址，试试 douyin.com 这样的"; return }
+        guard !usage.sites.contains(s) else { siteError = "\(s) 已经在名单里了"; return }
+        usage.sites.append(s)
+        usage.save()
+        newSite = ""
+        siteError = nil
     }
 
     private func setLimit(_ value: Int) {
