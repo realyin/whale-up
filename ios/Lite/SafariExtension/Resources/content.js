@@ -117,6 +117,8 @@
   $(".lock button.rest").onclick = () => location.replace(api.runtime.getURL("rest.html"));
   $(".lock button.home").onclick = () => location.assign(location.origin + "/");
   let toldBrowse = false;
+  let pendingSince = 0;
+  let toldJudging = null;
 
   function render(s) {
     // 万一还是算出了不是数字的东西：按用完了算，宁可锁上也不放过
@@ -136,6 +138,12 @@
     if (left <= 0 && isBrowsePage() && !isWhole()) {
       if (!$(".lock").hidden) unlock();
       if (!toldBrowse) { toldBrowse = true; say("今天的时间用完啦，只能看有营养的哦～", "head-angry", 6); }
+      return;
+    }
+    // 额度用完以后新点开的内容：AI 还在判断就先不锁（最多等 30 秒），免得有营养的视频先被锁一下、停掉
+    if (left <= 0 && verdict === "pending" && Date.now() - pendingSince < 30000) {
+      if (!$(".lock").hidden) unlock();
+      if (toldJudging !== contentKey) { toldJudging = contentKey; say("时间用完了，我先看看这个有没有营养…", "head-watching", 4); }
       return;
     }
     if (left <= 0) return lock(s);
@@ -221,11 +229,12 @@
     contentKey = key;
     const info = extract(video);
     verdict = "pending";
+    pendingSince = Date.now();
     render(state);
     judgeContent(key, { site, title: info.title, author: info.author, tags: info.tags.join("、"), description: info.description, tweet: info.tweet || "" })
       .then((v) => {
         if (key !== contentKey) return;
-        verdict = v && v.noText ? null : v;  // 推文没字：判断不了，按没营养算  // null：判断不了，按没营养算
+        verdict = v && v.noText ? null : v;  // null：判断不了（推文没字、没网等），按没营养算
         render(state);
         if (isGood()) say(`这个是${verdict.category || "有营养的"}，不算时间，好好看～`, "head-shy", 4);
       });
