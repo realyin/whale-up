@@ -77,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let debug = ProcessInfo.processInfo.environment["WHALEUP_DEBUG"] != nil
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        MainMenu.install()
         loadConfig()
         if let data = UserDefaults.standard.data(forKey: "tracker"),
            let saved = try? JSONDecoder().decode(Tracker.self, from: data) {

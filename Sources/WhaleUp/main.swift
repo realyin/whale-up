@@ -137,11 +137,26 @@ MainActor.assumeIsolated {
         // 开发用：只打开对话窗口，打印窗口状态（是不是普通程序、光标在不在输入框里）
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
+        MainMenu.install()
         let delegate = AppDelegate()
         let chat = ChatWindow(agent: Agent(host: delegate))
         chat.show(character: "whale")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             let w = NSApp.windows.first { $0.title == "问问大肥鱼" }
+            // 模拟语音输入法的做法：把字放进剪贴板，按 ⌘V，看输入框里有没有（测完把剪贴板还原）
+            let pb = NSPasteboard.general
+            let saved = pb.string(forType: .string)
+            pb.clearContents()
+            pb.setString("语音输入测试", forType: .string)
+            if let w, let e = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+                                               windowNumber: w.windowNumber, context: nil, characters: "v",
+                                               charactersIgnoringModifiers: "v", isARepeat: false, keyCode: 9) {
+                NSApp.sendEvent(e)
+            }
+            let typed = (w?.firstResponder as? NSTextView)?.string ?? ""
+            pb.clearContents()
+            if let saved { pb.setString(saved, forType: .string) }
+            print("cmd+V pasted:", typed == "语音输入测试", "text:", typed)
             print("policy regular:", NSApp.activationPolicy() == .regular, "active:", NSApp.isActive,
                   "key:", w?.isKeyWindow ?? false, "firstResponder:", w?.firstResponder.map { String(describing: type(of: $0)) } ?? "nil")
             w?.close()
