@@ -234,6 +234,7 @@
   // ---- 只拦视频：点开一条带视频的内容（推特的 /status/ 页）时问 AI，没营养的暂停、3 秒后退回 ----
   let videoKey = null;
   let backTimer = null;
+  let waited = { key: null, n: 0 };
   // 这条视频为什么拦 / 没拦：点她的脑袋能看到，放过的时候也直接说出来，不然看不出来是没生效还是判断成有营养
   let videoNote = "还没点开带视频的推文～";
   function note(text, face = "head-watching", seconds = 5) { videoNote = text; say(text, face, seconds); }
@@ -247,9 +248,14 @@
     }
     const key = site + "|" + identity(video);
     if (key === videoKey) return;
+    const info = extract(video);
+    // 推特的推文文字常比视频晚出来一会儿：没读到字先等两秒（每秒看一次），还没有再交给 App 去推特接口要
+    if (!info.title) {
+      if (waited.key !== key) waited = { key, n: 0 };
+      if (++waited.n < 3) return;
+    }
     videoKey = key;
     clearTimeout(backTimer);
-    const info = extract(video);
     verdict = "pending";
     render(state);
     judgeContent(key, { site, title: info.title, author: info.author, tags: info.tags.join("、"), description: info.description, tweet: info.tweet || "" })

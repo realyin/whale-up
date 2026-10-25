@@ -59,6 +59,10 @@ function extract(video) {
     const user = (location.pathname.match(/^\/([^/]+)\/status\//) || [])[1];
     if (id && user) d.tweet = `https://x.com/${user}/status/${id}`;
     d.author = (tweet?.querySelector('[data-testid="User-Name"]')?.innerText || "").split("\n").slice(0, 2).join(" ");
+    // 手机上全屏看视频（/mediaViewer）时推文文字不在 article 里：取屏幕上真正露在最上面的那段推文文字
+    // （垫在下面的时间线被盖住了，不算）。敏感内容的推文，推特公开接口不给，只能从这里读
+    if (!d.title) d.title = shownText('[data-testid="tweetText"], div[lang][dir="auto"]');
+    if (!d.author) d.author = shownText('[data-testid="User-Name"]').split("\n").slice(0, 2).join(" ");
     // 取不到时用网页标题：推文页的标题就是“某某 在 X 上：“推文内容” / X”
     if (!d.title) {
       const m = document.title.match(/^(.*?)\s*(?:在 X 上|on X)\s*[:：]\s*[“"](.*)[”"]\s*\/\s*X$/s);
@@ -85,6 +89,20 @@ function extract(video) {
   d.description = clip(d.description, 500);
   d.author = clip(d.author, 80);
   return d;
+}
+
+/** 屏幕上露在最上层（没被别的东西盖住）的第一个匹配元素的文字 */
+function shownText(selector) {
+  for (const el of document.querySelectorAll(selector)) {
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1 || r.bottom <= 0 || r.top >= window.innerHeight) continue;
+    const x = Math.min(window.innerWidth - 1, Math.max(0, r.left + Math.min(20, r.width / 2)));
+    const y = Math.min(window.innerHeight - 1, Math.max(0, r.top + Math.min(10, r.height / 2)));
+    const hit = document.elementFromPoint(x, y);
+    const text = (el.innerText || "").trim();
+    if (text && hit && (hit === el || el.contains(hit))) return text;
+  }
+  return "";
 }
 
 /** 什么时候算“换了一个内容”：网址变了；抖音信息流网址不变，按视频描述 / 片源区分 */
