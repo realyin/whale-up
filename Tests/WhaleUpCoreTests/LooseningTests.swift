@@ -51,6 +51,13 @@ final class LooseningTests: XCTestCase {
         XCTAssertTrue(f.adjust(minutes: -5, config: base))
     }
 
+    func testUndoingRecentAdditionIsFree() {
+        var c = base
+        c.forceCloseSites.removeAll { $0 == "bilibili.com" }
+        XCTAssertEqual(c.loosenings(from: base, recentlyAdded: ["bilibili.com"]), [])
+        XCTAssertEqual(c.loosenings(from: base).count, 1)
+    }
+
     func testOldSavedStateStillDecodes() throws {
         let old = #"{"extraSeconds":300,"day":"2026-10-25","warned":false}"#
         let f = try JSONDecoder().decode(ForceCloser.self, from: Data(old.utf8))

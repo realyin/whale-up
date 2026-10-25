@@ -25,6 +25,13 @@ struct Usage: Codable {
     var wholeSites: [String] = []
     /// 只拦视频的网站（如推特）：不计时；点开没营养的视频就退回去
     var videoOnlySites: [String] = []
+    /// 网站是什么时候加进来的：刚加的 10 分钟内改管法、删掉都不用随机码（纠正手误）
+    var addedAt: [String: Date] = [:]
+    static let graceSeconds: Double = 600
+
+    func isNew(_ site: String) -> Bool {
+        addedAt[site].map { Date().timeIntervalSince($0) < Self.graceSeconds } ?? false
+    }
 
     enum SiteMode: String { case content, videoOnly, whole }
     func mode(of site: String) -> SiteMode {
@@ -61,6 +68,7 @@ struct Usage: Codable {
         sites = try c.decodeIfPresent([String].self, forKey: .sites) ?? d.sites
         wholeSites = try c.decodeIfPresent([String].self, forKey: .wholeSites) ?? d.wholeSites
         videoOnlySites = try c.decodeIfPresent([String].self, forKey: .videoOnlySites) ?? d.videoOnlySites
+        addedAt = try c.decodeIfPresent([String: Date].self, forKey: .addedAt) ?? d.addedAt
         good = try c.decodeIfPresent([String: Double].self, forKey: .good) ?? d.good
     }
 

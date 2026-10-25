@@ -17,6 +17,7 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
             let mode = Usage.SiteMode(rawValue: message["mode"] as? String ?? "") ?? (message["whole"] as? Bool == true ? .whole : .content)
             if !u.sites.contains(site) {
                 u.sites.append(site)
+                u.addedAt[site] = Date()
                 u.setMode(mode, for: site)
                 changed = true
             } else if mode == .whole || (mode == .content && u.mode(of: site) == .videoOnly) {

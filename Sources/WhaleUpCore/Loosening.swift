@@ -2,17 +2,18 @@ import Foundation
 
 /// 哪些改动算“放松管控”：这些改动要先输随机码才生效。收紧的改动（少看、调小时长、加网站）不设门槛
 extension Config {
-    /// 和旧配置比，放松了哪些地方；空数组表示没有放松
-    public func loosenings(from old: Config) -> [String] {
+    /// 和旧配置比，放松了哪些地方；空数组表示没有放松。
+    /// recentlyAdded：刚加进名单的网站，从名单里删掉不算放松（加错了纠正一下，不用随机码）
+    public func loosenings(from old: Config, recentlyAdded: Set<String> = []) -> [String] {
         var out: [String] = []
         if old.forceCloseEnabled && !forceCloseEnabled { out.append("关掉强制关闭") }
         if forceCloseEnabled && forceCloseMinutes > old.forceCloseMinutes {
             out.append("强制关闭从 \(Int(old.forceCloseMinutes)) 分钟调到 \(Int(forceCloseMinutes)) 分钟")
         }
-        let removed = Set(old.forceCloseSites).subtracting(forceCloseSites)
+        let removed = Set(old.forceCloseSites).subtracting(forceCloseSites).subtracting(recentlyAdded)
         if !removed.isEmpty { out.append("从强制关闭名单删掉 \(removed.sorted().joined(separator: "、"))") }
-        let wholeRemoved = Set(old.wholeSites).subtracting(wholeSites)
-        let videoRemoved = Set(old.videoOnlySites).subtracting(videoOnlySites)
+        let wholeRemoved = Set(old.wholeSites).subtracting(wholeSites).subtracting(recentlyAdded)
+        let videoRemoved = Set(old.videoOnlySites).subtracting(videoOnlySites).subtracting(recentlyAdded)
         if !videoRemoved.isEmpty { out.append("\(videoRemoved.sorted().joined(separator: "、")) 不再拦没营养的视频") }
         if !wholeRemoved.isEmpty { out.append("\(wholeRemoved.sorted().joined(separator: "、")) 不再整站都算") }
         if old.dailyBudgetMinutes > 0 && (dailyBudgetMinutes == 0 || dailyBudgetMinutes > old.dailyBudgetMinutes) {

@@ -524,8 +524,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var configLoaded = false
 
     /// 设置页或菜单改了配置：保存并立即生效。放松管控的改动要先输随机码
+    /// 刚加进名单的网站和时间：10 分钟内删掉不用随机码（纠正手误）
+    private var recentlyAdded: [String: Date] = [:]
+
     private func applyConfig(_ new: Config) {
-        let loosened = new.loosenings(from: config)
+        recentlyAdded = recentlyAdded.filter { Date().timeIntervalSince($0.value) < 600 }
+        let loosened = new.loosenings(from: config, recentlyAdded: Set(recentlyAdded.keys))
+        for (old, now) in [(config.forceCloseSites, new.forceCloseSites), (config.wholeSites, new.wholeSites),
+                           (config.videoOnlySites, new.videoOnlySites), (config.junkSites, new.junkSites)] {
+            for site in Set(now).subtracting(old) { recentlyAdded[site] = Date() }
+        }
         if !loosened.isEmpty && !CodeGate.isUnlocked {
             // 先把界面改回去，再弹随机码（不在 SwiftUI 改值的过程里弹窗）
             main?.model.settings.replace(with: config)

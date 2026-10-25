@@ -288,7 +288,8 @@ struct HomeView: View {
             siteNotice = "\(site) 已改成\(Self.modeNames[mode]!)，马上生效"
         }
         let tightening = mode == .whole || (mode == .content && from == .videoOnly)
-        if tightening { apply() }
+        // 刚加的 10 分钟内：纠正手误，不用随机码
+        if tightening || usage.isNew(site) { apply() }
         else {
             gate = CodeRequest(what: "\(site) 从\(Self.modeNames[from]!)改成\(Self.modeNames[mode]!)（取消的话不变）", action: apply)
         }
@@ -323,12 +324,15 @@ struct HomeView: View {
                         }
                         .background(Capsule().fill(Theme.soft))
                         Button {
-                            gate = CodeRequest(what: "从名单里删掉 \(site)") {
+                            let remove = {
                                 usage.sites.removeAll { $0 == site }
                                 usage.wholeSites.removeAll { $0 == site }
                                 usage.videoOnlySites.removeAll { $0 == site }
+                                usage.addedAt[site] = nil
                                 usage.save()
                             }
+                            // 刚加的 10 分钟内删掉不用随机码
+                            if usage.isNew(site) { remove() } else { gate = CodeRequest(what: "从名单里删掉 \(site)", action: remove) }
                         } label: {
                             Image(systemName: "xmark.circle.fill").font(.system(size: 20)).foregroundColor(Theme.muted.opacity(0.6))
                         }
@@ -338,14 +342,16 @@ struct HomeView: View {
                     if site != usage.sites.last { Divider().overlay(Theme.track) }
                 }
             }
-            HStack(spacing: 10) {
-                TextField("输入网址或域名，如 douyin.com", text: $newSite)
-                    .font(.system(size: 15, design: .rounded)).foregroundColor(Theme.ink)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
-                    .padding(.horizontal, 12).padding(.vertical, 10)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Theme.soft))
-                    .onSubmit(addSite)
-                Button("添加", action: addSite).buttonStyle(Pill(small: true))
+            // 加网站：先输网址，再点想要的管法（加之前就选好）
+            TextField("输入网址或域名，如 douyin.com", text: $newSite)
+                .font(.system(size: 15, design: .rounded)).foregroundColor(Theme.ink)
+                .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                .padding(.horizontal, 12).padding(.vertical, 10)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Theme.soft))
+            HStack(spacing: 8) {
+                addButton("按内容管", mode: .content, color: Theme.accent)
+                addButton("只拦视频", mode: .videoOnly, color: Color(red: 0.45, green: 0.36, blue: 0.82))
+                addButton("整站管", mode: .whole, color: Theme.junk)
             }
             if let siteNotice {
                 Text(siteNotice).font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundColor(Theme.accent)
@@ -353,13 +359,25 @@ struct HomeView: View {
             if let siteError {
                 Text(siteError).font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundColor(Theme.junk)
             }
-            Text("点网站右边选管法：\n“看内容”：每个视频 / 帖子由 AI 判断，有营养的不计时，首页不锁。\n“只拦视频”：不计时，只在点开视频时让 AI 判断，没营养的自动退回（适合推特这种大部分内容都要看的）。\n“整站”：整个网站都算，首页也锁（适合虎扑这种几乎全是消遣的）。\n收紧随时生效；放松（离开整站、改成只拦视频、删网站）要输随机码。")
+            Text("点网站右边选管法：\n“看内容”：每个视频 / 帖子由 AI 判断，有营养的不计时，首页不锁。\n“只拦视频”：不计时，只在点开视频时让 AI 判断，没营养的自动退回（适合推特这种大部分内容都要看的）。\n“整站”：整个网站都算，首页也锁（适合虎扑这种几乎全是消遣的）。\n收紧随时生效；放松（离开整站、改成只拦视频、删网站）要输随机码。刚加的网站 10 分钟内可以随便改、删。")
                 .font(.system(size: 13, design: .rounded)).foregroundColor(Theme.muted)
         }
     }
 
     /// 从输入里取出域名：去掉 http(s)://、www.、路径
-    private func addSite() {
+    /// “按 xx 加入”的按钮
+    private func addButton(_ title: String, mode: Usage.SiteMode, color: Color) -> some View {
+        Button { addSite(mode) } label: {
+            Text(title).font(.system(size: 14, weight: .bold, design: .rounded)).foregroundColor(.white)
+                .frame(maxWidth: .infinity).padding(.vertical, 10)
+                .background(Capsule().fill(color))
+                .overlay(Capsule().stroke(Theme.ink, lineWidth: 2))
+        }
+        .buttonStyle(.plain)
+        .opacity(newSite.trimmingCharacters(in: .whitespaces).isEmpty ? 0.45 : 1)
+    }
+
+    private func addSite(_ mode: Usage.SiteMode) {
         var s = newSite.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if let range = s.range(of: "://") { s = String(s[range.upperBound...]) }
         s = String(s.split(separator: "/").first ?? "")
@@ -368,9 +386,12 @@ struct HomeView: View {
         guard s.contains("."), !s.contains(" ") else { siteError = "这看起来不像网址，试试 douyin.com 这样的"; return }
         guard !usage.sites.contains(s) else { siteError = "\(s) 已经在名单里了"; return }
         usage.sites.append(s)
+        usage.addedAt[s] = Date()
+        usage.setMode(mode, for: s)
         usage.save()
         newSite = ""
         siteError = nil
+        siteNotice = "已加入 \(s)（\(Self.modeNames[mode]!)）。选错了的话 10 分钟内可以直接改、删，不用输随机码"
     }
 
     private func setLimit(_ value: Int) {
