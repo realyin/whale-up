@@ -58,3 +58,19 @@ final class LooseningTests: XCTestCase {
         XCTAssertEqual(f.grantsToday, 0)
     }
 }
+
+final class WholeSiteTests: XCTestCase {
+    func testWholeSiteIgnoresAILabelAndCountsAsJunk() {
+        var c = Config()
+        c.llm.enabled = true
+        c.wholeSites = ["hupu.com"]
+        let good = ContentLabel(isJunk: false, nutrition: 4, category: "体育", reason: "x", model: "m")
+        var v = ContentView(viewId: "1", url: "https://bbs.hupu.com/123", title: "t", startedAt: 0, endedAt: 0, activeSeconds: 10)
+        v.label = good
+        XCTAssertTrue(v.isJunk(config: c))
+        XCTAssertNotNil(Classifier.junkReason(for: Activity(appName: "Safari", bundleID: nil, url: "https://bbs.hupu.com/"), config: c))
+        var looser = c
+        looser.wholeSites = []
+        XCTAssertEqual(looser.loosenings(from: c), ["hupu.com 不再整站都算"])
+    }
+}

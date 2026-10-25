@@ -116,6 +116,14 @@ public struct Config: Codable, Equatable {
     public var forceCloseSites: [String] = [
         "douyin.com", "kuaishou.com", "bilibili.com", "tiktok.com", "youtube.com/shorts",
     ]
+    /// 整站都算没营养的网站（如虎扑）：不看 AI 判断、首页也算，整个网站一起管
+    public var wholeSites: [String] = []
+
+    /// 所有按网站管的规则：没营养的、强制关闭的、整站算的
+    public var watchedSites: [String] { junkSites + forceCloseSites + wholeSites }
+
+    /// 这个网址是不是“整站都算”的网站
+    public func isWholeSite(_ url: String) -> Bool { Classifier.matchSite(url, rules: wholeSites) != nil }
 
     /// 内容记录范围
     public var contentScope: ContentScope = .junk
@@ -173,6 +181,7 @@ public struct Config: Codable, Equatable {
         forceCloseEnabled = try c.decodeIfPresent(Bool.self, forKey: .forceCloseEnabled) ?? d.forceCloseEnabled
         forceCloseMinutes = try c.decodeIfPresent(Double.self, forKey: .forceCloseMinutes) ?? d.forceCloseMinutes
         forceCloseSites = try c.decodeIfPresent([String].self, forKey: .forceCloseSites) ?? d.forceCloseSites
+        wholeSites = try c.decodeIfPresent([String].self, forKey: .wholeSites) ?? d.wholeSites
         contentScope = try c.decodeIfPresent(ContentScope.self, forKey: .contentScope) ?? d.contentScope
         sensitiveSites = try c.decodeIfPresent([String].self, forKey: .sensitiveSites) ?? d.sensitiveSites
         llm = try c.decodeIfPresent(LLMConfig.self, forKey: .llm) ?? d.llm
@@ -188,7 +197,7 @@ public struct Config: Codable, Equatable {
         switch contentScope {
         case .off: return false
         case .all: return Classifier.siteRule(from: url) != nil
-        case .junk: return Classifier.matchSite(url, rules: junkSites + forceCloseSites) != nil
+        case .junk: return Classifier.matchSite(url, rules: watchedSites) != nil
         }
     }
 

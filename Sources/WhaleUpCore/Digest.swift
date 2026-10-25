@@ -25,8 +25,9 @@ public enum DayKey {
 extension ContentView {
     /// 按网站规则和大模型判断，这条内容算不算没营养
     public func isJunk(config: Config) -> Bool {
-        let ruleMatched = Classifier.matchSite(url, rules: config.junkSites + config.forceCloseSites) != nil
-        return JunkJudge.isJunk(siteRuleMatched: ruleMatched, label: label, config: config)
+        let ruleMatched = Classifier.matchSite(url, rules: config.watchedSites) != nil
+        // 整站都算的网站不看 AI 判断
+        return JunkJudge.isJunk(siteRuleMatched: ruleMatched, label: config.isWholeSite(url) ? nil : label, config: config)
     }
 }
 

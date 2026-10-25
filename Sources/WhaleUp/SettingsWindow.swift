@@ -90,9 +90,14 @@ struct SettingsView: View {
                 switch model.tab {
                 case .sites:
                     RuleListEditor(
-                        note: "在这些网站上连续刷太久，会弹窗劝你休息。",
+                        note: "在这些网站上连续刷太久，会弹窗劝你休息。开了 AI 判断时按内容区分：有营养的不算。",
                         placeholder: "输入网址或域名，如 zhihu.com、youtube.com/shorts",
                         rules: $model.config.junkSites, browserURL: model.browserURL, isSite: true)
+                    Divider().padding(.vertical, 8)
+                    RuleListEditor(
+                        note: "整站都算没营养的网站（如虎扑这种几乎全是消遣的）：不看 AI 判断，首页也算，强制关闭时首页也关。删掉要输随机码。",
+                        placeholder: "输入网址或域名，如 hupu.com",
+                        rules: $model.config.wholeSites, browserURL: model.browserURL, isSite: true)
                 case .apps:
                     RuleListEditor(
                         note: "名字里包含这些文字的 App（或 Bundle ID 完全相同），算作没营养的内容。",

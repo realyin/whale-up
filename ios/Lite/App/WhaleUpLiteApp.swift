@@ -284,9 +284,30 @@ struct HomeView: View {
                     HStack {
                         Text(site).font(.system(size: 15, weight: .semibold, design: .rounded)).foregroundColor(Theme.ink)
                         Spacer()
+                        // 管法：看内容（AI 判断、首页不锁）/ 整站（全算、首页也锁）。整站改成看内容等于放松，要输随机码
+                        let whole = usage.wholeSites.contains(site)
+                        Button {
+                            if whole {
+                                gate = CodeRequest(what: "\(site) 改成按内容判断") {
+                                    usage.wholeSites.removeAll { $0 == site }
+                                    usage.save()
+                                }
+                            } else {
+                                usage.wholeSites.append(site)
+                                usage.save()
+                            }
+                        } label: {
+                            Text(whole ? "整站" : "看内容")
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .foregroundColor(whole ? .white : Theme.accent)
+                                .padding(.horizontal, 10).padding(.vertical, 5)
+                                .background(Capsule().fill(whole ? Theme.junk : Theme.soft))
+                        }
+                        .buttonStyle(.plain)
                         Button {
                             gate = CodeRequest(what: "从名单里删掉 \(site)") {
                                 usage.sites.removeAll { $0 == site }
+                                usage.wholeSites.removeAll { $0 == site }
                                 usage.save()
                             }
                         } label: {
@@ -310,7 +331,7 @@ struct HomeView: View {
             if let siteError {
                 Text(siteError).font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundColor(Theme.junk)
             }
-            Text("Safari 里打开这些网站时，大肥鱼就会出来计时，到点锁上。加网站随时生效，删网站要输随机码。")
+            Text("点网站右边切换管法：“看内容”是每个视频 / 帖子由 AI 判断，有营养的不计时，首页不锁；“整站”是整个网站都算（适合虎扑这种几乎全是消遣的），首页也锁。加网站、改成整站随时生效；删网站、改回看内容要输随机码。")
                 .font(.system(size: 13, design: .rounded)).foregroundColor(Theme.muted)
         }
     }

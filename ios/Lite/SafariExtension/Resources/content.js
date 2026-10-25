@@ -49,6 +49,7 @@
       .card button { width: 100%; border: 2.5px solid var(--ink); border-radius: 999px; background: var(--accent); color: #fff; font-size: 16px;
                      font-weight: 800; padding: 12px; box-shadow: 0 3px 0 var(--ink); }
       .card button.home { background: var(--paper); color: var(--ink); margin-bottom: 10px; }
+      .card button[hidden] { display: none; }
     </style>
     <div class="buddy">
       <div class="bubble" hidden></div>
@@ -69,7 +70,9 @@
   const bubble = $(".bubble");
   // 当前内容的 AI 判断：undefined 还没看、"pending" 判断中、{isJunk,...}、{off:true} 没开 AI、null 判断失败
   let verdict;
-  const isGood = () => !!verdict && typeof verdict === "object" && !verdict.off && verdict.isJunk === false;
+  const isGood = () => !isWhole() && !!verdict && typeof verdict === "object" && !verdict.off && verdict.isJunk === false;
+  // 整站都算的网站（如虎扑）：不问 AI、首页也锁、锁屏卡片上不放“回首页”
+  const isWhole = () => (state.wholeSites || []).some((x) => location.hostname === x || location.hostname.endsWith("." + x));
   let bubbleTimer = null;
   let warned = false;
 
@@ -85,7 +88,10 @@
   let pauser = null;
   function lock(s) {
     $(".lock h2").textContent = `今天的 ${todayLimit(s)} 分钟用完啦`;
-    $(".lock .start").textContent = s.dayStartHour;
+    $(".lock button.home").hidden = isWhole();
+    $(".lock p").innerHTML = isWhole()
+      ? `这个网站今天不能再刷了，明天凌晨 <b>${s.dayStartHour}</b> 点再见～<br>真想多看，点地址栏里的鲸醒图标，自己加时间。`
+      : `这个视频大肥鱼不让看了，明天凌晨 <b>${s.dayStartHour}</b> 点再见～<br>有营养的照样能看：回首页找找。真想多看，点地址栏里的鲸醒图标，自己加时间。`;
     $(".lock").hidden = false;
     $(".buddy").style.display = "none";
     if (!pauser) {
@@ -117,7 +123,7 @@
     // 有营养的内容不计时，也不锁
     if (isGood()) { if (!$(".lock").hidden) unlock(); return; }
     // 首页、搜索这类“逛”的页面不锁：得能去找有营养的视频
-    if (left <= 0 && isBrowsePage()) {
+    if (left <= 0 && isBrowsePage() && !isWhole()) {
       if (!$(".lock").hidden) unlock();
       if (!toldBrowse) { toldBrowse = true; say("今天的时间用完啦，只能看有营养的哦～", "head-angry", 6); }
       return;
@@ -194,6 +200,7 @@
   const site = state.sites.find((x) => location.hostname === x || location.hostname.endsWith("." + x)) || location.hostname;
   let contentKey = null;
   function checkContent() {
+    if (isWhole()) { verdict = undefined; return; }
     const video = largestVideo();
     const key = site + "|" + identity(video);
     if (key === contentKey) return;

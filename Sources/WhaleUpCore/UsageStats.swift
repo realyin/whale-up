@@ -37,7 +37,7 @@ public struct UsageStats: Codable, Equatable {
         var key = "app:" + activity.appName
         if let url = activity.url, config.isSensitive(url: url) { return "site:" + sensitiveName }
         if let url = activity.url {
-            if let rule = Classifier.matchSite(url, rules: config.junkSites + config.forceCloseSites) {
+            if let rule = Classifier.matchSite(url, rules: config.watchedSites) {
                 key = "site:" + rule
             } else if let site = Classifier.siteRule(from: url) {
                 key = "site:" + site
@@ -111,7 +111,7 @@ public struct UsageStats: Codable, Equatable {
         if name.hasSuffix(nutritiousSuffix) { return false }
         if name.hasSuffix(junkSuffix) { return true }
         if isSite {
-            let rules = config.junkSites + config.forceCloseSites
+            let rules = config.watchedSites
             return rules.contains(name) || Classifier.matchSite("https://" + name, rules: rules) != nil
         }
         return Classifier.junkReason(for: Activity(appName: name, bundleID: nil), config: config) != nil

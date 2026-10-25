@@ -11,6 +11,7 @@ const DEFAULTS = {
   dayStartHour: 4,    // 一天从几点开始算
   sites: ["douyin.com", "bilibili.com", "b23.tv", "youtube.com", "kuaishou.com", "xiaohongshu.com",
           "weibo.com", "weibo.cn", "tiktok.com", "ixigua.com", "toutiao.com"],
+  wholeSites: [],     // 整站都算的网站：不看 AI 判断、首页也锁
   appUsed: 0,         // 上次同步时 App 自己记的秒数（抖音等 App，不含 Safari）
   web: {},            // Safari 里今天每个网站刷了多少秒（只加不减；有营养的不在这里）
   good: {},           // Safari 里今天看的有营养内容：网站 → 秒（只记下来，不算进时长）
@@ -53,6 +54,7 @@ async function loadMirror() {
   m.web = cleanBook(m.web);
   m.good = cleanBook(m.good);
   if (!Array.isArray(m.sites) || !m.sites.length) m.sites = DEFAULTS.sites;
+  if (!Array.isArray(m.wholeSites)) m.wholeSites = [];
   const today = dayKey(m.dayStartHour);
   if (m.day !== today) Object.assign(m, { day: today, appUsed: 0, web: {}, good: {}, extra: 0, grants: 0 });
   return m;
@@ -129,6 +131,7 @@ function sync() {
       Object.assign(now, { appUsed: num(r.appUsed), limit: num(r.limit, now.limit), extra: num(r.extra, now.extra),
                            grants: Math.max(num(now.grants), num(r.grants)),
                            dayStartHour: num(r.dayStartHour, now.dayStartHour), sites: Array.isArray(r.sites) && r.sites.length ? r.sites : now.sites,
+                           wholeSites: Array.isArray(r.wholeSites) ? r.wholeSites : now.wholeSites,
                            lastSync: Date.now() });
       if (dirty && JSON.stringify(now.dirty) === JSON.stringify(dirty)) now.dirty = null;
       await saveMirror(now);

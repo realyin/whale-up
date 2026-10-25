@@ -28,7 +28,7 @@ public enum Classifier {
 
     /// 网址命中的“没营养”网站规则；不命中返回 nil。
     public static func junkSite(for urlString: String, config: Config) -> String? {
-        matchSite(urlString, rules: config.junkSites)
+        matchSite(urlString, rules: config.junkSites + config.wholeSites)
     }
 
     /// 网址命中的网站规则（规则写法同 junkSites）；不命中返回 nil。

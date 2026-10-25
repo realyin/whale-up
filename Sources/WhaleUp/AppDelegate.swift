@@ -164,7 +164,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         current = monitor.currentActivity()
         // 网站规则先判断；开启 AI 判断后，大模型对这个网页的判断优先
         let ruleReason = current.flatMap { Classifier.junkReason(for: $0, config: config) }
-        currentLabel = config.llm.enabled
+        // 整站都算的网站（如虎扑）不看 AI 判断
+        let wholeSite = current?.url.map(config.isWholeSite) ?? false
+        currentLabel = config.llm.enabled && !wholeSite
             ? current?.url.flatMap { try? contentStore?.label(forURL: $0.components(separatedBy: "#")[0]) } ?? nil
             : nil
         currentReason = JunkJudge.isJunk(siteRuleMatched: ruleReason != nil, label: currentLabel, config: config)
@@ -271,7 +273,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let rule = current?.url.flatMap { Classifier.matchSite($0, rules: config.forceCloseSites) }
         // 强制关闭只针对名单里的网站；大模型判断为有营养的内容不管
         // 首页、搜索这类“逛”的页面不关：额度用完了也得能去找有营养的视频
-        let browsing = current?.url.map(PageKind.isBrowsePage) ?? false
+        // 整站都算的网站首页也关
+        let browsing = current?.url.map { PageKind.isBrowsePage($0) && !config.isWholeSite($0) } ?? false
         let onSite = rule != nil && !browsing && JunkJudge.isJunk(siteRuleMatched: true, label: currentLabel, config: config)
         let action = forceCloser.record(onSite: onSite, usedToday: forceUsedToday, now: now, config: config)
         refreshForceToday()
