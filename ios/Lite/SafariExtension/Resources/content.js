@@ -3,7 +3,15 @@
   let state = await loadMirror();
   if (!isWatchedSite(state, location.hostname)) return;
 
-  const img = (name) => api.runtime.getURL(`images/${name}.png`);
+  // 图片先读进来存成 data: 地址：扩展更新后，已经打开的网页里扩展地址会失效，头像就成了空白
+  const pictures = {};
+  const img = (name) => pictures[name] || api.runtime.getURL(`images/${name}.png`);
+  await Promise.all(["head-watching", "head-angry", "head-shy", "pose-sleep_curl"].map(async (name) => {
+    try {
+      const blob = await (await fetch(api.runtime.getURL(`images/${name}.png`))).blob();
+      pictures[name] = await new Promise((ok) => { const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(blob); });
+    } catch (e) { /* 读不到就还用扩展地址 */ }
+  }));
   const host = document.createElement("div");
   host.style.cssText = "all: initial; position: fixed; z-index: 2147483647; inset: 0; pointer-events: none;";
   const root = host.attachShadow({ mode: "closed" });
@@ -128,7 +136,8 @@
   const buddy = $(".buddy");
   const head = $(".head");
   const SIZE = 64, MARGIN = 10;
-  let pos = (await api.storage.local.get("whaleupPos")).whaleupPos || { side: "right", y: 0.62 };
+  let pos = { side: "right", y: 0.62 };
+  try { pos = (await api.storage.local.get("whaleupPos")).whaleupPos || pos; } catch (e) { /* 读不到就放默认位置 */ }
 
   // 按脑袋的中心定位、从底边算：上面冒出气泡时，脑袋不会被往下挤
   function place(animate) {
@@ -171,7 +180,7 @@
     }
     pos = { side: e.clientX < window.innerWidth / 2 ? "left" : "right", y: e.clientY / window.innerHeight };
     place(true);
-    api.storage.local.set({ whaleupPos: pos });
+    api.storage.local.set({ whaleupPos: pos }).catch(() => {});
   };
   head.addEventListener("pointerup", drop);
   head.addEventListener("pointercancel", drop);
@@ -203,19 +212,32 @@
     state = synced;
     render(state);
   }
+  // 扩展的存储读写失败（常见于扩展更新后、这个网页还是更新前打开的）：照样在这个网页里记账、到点照锁，
+  // 并提示刷新一下。计时绝不能因为出错就停
+  let broken = false;
+  function addInMemory(seconds) {
+    const book = isGood() ? (state.good ||= {}) : (state.web ||= {});
+    book[site] = num(book[site]) + seconds;
+  }
   setInterval(async () => {
     if (document.visibilityState !== "visible") return;
-    checkContent();
-    if ($(".lock").hidden) state = await addLocal(site, 5, isGood());
-    else state = await loadMirror();
+    try { checkContent(); } catch (e) { /* 取不到视频信息不影响计时 */ }
+    try {
+      if ($(".lock").hidden) state = await addLocal(site, 5, isGood());
+      else state = await loadMirror();
+      broken = false;
+    } catch (e) {
+      if ($(".lock").hidden) addInMemory(5);
+      if (!broken) { broken = true; say("鲸醒刚更新过，刷新一下页面就好～（先按这个网页里记的算）", "head-angry", 8); }
+    }
     render(state);
-    sync().then(refresh);
+    if (!broken) sync().then(refresh).catch(() => {});
   }, 5000);
-  sync().then(refresh);
-  checkContent();
+  sync().then(refresh).catch(() => {});
+  try { checkContent(); } catch (e) { /* 同上 */ }
 
   // 切回这个页面时马上同步一次（可能在 App 或弹出面板里改了设置）
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") sync().then(refresh);
+    if (document.visibilityState === "visible" && !broken) sync().then(refresh).catch(() => {});
   });
 })();
