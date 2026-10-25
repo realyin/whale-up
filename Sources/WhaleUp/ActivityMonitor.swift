@@ -63,6 +63,30 @@ final class ActivityMonitor {
         "company.thebrowser.Browser": "Arc",
     ]
 
+    /// 当前标签页退回上一页（“只拦视频”用）。Chromium 系浏览器直接 go back；Safari 用网页里的 history.back()，
+    /// 没开“允许 Apple 事件中的 JavaScript”时退不回去，就关掉这个标签页
+    @discardableResult
+    func goBack(bundleID: String) -> Bool {
+        guard let browser = Self.browserNames[bundleID] else { return false }
+        if bundleID == "com.apple.Safari" {
+            if run("""
+                tell application "Safari" to do JavaScript "history.back()" in current tab of front window
+                return "ok"
+                """) != nil { return true }
+            return run("""
+                tell application "Safari"
+                    set w to front window
+                    \(Self.closeOrBlank("current tab of w"))
+                end tell
+                return "ok"
+                """) != nil
+        }
+        return run("""
+            tell application "\(browser)" to go back (active tab of front window)
+            return "ok"
+            """) != nil
+    }
+
     /// 关掉正在看的页面（命中 rules 时）：浏览器里只关当前这一个标签页，其他 App 直接退出。
     /// nudgedURL 是弹窗出现时的网址；短视频网站划走后网址会变，所以优先看当前标签页。
     @discardableResult

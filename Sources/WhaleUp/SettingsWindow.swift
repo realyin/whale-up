@@ -98,6 +98,11 @@ struct SettingsView: View {
                         note: "整站都算没营养的网站（如虎扑这种几乎全是消遣的）：不看 AI 判断，首页也算，强制关闭时首页也关。删掉要输随机码。",
                         placeholder: "输入网址或域名，如 hupu.com",
                         rules: $model.config.wholeSites, browserURL: model.browserURL, isSite: true)
+                    Divider().padding(.vertical, 8)
+                    RuleListEditor(
+                        note: "只拦视频的网站（如推特这种大部分内容都要看的）：不计时、不提醒；点开的视频被 AI 判为没营养，就自动退回上一页。需要开 AI 判断。同一个网站也在上面的名单里时按上面的算。删掉要输随机码。",
+                        placeholder: "输入网址或域名，如 x.com",
+                        rules: $model.config.videoOnlySites, browserURL: model.browserURL, isSite: true)
                 case .apps:
                     RuleListEditor(
                         note: "名字里包含这些文字的 App（或 Bundle ID 完全相同），算作没营养的内容。",

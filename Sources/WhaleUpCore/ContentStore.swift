@@ -232,6 +232,12 @@ public final class ContentStore {
                   [url]) { Self.decodeLabel(Self.text($0, 0)) }.first ?? nil
     }
 
+    /// 这个网址上放的视频的判断（只看扩展报上来是视频的记录）：给“只拦视频”用
+    public func videoLabel(forURL url: String) throws -> ContentLabel? {
+        try query("SELECT label FROM views WHERE url = ? AND kind = 'video' AND label IS NOT NULL ORDER BY started_at DESC LIMIT 1",
+                  [url]) { Self.decodeLabel(Self.text($0, 0)) }.first ?? nil
+    }
+
     /// 同一条内容（网站 + 标题 + 作者相同）以前判断过，就直接复用，不再调用大模型
     public func cachedLabel(for v: ContentView) throws -> ContentLabel? {
         try query("""

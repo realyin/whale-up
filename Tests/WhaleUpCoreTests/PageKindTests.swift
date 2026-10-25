@@ -19,3 +19,26 @@ final class PageKindTests: XCTestCase {
         }
     }
 }
+
+final class VideoOnlyTests: XCTestCase {
+    func testTwitterPages() {
+        XCTAssertTrue(PageKind.isBrowsePage("https://x.com/home"))
+        XCTAssertTrue(PageKind.isBrowsePage("https://x.com/someone"))
+        XCTAssertFalse(PageKind.isBrowsePage("https://x.com/someone/status/123"))
+        XCTAssertFalse(PageKind.isBrowsePage("https://twitter.com/someone/status/123/video/1"))
+    }
+
+    func testOtherListsWinAndRemovalIsLoosening() {
+        var c = Config()
+        c.junkSites = []
+        c.forceCloseSites = []
+        c.videoOnlySites = ["x.com"]
+        XCTAssertTrue(c.isVideoOnlySite("https://x.com/a/status/1"))
+        var both = c
+        both.junkSites = ["x.com"]
+        XCTAssertFalse(both.isVideoOnlySite("https://x.com/a/status/1"), "也在普通名单里：按普通名单算")
+        var removed = c
+        removed.videoOnlySites = []
+        XCTAssertEqual(removed.loosenings(from: c), ["x.com 不再拦没营养的视频"])
+    }
+}

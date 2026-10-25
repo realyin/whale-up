@@ -105,6 +105,12 @@
       d.title = d.title.replace(/\s*(展开|收起)\s*$/, "");
       d.author = d.author.replace(/^@/, "");
       d.tags = (d.title.match(/#[^\s#]+/g) || []).map((t) => t.slice(1));
+    } else if (host === "x.com" || host.endsWith(".x.com") || host.endsWith("twitter.com")) {
+      // 推文详情页：第一条就是点开的那条
+      const tweet = document.querySelector('article[data-testid="tweet"]') || document.querySelector("article");
+      d.title = tweet?.querySelector('[data-testid="tweetText"]')?.innerText?.trim() || "";
+      d.author = (tweet?.querySelector('[data-testid="User-Name"]')?.innerText || "").split("\n").slice(0, 2).join(" ");
+      d.tags = (d.title.match(/#[^\s#]+/g) || []).map((t) => t.slice(1));
     } else if (host.endsWith("youtube.com")) {
       d.title = text("ytd-reel-video-renderer[is-active] h2") || text("h1.ytd-watch-metadata");
       d.author = text("ytd-reel-video-renderer[is-active] #channel-name a") || text("#owner #channel-name a");

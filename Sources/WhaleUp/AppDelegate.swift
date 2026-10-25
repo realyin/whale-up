@@ -172,6 +172,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         currentReason = JunkJudge.isJunk(siteRuleMatched: ruleReason != nil, label: currentLabel, config: config)
             ? (ruleReason ?? currentLabel.map { "\($0.category)内容" })
             : nil
+        // 只拦视频的网站（如推特）：不计时、不提醒，只看点开的视频
+        if let url = current?.url, config.isVideoOnlySite(url) {
+            currentReason = nil
+            blockJunkVideo(url: url)
+        }
         if let url = current?.url, Classifier.siteRule(from: url) != nil, url != lastBrowserURL {
             lastBrowserURL = url
             main?.model.settings.browserURL = url
@@ -315,6 +320,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private var lastBudgetCloseAt = Date.distantPast
+    /// 上一次因为“只拦视频”退回的网址和时间：同一个视频 15 秒内不重复退
+    private var lastBlockedVideo: (url: String, at: Date)?
+    private var pendingBack: String?
+
+    /// 只拦视频：点开的单条内容里放的是视频、AI 判为没营养，就说一句、3 秒后退回上一页
+    private func blockJunkVideo(url: String) {
+        guard config.llm.enabled, !PageKind.isBrowsePage(url), pendingBack == nil,
+              let id = current?.bundleID,
+              let label = try? contentStore?.videoLabel(forURL: url.components(separatedBy: "#")[0]), label.isJunk else { return }
+        if let last = lastBlockedVideo, last.url == url, Date().timeIntervalSince(last.at) < 15 { return }
+        lastBlockedVideo = (url, Date())
+        pendingBack = url
+        let line = "这个视频没什么营养（\(label.reason)），帮你退回去啦"
+        if let mascot, mascot.isShown { mascot.remark(line, mood: .angry, seconds: 4) } else { toast.show("🐳 " + line) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                defer { self.pendingBack = nil }
+                // 3 秒里已经自己退出去了就不用再退
+                guard self.monitor.currentActivity()?.url == url else { return }
+                self.monitor.goBack(bundleID: id)
+            }
+        }
+    }
 
     /// 正在请大模型写劝导文案，期间不再触发新的弹窗
     private var nudgePending = false

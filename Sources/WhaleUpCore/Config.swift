@@ -119,6 +119,15 @@ public struct Config: Codable, Equatable {
     /// 整站都算没营养的网站（如虎扑）：不看 AI 判断、首页也算，整个网站一起管
     public var wholeSites: [String] = []
 
+    /// 只拦视频的网站（如推特）：不计时、不提醒；点开的视频被 AI 判为没营养就退回上一页。
+    /// 同一个网站也在上面几个名单里时，按那几个名单算（所以往这里加网站不会放松管控）
+    public var videoOnlySites: [String] = []
+
+    /// 这个网址是不是按“只拦视频”管（不在其他名单里）
+    public func isVideoOnlySite(_ url: String) -> Bool {
+        Classifier.matchSite(url, rules: videoOnlySites) != nil && Classifier.matchSite(url, rules: watchedSites) == nil
+    }
+
     /// 所有按网站管的规则：没营养的、强制关闭的、整站算的
     public var watchedSites: [String] { junkSites + forceCloseSites + wholeSites }
 
@@ -182,6 +191,7 @@ public struct Config: Codable, Equatable {
         forceCloseMinutes = try c.decodeIfPresent(Double.self, forKey: .forceCloseMinutes) ?? d.forceCloseMinutes
         forceCloseSites = try c.decodeIfPresent([String].self, forKey: .forceCloseSites) ?? d.forceCloseSites
         wholeSites = try c.decodeIfPresent([String].self, forKey: .wholeSites) ?? d.wholeSites
+        videoOnlySites = try c.decodeIfPresent([String].self, forKey: .videoOnlySites) ?? d.videoOnlySites
         contentScope = try c.decodeIfPresent(ContentScope.self, forKey: .contentScope) ?? d.contentScope
         sensitiveSites = try c.decodeIfPresent([String].self, forKey: .sensitiveSites) ?? d.sensitiveSites
         llm = try c.decodeIfPresent(LLMConfig.self, forKey: .llm) ?? d.llm

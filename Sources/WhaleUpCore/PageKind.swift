@@ -22,6 +22,10 @@ public enum PageKind {
         if on("douyin.com") || on("kuaishou.com") || on("tiktok.com") {
             return starts(["/search", "/user/", "/profile", "/@"])
         }
+        if on("x.com") || on("twitter.com") {
+            // 只有点开的单条推文（/用户/status/编号）算内容，时间线、搜索、通知、个人主页都是逛
+            return path.range(of: #"^/[^/]+/status/\d+"#, options: .regularExpression) == nil
+        }
         if on("xiaohongshu.com") {
             // /explore 是卡片墙（不自动放），/explore/<id> 才是一条笔记
             return path == "/" || path == "/explore" || path == "/explore/" || starts(["/search_result", "/user/profile"])

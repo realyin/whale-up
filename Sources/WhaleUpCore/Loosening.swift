@@ -12,6 +12,8 @@ extension Config {
         let removed = Set(old.forceCloseSites).subtracting(forceCloseSites)
         if !removed.isEmpty { out.append("从强制关闭名单删掉 \(removed.sorted().joined(separator: "、"))") }
         let wholeRemoved = Set(old.wholeSites).subtracting(wholeSites)
+        let videoRemoved = Set(old.videoOnlySites).subtracting(videoOnlySites)
+        if !videoRemoved.isEmpty { out.append("\(videoRemoved.sorted().joined(separator: "、")) 不再拦没营养的视频") }
         if !wholeRemoved.isEmpty { out.append("\(wholeRemoved.sorted().joined(separator: "、")) 不再整站都算") }
         if old.dailyBudgetMinutes > 0 && (dailyBudgetMinutes == 0 || dailyBudgetMinutes > old.dailyBudgetMinutes) {
             out.append(dailyBudgetMinutes == 0 ? "取消每日额度" : "每日额度从 \(Int(old.dailyBudgetMinutes)) 分钟调到 \(Int(dailyBudgetMinutes)) 分钟")
