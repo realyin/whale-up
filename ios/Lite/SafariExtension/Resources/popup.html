@@ -1,54 +1,45 @@
 <!doctype html>
 <html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  /* 不跟系统深色模式变：输入框等控件也按浅色画 */
-  :root { --ink: #1f2b5e; --paper: #fffdf9; --accent: #3d6fd6; --soft: #e9f0fc; color-scheme: light; }
-  textarea { color: var(--ink); background: #fff; }
+  /* 不跟系统深色模式变 */
+  :root { --ink: #1f2b5e; --paper: #fffdf9; --accent: #3d6fd6; --soft: #e9f0fc; --junk: #eb6834; color-scheme: light; }
   body { margin: 0; padding: 16px; background: var(--soft); color: var(--ink); font-family: -apple-system, "PingFang SC", sans-serif; min-width: 280px; }
   .top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
   .top img { width: 60px; height: 60px; border-radius: 50%; border: 3px solid var(--ink); background: var(--paper); }
   .top b { font-size: 20px; }
-  .card { background: var(--paper); border: 2.5px solid var(--ink); border-radius: 18px; padding: 12px 14px; margin-bottom: 12px; }
-  .card h3 { margin: 0 0 8px; font-size: 15px; }
-  .row { display: flex; align-items: center; gap: 10px; }
-  .row .num { flex: 1; font-size: 20px; font-weight: 800; }
-  button { border: 2px solid var(--ink); border-radius: 999px; background: var(--soft); color: var(--ink); font-size: 15px; font-weight: 800;
-           padding: 6px 14px; box-shadow: 0 2px 0 var(--ink); }
+  .card { background: var(--paper); border: 2.5px solid var(--ink); border-radius: 18px; padding: 12px 14px; margin-top: 14px; }
+  .card h3 { margin: 0 0 4px; font-size: 15px; }
+  .site { font-size: 19px; font-weight: 800; margin: 2px 0 10px; word-break: break-all; }
+  .row { display: flex; gap: 10px; }
+  button { flex: 1; border: 2px solid var(--ink); border-radius: 999px; background: var(--soft); color: var(--ink); font-size: 15px; font-weight: 800;
+           padding: 9px 10px; box-shadow: 0 2px 0 var(--ink); }
   button:active { transform: translateY(2px); box-shadow: none; }
+  button.whole { background: var(--junk); color: #fff; }
+  button[hidden] { display: none; }
   .hint { font-size: 12px; color: #5a6383; margin-top: 8px; line-height: 1.5; }
-  textarea { width: 100%; box-sizing: border-box; height: 110px; border: 2px solid var(--ink); border-radius: 12px; padding: 8px; font-size: 13px; }
+  .done { font-size: 14px; font-weight: 700; color: var(--accent); margin-top: 8px; }
   .bar { height: 10px; border-radius: 6px; background: #f1e3dc; overflow: hidden; margin-top: 6px; }
-  .bar i { display: block; height: 100%; background: #eb6834; }
+  .bar i { display: block; height: 100%; background: var(--junk); }
 </style></head>
 <body>
   <div class="top"><img id="face" src="images/head-watching.png"><div><b id="used"></b><div class="hint" id="left"></div></div></div>
   <div class="bar"><i id="bar"></i></div>
   <div class="hint" id="syncStatus"></div>
   <div class="hint" id="offline" hidden>暂时没连上鲸醒 App：先按 Safari 这边记的算，连上后会自动对齐。可以先打开一次鲸醒 App 再试。</div>
-  <div style="height:12px"></div>
-  <div class="card">
-    <h3>每天一共能刷</h3>
-    <div class="row"><button id="minus">－5</button><span class="num" id="limit"></span><button id="plus">＋5</button></div>
-    <div class="hint">和鲸醒 App 里的是同一个：抖音等 App 和网页里刷的时间加在一起算。</div>
+
+  <!-- 把正在看的网站加进管控名单：加入是收紧，马上生效 -->
+  <div class="card" id="addCard" hidden>
+    <h3>这个网站</h3>
+    <div class="site" id="site"></div>
+    <div class="row">
+      <button id="addContent">按内容管</button>
+      <button id="addWhole" class="whole">整站管</button>
+    </div>
+    <div class="done" id="siteState"></div>
+    <div class="hint">按内容管：每个视频 / 帖子由 AI 判断，有营养的不计时，首页不锁。整站管：整个网站都算，首页也锁（适合虎扑这种）。</div>
   </div>
-  <div class="card">
-    <h3>今天多看 / 少看</h3>
-    <div class="row"><button id="less">－5</button><span class="num" id="extra"></span><button id="more">＋5</button></div>
-    <div class="hint" id="extraHint"></div>
-    <button id="reset" hidden style="margin-top:8px">恢复成每天的时长</button>
-  </div>
-  <div class="hint" style="text-align:center">要管哪些网站，在鲸醒 App 里改。</div>
-  <!-- 放松管控前的随机码：画在 canvas 上不能复制，输入框不能粘贴 -->
-  <div id="gate" hidden style="position:fixed;inset:0;background:rgba(233,240,252,.97);padding:16px;overflow:auto">
-    <div style="text-align:center"><img src="images/pose-heart.png" style="width:120px"></div>
-    <h3 style="text-align:center;margin:6px 0">真的需要吗？</h3>
-    <div class="hint" id="gateWhat" style="text-align:center"></div>
-    <canvas id="gateCode" width="560" height="84" style="width:100%;margin:12px 0;border-radius:12px"></canvas>
-    <input id="gateInput" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="在这里一个一个字打"
-           style="width:100%;box-sizing:border-box;font:600 17px ui-monospace,monospace;padding:10px;border:2px solid var(--ink);border-radius:12px;color:var(--ink);background:#fff">
-    <div class="hint" id="gateMsg" style="color:#eb6834"></div>
-    <div class="row" style="margin-top:12px"><button id="gateCancel">算了，不改了</button><span style="flex:1"></span><button id="gateOk" style="background:#3d6fd6;color:#fff">确定</button></div>
-  </div>
+
+  <div class="hint" style="text-align:center;margin-top:14px">每天能刷多久、今天多看 / 少看、删网站，都在鲸醒 App 里改。</div>
   <script src="shared.js"></script>
   <script src="popup.js"></script>
 </body></html>

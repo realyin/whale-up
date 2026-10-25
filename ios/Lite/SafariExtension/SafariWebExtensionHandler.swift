@@ -11,6 +11,12 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         var u = Usage.load()
         var changed = false
 
+        // 在 Safari 面板里点了“把这个网站加入管控”：加入名单（整站管的再记进整站名单）。加入是收紧，不用随机码
+        if message["type"] as? String == "addSite", let site = message["site"] as? String, site.contains(".") {
+            if !u.sites.contains(site) { u.sites.append(site); changed = true }
+            if message["whole"] as? Bool == true, !u.wholeSites.contains(site) { u.wholeSites.append(site); changed = true }
+        }
+
         if let settings = message["settings"] as? [String: Any] {
             if let limit = (settings["limit"] as? NSNumber)?.intValue { u.setLimit(limit) }
             // 扩展那边已经输过随机码、数过次数了，这里直接记下

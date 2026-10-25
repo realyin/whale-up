@@ -13,7 +13,9 @@
   },
   "permissions": [
     "storage",
-    "nativeMessaging"
+    "nativeMessaging",
+    "activeTab",
+    "tabs"
   ],
   "content_scripts": [
     {
