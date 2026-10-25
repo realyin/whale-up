@@ -196,6 +196,7 @@
     drag = null;
     head.classList.remove("dragging");
     if (!moved) {
+      if (isVideoOnly()) { say(videoNote, "head-watching", 6); return; }
       const goodMin = Math.floor(Object.values(state.good || {}).reduce((a, b) => a + num(b), 0) / 60);
       say(`没营养的今天刷了 ${Math.floor(usedOf(state) / 60)} 分钟（上限 ${todayLimit(state)} 分钟，App 和网页一起算）`
         + (goodMin > 0 ? `；有营养的看了 ${goodMin} 分钟，不算时间～` : "。"), "head-shy", 5);
@@ -233,11 +234,15 @@
   // ---- 只拦视频：点开一条带视频的内容（推特的 /status/ 页）时问 AI，没营养的暂停、3 秒后退回 ----
   let videoKey = null;
   let backTimer = null;
+  // 这条视频为什么拦 / 没拦：点她的脑袋能看到，放过的时候也直接说出来，不然看不出来是没生效还是判断成有营养
+  let videoNote = "还没点开带视频的推文～";
+  function note(text, face = "head-watching", seconds = 5) { videoNote = text; say(text, face, seconds); }
   function checkVideo() {
     const video = largestVideo();
     if (isBrowsePage() || !video) {
       // 回到时间线 / 没有视频：不管
       if (videoKey) { videoKey = null; verdict = undefined; clearTimeout(backTimer); render(state); }
+      videoNote = isBrowsePage() ? "现在在时间线上：时间线里不拦，点开一条带视频的推文我再看～" : "这一页我没找到视频～";
       return;
     }
     const key = site + "|" + identity(video);
@@ -246,7 +251,7 @@
     clearTimeout(backTimer);
     const info = extract(video);
     // 推文只有视频、一个字都没有：AI 没东西可判断，宁可放过，别误伤要看的内容
-    if (info.title.startsWith("（这条推文没有文字")) { verdict = undefined; render(state); return; }
+    if (info.title.startsWith("（这条推文没有文字")) { verdict = undefined; render(state); note("这条推文一个字都没有，我看不出好坏，先放过～"); return; }
     verdict = "pending";
     render(state);
     judgeContent(key, { site, title: info.title, author: info.author, tags: info.tags.join("、"), description: info.description })
@@ -254,11 +259,16 @@
         if (key !== videoKey) return;
         verdict = v;
         render(state);
-        if (isGood()) { say(`这个视频是${verdict.category || "有营养的"}，看吧～`, "head-shy", 4); return; }
+        if (isGood()) { note(`这个视频是${verdict.category || "有营养的"}（${verdict.reason || "有收获"}），看吧～`, "head-shy", 4); return; }
         // 判断不了（没开 AI、没网）就不拦：只拦视频的网站宁可放过，也别误伤要看的内容
-        if (!v || v.off || v.isJunk !== true) { verdict = undefined; render(state); return; }
+        if (!v || v.off || v.isJunk !== true) {
+          verdict = undefined; render(state);
+          note(v && v.off ? "AI 判断还没打开，我分不出好坏，先放过。去鲸醒 App 里打开“AI 判断”、填上 Key 就能拦～"
+            : "AI 没回我（可能没网），这条先放过～", "head-angry", 7);
+          return;
+        }
         document.querySelectorAll("video").forEach((x) => x.pause());
-        say(`这个视频没什么营养（${v.reason || v.category || "消遣"}），3 秒后帮你退回去～`, "head-angry", 4);
+        note(`这个视频没什么营养（${v.reason || v.category || "消遣"}），3 秒后帮你退回去～`, "head-angry", 4);
         backTimer = setTimeout(() => {
           if (key !== videoKey) return;
           if (history.length > 1) history.back();

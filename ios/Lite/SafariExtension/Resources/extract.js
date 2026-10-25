@@ -49,10 +49,17 @@ function extract(video) {
     d.author = d.author.replace(/^@/, "");
     d.tags = (d.title.match(/#[^\s#]+/g) || []).map((t) => t.slice(1));
   } else if (host === "x.com" || host.endsWith(".x.com") || host.endsWith("twitter.com")) {
-    // 推文详情页：第一条就是点开的那条
-    const tweet = document.querySelector('article[data-testid="tweet"]') || document.querySelector("article");
+    // 点开的那条：页面上可能还垫着时间线（手机上全屏看视频时），按网址里的推文编号找，不能直接取第一条
+    const id = (location.pathname.match(/\/status\/(\d+)/) || [])[1];
+    const articles = [...document.querySelectorAll('article[data-testid="tweet"], article')];
+    const tweet = (id && articles.find((a) => a.querySelector(`a[href*="/status/${id}"]`))) || articles[0];
     d.title = tweet?.querySelector('[data-testid="tweetText"]')?.innerText?.trim() || "";
     d.author = (tweet?.querySelector('[data-testid="User-Name"]')?.innerText || "").split("\n").slice(0, 2).join(" ");
+    // 取不到时用网页标题：推文页的标题就是“某某 在 X 上：“推文内容” / X”
+    if (!d.title) {
+      const m = document.title.match(/^(.*?)\s*(?:在 X 上|on X)\s*[:：]\s*[“"](.*)[”"]\s*\/\s*X$/s);
+      if (m) { d.title = m[2].trim(); d.author ||= m[1].trim(); }
+    }
     d.tags = (d.title.match(/#[^\s#]+/g) || []).map((t) => t.slice(1));
     if (!d.title) d.title = "（这条推文没有文字，只有视频）";
   } else if (host.endsWith("youtube.com")) {
