@@ -90,7 +90,8 @@
   $(".lock button").onclick = () => location.replace(api.runtime.getURL("rest.html"));
 
   function render(s) {
-    const left = limitSeconds(s) - usedOf(s);
+    // 万一还是算出了不是数字的东西：按用完了算，宁可锁上也不放过
+    const left = Number.isFinite(limitSeconds(s) - usedOf(s)) ? limitSeconds(s) - usedOf(s) : 0;
     $(".count").textContent = `${Math.floor(usedOf(s) / 60)}/${todayLimit(s)}′`;
     // 头顶的小标签：AI 判断的结果
     const tag = $(".tag");

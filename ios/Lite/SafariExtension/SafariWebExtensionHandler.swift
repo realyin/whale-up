@@ -23,13 +23,13 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         // 扩展那边的“今天”和这边不是同一天时（刚过凌晨 4 点）不收
         if let web = message["web"] as? [String: Any], (message["day"] as? String).map({ $0 == u.dayKey() }) ?? true {
             for (site, value) in web {
-                let secs = min(24 * 3600, max(0, (value as? NSNumber)?.doubleValue ?? 0))
+                let secs = min(24 * 3600, max(0, ((value as? NSNumber)?.doubleValue).flatMap { $0.isFinite ? $0 : nil } ?? 0))
                 let key = Usage.safariPrefix + site
                 if secs > (u.seconds[key] ?? 0) { u.seconds[key] = secs; changed = true }
             }
             // 有营养的时间：记下来给你看，不算进每天的时长
             for (site, value) in message["good"] as? [String: Any] ?? [:] {
-                let secs = min(24 * 3600, max(0, (value as? NSNumber)?.doubleValue ?? 0))
+                let secs = min(24 * 3600, max(0, ((value as? NSNumber)?.doubleValue).flatMap { $0.isFinite ? $0 : nil } ?? 0))
                 if secs > (u.good[site] ?? 0) { u.good[site] = secs; changed = true }
             }
         }

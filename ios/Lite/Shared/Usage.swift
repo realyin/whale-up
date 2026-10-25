@@ -81,7 +81,9 @@ struct Usage: Codable {
     }
 
     func usedSeconds(_ name: String, now: Date = Date()) -> Double {
-        (seconds[name] ?? 0) + (open[name].map { min(Self.maxSession, now.timeIntervalSince($0)) } ?? 0)
+        let stored = seconds[name].flatMap { $0.isFinite ? $0 : nil } ?? 0
+        let running = open[name].map { max(0, min(Self.maxSession, now.timeIntervalSince($0))) } ?? 0
+        return stored + running
     }
 
     var used: Double {

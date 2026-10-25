@@ -26,6 +26,15 @@ function dayKey(startHour) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;  // 和 App 那边一样："2026-10-05"
 }
 
+/** 只认有限的数字，其他（undefined / null / NaN / 字符串）都当 fallback */
+const num = (x, fallback = 0) => (typeof x === "number" && Number.isFinite(x) ? x : fallback);
+/** 网站 → 秒 的账：坏掉的项去掉 */
+function cleanBook(book) {
+  const out = {};
+  for (const [k, v] of Object.entries(book && typeof book === "object" ? book : {})) if (num(v) > 0) out[k] = num(v);
+  return out;
+}
+
 async function loadMirror() {
   const saved = (await api.storage.local.get(MIRROR))[MIRROR] || {};
   const m = Object.assign({}, DEFAULTS, saved);
@@ -35,6 +44,15 @@ async function loadMirror() {
   delete m.pending; delete m.nativeUsed;
   // 上一版存的日期没补零（"2026-10-5"）
   if (m.day) m.day = m.day.replace(/-(\d)(?=-|$)/g, "-0$1");
+  // 存着的数字坏了（比如变成 NaN）：修回来，不然总数算出来是 NaN、永远不会锁
+  m.appUsed = num(m.appUsed);
+  m.limit = Math.min(240, Math.max(5, num(m.limit, 30)));
+  m.extra = num(m.extra);
+  m.grants = num(m.grants);
+  m.dayStartHour = num(m.dayStartHour, 4);
+  m.web = cleanBook(m.web);
+  m.good = cleanBook(m.good);
+  if (!Array.isArray(m.sites) || !m.sites.length) m.sites = DEFAULTS.sites;
   const today = dayKey(m.dayStartHour);
   if (m.day !== today) Object.assign(m, { day: today, appUsed: 0, web: {}, good: {}, extra: 0, grants: 0 });
   return m;
@@ -43,10 +61,10 @@ async function loadMirror() {
 function saveMirror(m) { return api.storage.local.set({ [MIRROR]: m }); }
 
 /** 今天一共刷了多少秒（App 和网页一起） */
-function usedOf(m) { return m.appUsed + Object.values(m.web).reduce((a, b) => a + b, 0); }
+function usedOf(m) { return num(m.appUsed) + Object.values(m.web || {}).reduce((a, b) => a + num(b), 0); }
 
 /** 今天一共能刷几分钟（每天的时长加上今天的调整，最少 5 分钟） */
-function todayLimit(m) { return Math.max(5, m.limit + m.extra); }
+function todayLimit(m) { return Math.max(5, num(m.limit, 30) + num(m.extra)); }
 function limitSeconds(m) { return todayLimit(m) * 60; }
 
 function isWatchedSite(m, host) {
@@ -57,7 +75,7 @@ function isWatchedSite(m, host) {
 async function addLocal(site, seconds, good = false) {
   const m = await loadMirror();
   const book = good ? m.good : m.web;
-  book[site] = (book[site] || 0) + seconds;
+  book[site] = num(book[site]) + num(seconds);
   await saveMirror(m);
   return m;
 }
@@ -104,11 +122,12 @@ function sync() {
       const reply = api.runtime.sendMessage({ to: "native", type: "sync", day: m.day, web: m.web, good: m.good, settings: dirty || undefined });
       const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 2500));
       const r = await Promise.race([reply, timeout]);
-      if (!r || r.error || typeof r.appUsed !== "number") return null;
+      if (!r || r.error || !Number.isFinite(r.appUsed)) return null;
       // Safari 的时间以这边为准；只从 App 那边拿它自己记的时间和设置
       const now = await loadMirror();
-      Object.assign(now, { appUsed: r.appUsed, limit: r.limit, extra: r.extra, grants: Math.max(now.grants || 0, r.grants || 0),
-                           dayStartHour: r.dayStartHour, sites: r.sites,
+      Object.assign(now, { appUsed: num(r.appUsed), limit: num(r.limit, now.limit), extra: num(r.extra, now.extra),
+                           grants: Math.max(num(now.grants), num(r.grants)),
+                           dayStartHour: num(r.dayStartHour, now.dayStartHour), sites: Array.isArray(r.sites) && r.sites.length ? r.sites : now.sites,
                            lastSync: Date.now() });
       if (dirty && JSON.stringify(now.dirty) === JSON.stringify(dirty)) now.dirty = null;
       await saveMirror(now);
