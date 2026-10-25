@@ -222,10 +222,10 @@
     const info = extract(video);
     verdict = "pending";
     render(state);
-    judgeContent(key, { site, title: info.title, author: info.author, tags: info.tags.join("、"), description: info.description })
+    judgeContent(key, { site, title: info.title, author: info.author, tags: info.tags.join("、"), description: info.description, tweet: info.tweet || "" })
       .then((v) => {
         if (key !== contentKey) return;
-        verdict = v;  // null：判断不了，按没营养算
+        verdict = v && v.noText ? null : v;  // 推文没字：判断不了，按没营养算  // null：判断不了，按没营养算
         render(state);
         if (isGood()) say(`这个是${verdict.category || "有营养的"}，不算时间，好好看～`, "head-shy", 4);
       });
@@ -250,13 +250,13 @@
     videoKey = key;
     clearTimeout(backTimer);
     const info = extract(video);
-    // 推文只有视频、一个字都没有：AI 没东西可判断，宁可放过，别误伤要看的内容
-    if (info.title.startsWith("（这条推文没有文字")) { verdict = undefined; render(state); note("这条推文一个字都没有，我看不出好坏，先放过～"); return; }
     verdict = "pending";
     render(state);
-    judgeContent(key, { site, title: info.title, author: info.author, tags: info.tags.join("、"), description: info.description })
+    judgeContent(key, { site, title: info.title, author: info.author, tags: info.tags.join("、"), description: info.description, tweet: info.tweet || "" })
       .then((v) => {
         if (key !== videoKey) return;
+        // 推文只有视频、一个字都没有：AI 没东西可判断，宁可放过，别误伤要看的内容
+        if (v && v.noText) { verdict = undefined; render(state); note("这条推文一个字都没有，我看不出好坏，先放过～"); return; }
         verdict = v;
         render(state);
         if (isGood()) { note(`这个视频是${verdict.category || "有营养的"}（${verdict.reason || "有收获"}），看吧～`, "head-shy", 4); return; }

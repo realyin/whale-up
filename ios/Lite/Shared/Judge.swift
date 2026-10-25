@@ -94,6 +94,31 @@ enum Judge {
         }
     }
 
+    /// 推特网页上取不到推文文字时（手机上全屏看视频的页面里没有），用推特公开的 oEmbed 接口要一份：不用登录，
+    /// 只发推文网址。返回推文文字（去掉了图片 / 视频链接）和作者；取不到返回 nil
+    static func tweet(_ url: String) async -> (text: String, author: String)? {
+        guard let id = url.range(of: #"/status/\d+"#, options: .regularExpression).map({ String(url[$0]) }),
+              let user = url.range(of: #"(?<=\.com/)[^/]+"#, options: .regularExpression).map({ String(url[$0]) }),
+              var c = URLComponents(string: "https://publish.twitter.com/oembed") else { return nil }
+        c.queryItems = [URLQueryItem(name: "url", value: "https://twitter.com/\(user)\(id)"), URLQueryItem(name: "omit_script", value: "1")]
+        guard let u = c.url else { return nil }
+        var req = URLRequest(url: u)
+        req.timeoutInterval = 10
+        guard let (data, response) = try? await URLSession.shared.data(for: req),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let html = json["html"] as? String else { return nil }
+        // html 里是 <blockquote><p>推文文字 <a>pic.twitter.com/…</a></p>&mdash; 作者 …</blockquote>
+        let p = html.range(of: #"<p[^>]*>.*?</p>"#, options: [.regularExpression]).map { String(html[$0]) } ?? ""
+        var text = p.replacingOccurrences(of: #"<a[^>]*>(pic\.twitter\.com|https?://t\.co)[^<]*</a>"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: "<br>", with: "\n")
+            .replacingOccurrences(of: #"<[^>]+>"#, with: "", options: .regularExpression)
+        for (from, to) in ["&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": "\"", "&#39;": "'", "&nbsp;": " "] {
+            text = text.replacingOccurrences(of: from, with: to)
+        }
+        return (text.trimmingCharacters(in: .whitespacesAndNewlines), json["author_name"] as? String ?? "")
+    }
+
     static func ask(_ info: [String: String], settings: AISettings = .load()) async throws -> Verdict {
         guard settings.ready else { throw Failure.off }
         let p = prompt(info, preferences: settings.preferences)

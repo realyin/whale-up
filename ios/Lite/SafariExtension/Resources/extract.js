@@ -52,8 +52,12 @@ function extract(video) {
     // 点开的那条：页面上可能还垫着时间线（手机上全屏看视频时），按网址里的推文编号找，不能直接取第一条
     const id = (location.pathname.match(/\/status\/(\d+)/) || [])[1];
     const articles = [...document.querySelectorAll('article[data-testid="tweet"], article')];
-    const tweet = (id && articles.find((a) => a.querySelector(`a[href*="/status/${id}"]`))) || articles[0];
+    // 没有编号就是第一条；有编号却找不到，不能拿第一条凑数（多半是垫在下面的时间线），留空让 App 去推特接口要
+    const tweet = id ? articles.find((a) => a.querySelector(`a[href*="/status/${id}"]`)) : articles[0];
     d.title = tweet?.querySelector('[data-testid="tweetText"]')?.innerText?.trim() || "";
+    // 推文网址：网页上取不到文字时，App 拿它去推特公开接口要文字
+    const user = (location.pathname.match(/^\/([^/]+)\/status\//) || [])[1];
+    if (id && user) d.tweet = `https://x.com/${user}/status/${id}`;
     d.author = (tweet?.querySelector('[data-testid="User-Name"]')?.innerText || "").split("\n").slice(0, 2).join(" ");
     // 取不到时用网页标题：推文页的标题就是“某某 在 X 上：“推文内容” / X”
     if (!d.title) {
@@ -61,7 +65,6 @@ function extract(video) {
       if (m) { d.title = m[2].trim(); d.author ||= m[1].trim(); }
     }
     d.tags = (d.title.match(/#[^\s#]+/g) || []).map((t) => t.slice(1));
-    if (!d.title) d.title = "（这条推文没有文字，只有视频）";
   } else if (host.endsWith("youtube.com")) {
     d.title = text("ytd-reel-video-renderer[is-active] h2") || text("h1.ytd-watch-metadata") || text(".slim-video-metadata-header h2")
       || text("ytm-shorts-lockup-view-model h3");
@@ -69,7 +72,8 @@ function extract(video) {
       || text(".slim-owner-channel-name");
   }
 
-  d.title ||= meta("og:title") || document.title;
+  // 推文没取到文字：别拿“X”这种网页标题凑数，留空交给 App
+  if (!d.tweet || d.title) d.title ||= meta("og:title") || document.title;
   d.author ||= meta("author");
   if (!d.tags.length) d.tags = meta("keywords").split(/[,，]/);
   d.description ||= meta("og:description") || meta("description");

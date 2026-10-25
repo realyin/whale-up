@@ -94,6 +94,7 @@ async function judgeContent(key, info) {
     const r = await Promise.race([reply, timeout]);
     if (!r || r.error) return null;
     if (r.off) return { off: true };
+    if (r.noText) return { noText: true };
     const now = await loadMirror();
     now.verdicts[key] = { isJunk: !!r.isJunk, category: r.category || "", reason: r.reason || "" };
     // 只留最近 300 条

@@ -61,7 +61,15 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         guard settings.ready else { return reply(["off": true], context) }
         var info: [String: String] = [:]
         for k in ["site", "title", "author", "tags", "description"] { info[k] = message[k] as? String ?? "" }
+        let tweet = message["tweet"] as? String ?? ""
         Task {
+            // 推特网页上没取到推文文字：去推特公开接口要一份；真的一个字都没有就告诉扩展，不去问 AI
+            if !tweet.isEmpty && (info["title"] ?? "").isEmpty {
+                guard let t = await Judge.tweet(tweet), !t.text.isEmpty else { return reply(["noText": true], context) }
+                info["title"] = t.text
+                if (info["author"] ?? "").isEmpty { info["author"] = t.author }
+                info["tags"] = t.text.split(separator: " ").filter { $0.hasPrefix("#") }.map { String($0.dropFirst()) }.joined(separator: "、")
+            }
             do {
                 let v = try await Judge.ask(info, settings: settings)
                 Judge.remember(key, v)
