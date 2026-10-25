@@ -3,7 +3,7 @@
 # 用法：./install-lite.sh [设备 ID]（不填就用第一台连着的 iPhone）
 set -euo pipefail
 cd "$(dirname "$0")"
-DEVICE="${1:-$(xcrun devicectl list devices 2>/dev/null | awk '/connected/ && /iPhone/ {print $3; exit}')}"
+DEVICE="${1:-$(xcrun devicectl list devices 2>/dev/null | awk '(/connected/ || /available/) && /iPhone/ {print $3; exit}')}"
 [ -n "$DEVICE" ] || { echo "没找到连着的 iPhone：用数据线连上，并在手机上打开“开发者模式”"; exit 1; }
 xcodegen generate --spec project-lite.yml >/dev/null
 xcodebuild -project WhaleUpLite.xcodeproj -scheme WhaleUpLite -destination 'generic/platform=iOS' \
