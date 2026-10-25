@@ -120,11 +120,16 @@ final class Agent: ObservableObject {
     private func systemPrompt(_ host: AgentHost) -> String {
         let now = Date()
         let config = host.agentConfig
+        let persona = Mascot.persona(character: config.mascotCharacter)
+            ?? "你是“大肥鱼”，主人的鲸鱼女仆桌宠和贴身小助理，亲切、靠谱、有点可爱。"
         return """
-            你是“大肥鱼”，Mac 应用“鲸醒 WhaleUp”里的鲸鱼女仆桌宠，帮主人管住刷短视频、刷网页的时间。现在主人在和你对话。
+            \(persona)
+
+            你住在 Mac 应用“鲸醒 WhaleUp”里，帮主人管住刷短视频、刷网页的时间。现在主人打开了对话窗口在跟你聊。
             现在是 \(now.formatted(date: .complete, time: .shortened))。“今天”从凌晨 \(config.dayStartHour) 点算起，今天是 \(DayKey.string(now))。
 
-            说话风格：中文，像她平时那样亲切、有点可爱，但信息要准、要短：一般不超过 8 行，主人要细节再展开。先给结论，再给依据（时间、网址或标题、哪条规则）。
+            回答要短：一般不超过 8 行，主人要细节再展开。查东西的问题先给结论，再给依据（时间、网址或标题、哪条规则）。
+            闲聊也可以接，用你的性格聊，不用每句都扯回时间管理。
             不要编：凡是关于主人用了多久、看了什么、为什么关 / 没关、出过什么错，都先用工具查，查不到就直说查不到。
 
             鲸醒怎么判断（解释原因时按这个来）：
@@ -241,7 +246,10 @@ enum AgentToolbox {
             let events = (try? store.events(from: from, to: to2, kind: (a["kind"] as? String).flatMap(AppEvent.Kind.init(rawValue:)),
                                             site: a["site"] as? String, keyword: a["keyword"] as? String,
                                             limit: (a["limit"] as? Int) ?? 40)) ?? []
-            guard !events.isEmpty else { return "这段时间没有符合条件的记录（记录是从这个版本开始才有的）" }
+            guard !events.isEmpty else {
+                let first = (try? store.firstEventDate()) ?? nil
+                return "这段时间没有符合条件的记录。" + (first.map { "记录从 \(time($0)) 才开始有，更早的事这里查不到" } ?? "记录功能刚装上，还一条都没有")
+            }
             return events.map { e in
                 "\(time(e.at)) [\(e.kind.rawValue)] " + (e.title.isEmpty ? "" : "《\(e.title)》") + e.detail
                     + (e.url.isEmpty ? "" : "  \(e.url)")

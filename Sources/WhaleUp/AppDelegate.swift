@@ -417,7 +417,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let recent = (try? store.views(from: now.addingTimeInterval(-45 * 60), to: now)) ?? []
         let reasons = ((try? store.reasons(from: now.addingTimeInterval(-7 * 86400), to: now)) ?? []).map(\.reason)
         let prompt = NudgePrompt.make(nudge: nudge, recentViews: recent, reasons: reasons,
-                                      outcomes: nudgeOutcomeSummary, hourMinute: now.formatted(date: .omitted, time: .shortened))
+                                      outcomes: nudgeOutcomeSummary, hourMinute: now.formatted(date: .omitted, time: .shortened),
+                                      persona: config.mascotEnabled ? Mascot.persona(character: config.mascotCharacter) : nil)
         Task {
             var text = Messages.make(for: nudge)
             var byAI = false
@@ -1125,6 +1126,9 @@ extension AppDelegate: AgentHost {
         if !config.videoOnlySites.isEmpty { lines.append("只拦视频：\(config.videoOnlySites.joined(separator: "、"))") }
         lines.append("没营养 App：\(config.junkApps.joined(separator: "、"))")
         lines.append("不记录的网站：\(config.sensitiveSites.count) 个")
+        let first = (try? contentStore?.firstEventDate()) ?? nil
+        lines.append(first.map { "鲸醒自己的记录（关 / 没关的判断、动作、出错）从 \($0.formatted(date: .abbreviated, time: .shortened)) 开始；这之前的事记录里本来就没有，不能当成 bug" }
+                     ?? "鲸醒自己的记录还一条都没有（这个功能刚装上），所以“记录里没有”不能当成 bug")
         return lines.joined(separator: "\n")
     }
 

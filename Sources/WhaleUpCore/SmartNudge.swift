@@ -3,8 +3,10 @@ import Foundation
 /// 让大模型结合此刻的情况写劝导文案
 public enum NudgePrompt {
     public static func make(nudge: Nudge, recentViews: [ContentView], reasons: [ReasonKind],
-                            outcomes: String?, hourMinute: String) -> (system: String, user: String) {
-        let system = """
+                            outcomes: String?, hourMinute: String, persona: String? = nil) -> (system: String, user: String) {
+        // 有角色设定时用她的口吻说（劝导是桌宠说出来的）；没有就是一个了解他的朋友
+        let who = persona.map { "下面是你的角色设定，劝导要用这个角色的口吻：\n\($0)\n\n" } ?? ""
+        let system = who + """
             你是用户自己请来的注意力教练。用户正在电脑上刷没营养的内容，已经超过了他给自己定的时长，现在要弹一个小窗劝他停下来。
             请写一段劝导：像一个了解他的朋友，直接、具体、有温度，可以带一点幽默；用他刚才看的具体内容说话，不要说教，不要空话套话。
             他此刻坐在电脑前，劝导要符合这个场景：深夜劝他关掉网页、合上电脑去睡觉；白天劝他离开屏幕活动一下、休息眼睛，或者回到电脑上的正事。不要提手机。提醒次数越多，语气越认真。

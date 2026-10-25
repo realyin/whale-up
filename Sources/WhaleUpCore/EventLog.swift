@@ -67,6 +67,13 @@ extension ContentStore {
         }
     }
 
+    /// 最早的一条记录是什么时候（这之前没有记录，不能用“记录里没有”下结论）
+    public func firstEventDate() throws -> Date? {
+        try select("SELECT MIN(at) FROM events", []) { s in
+            sqlite3_column_type(s, 0) == SQLITE_NULL ? nil : Date(timeIntervalSince1970: sqlite3_column_double(s, 0))
+        }.first ?? nil
+    }
+
     /// 改正大模型对某个网址的判断（这个网址所有的观看记录都改）
     public func setLabel(forURL url: String, label: ContentLabel) throws {
         let json = String(data: try JSONEncoder().encode(label), encoding: .utf8)

@@ -44,4 +44,12 @@ final class SmartNudgeTests: XCTestCase {
         let empty = #"{"choices":[{"message":{"content":"{\"emoji\":\"\",\"title\":\"\",\"body\":\"\"}"}}]}"#
         XCTAssertThrowsError(try NudgePrompt.parse(Data(empty.utf8), provider: .deepseek))
     }
+
+    func testPersonaGoesFirstWhenGiven() {
+        let nudge = Nudge(reason: "douyin.com", appName: "Chrome", sessionMinutes: 20, todayMinutes: 30, isNight: false, count: 1)
+        let p = NudgePrompt.make(nudge: nudge, recentViews: [], reasons: [], outcomes: nil, hourMinute: "14:00", persona: "你是大肥鱼，傲娇")
+        XCTAssertTrue(p.system.hasPrefix("下面是你的角色设定"))
+        XCTAssertTrue(p.system.contains("你是大肥鱼，傲娇"))
+        XCTAssertFalse(NudgePrompt.make(nudge: nudge, recentViews: [], reasons: [], outcomes: nil, hourMinute: "14:00").system.contains("角色设定"))
+    }
 }

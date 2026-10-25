@@ -48,6 +48,18 @@ final class Mascot: NSObject, WKScriptMessageHandler {
         Config.fileURL.deletingLastPathComponent().appendingPathComponent("Mascot")
     }
 
+    /// 角色包 character.json 里的性格设定（persona，字符串或一行一个的数组）：对话、劝导都按它的口吻说话
+    static func persona(character: String) -> String? {
+        let candidates = [webRoot, assetsDir].compactMap { $0?.appendingPathComponent("characters/\(character)/character.json") }
+        for url in candidates {
+            guard let data = try? Data(contentsOf: url),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+            if let text = json["persona"] as? String { return text }
+            if let lines = json["persona"] as? [String] { return lines.joined(separator: "\n") }
+        }
+        return nil
+    }
+
     static func installWebFiles() {
         guard let src = assetsDir else { return }
         let fm = FileManager.default
