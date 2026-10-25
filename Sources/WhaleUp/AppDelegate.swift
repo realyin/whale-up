@@ -280,7 +280,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // 首页、搜索这类“逛”的页面不关：额度用完了也得能去找有营养的视频
         // 整站都算的网站首页也关
         let browsing = current?.url.map { PageKind.isBrowsePage($0) && !config.isWholeSite($0) } ?? false
-        let onSite = rule != nil && !browsing && JunkJudge.isJunk(siteRuleMatched: true, label: currentLabel, config: config)
+        let waiting = awaitingLabel(now: now)
+        let onSite = rule != nil && !browsing && !waiting && JunkJudge.isJunk(siteRuleMatched: true, label: currentLabel, config: config)
         let action = forceCloser.record(onSite: onSite, usedToday: forceUsedToday, now: now, config: config)
         refreshForceToday()
         switch action {
@@ -304,7 +305,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         // 每日额度用完且设置了直接关闭：刷没营养的网页就关掉（10 秒内只关一次）
-        if config.budgetCloses, currentReason != nil, !browsing, let activity = current, activity.url != nil,
+        if config.budgetCloses, currentReason != nil, !browsing, !waiting, let activity = current, activity.url != nil,
            config.budgetRemainingSeconds(usedToday: tracker.todaySeconds) == 0,
            now.timeIntervalSince(lastBudgetCloseAt) > 10, let id = activity.bundleID {
             lastBudgetCloseAt = now
@@ -317,6 +318,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
             }
         }
+    }
+
+    /// 每个网页（去掉 # 后的网址）第一次打开的时间：判断出来以前先不关。按第一次算，来回切标签页也不会重新等
+    private var firstSeen: [String: Date] = [:]
+    /// 新打开的内容最多等这么久让大模型判断：浏览器扩展停留 5 秒才上报，再加上调用大模型的时间
+    private static let labelWaitSeconds: Double = 30
+
+    /// 开了 AI 判断、这个网页还没判断出来、打开还不到 30 秒：先别关。
+    /// 不然额度用完以后，新点开的学习视频在判断出来之前就被当成没营养关掉了，永远轮不到判断
+    private func awaitingLabel(now: Date) -> Bool {
+        guard config.llm.enabled, currentLabel == nil, let url = current?.url?.components(separatedBy: "#")[0],
+              !config.isWholeSite(url) else { return false }
+        if firstSeen.count > 500 { firstSeen = firstSeen.filter { now.timeIntervalSince($0.value) < 3600 } }
+        let since = firstSeen[url] ?? now
+        firstSeen[url] = since
+        return now.timeIntervalSince(since) < Self.labelWaitSeconds
     }
 
     private var lastBudgetCloseAt = Date.distantPast
