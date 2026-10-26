@@ -87,8 +87,29 @@
     return "";
   }
 
+  // YouTube 是单页应用：从长视频划进 Shorts 时，上一个视频的标题、简介还藏在页面里，按页面元素取容易取成上一个。
+  // 改用 YouTube 自己的 oEmbed 接口按视频编号要标题和作者（同一个网站，不用登录），取到以前先用页面标题
+  const ytInfo = new Map(); // 视频编号 → { title, author }；null 表示正在要
+  function youtubeId() {
+    if (!location.hostname.endsWith("youtube.com")) return null;
+    const p = location.pathname;
+    if (p.startsWith("/shorts/")) return p.split("/")[2] || null;
+    if (p === "/watch") return new URLSearchParams(location.search).get("v");
+    return null;
+  }
+  function fetchYoutube(id) {
+    if (!id || ytInfo.has(id)) return;
+    ytInfo.set(id, null);
+    fetch(`/oembed?format=json&url=${encodeURIComponent("https://www.youtube.com/watch?v=" + id)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (j) ytInfo.set(id, { title: j.title || "", author: j.author_name || "" }); else ytInfo.delete(id); })
+      .catch(() => ytInfo.delete(id));
+  }
+
   function extract(video) {
     const host = location.hostname;
+    // 单页应用里 og:title、og:description 这些 meta 不跟着换，别拿来凑
+    const spa = host.endsWith("youtube.com");
     const d = { title: "", author: "", tags: [], description: "" };
 
     if (host.endsWith("bilibili.com")) {
@@ -112,14 +133,27 @@
       d.author = (tweet?.querySelector('[data-testid="User-Name"]')?.innerText || "").split("\n").slice(0, 2).join(" ");
       d.tags = (d.title.match(/#[^\s#]+/g) || []).map((t) => t.slice(1));
     } else if (host.endsWith("youtube.com")) {
-      d.title = text("ytd-reel-video-renderer[is-active] h2") || text("h1.ytd-watch-metadata");
-      d.author = text("ytd-reel-video-renderer[is-active] #channel-name a") || text("#owner #channel-name a");
+      const id = youtubeId();
+      fetchYoutube(id);
+      const info = id && ytInfo.get(id);
+      if (info) {
+        d.title = info.title;
+        d.author = info.author;
+      } else if (location.pathname === "/watch") {
+        // 只在长视频页读长视频的标题区（别的页面里它是藏着的旧内容）
+        d.title = text("h1.ytd-watch-metadata");
+        d.author = text("#owner #channel-name a");
+      }
+      d.title ||= document.title.replace(/^\(\d+\)\s*/, "");
+      d.tags = (d.title.match(/#[^\s#]+/g) || []).map((t) => t.slice(1));
     }
 
     d.title ||= meta("og:title") || document.title;
-    d.author ||= meta("author");
-    if (!d.tags.length) d.tags = meta("keywords").split(/[,，]/);
-    d.description ||= meta("og:description") || meta("description");
+    if (!spa) {
+      d.author ||= meta("author");
+      if (!d.tags.length) d.tags = meta("keywords").split(/[,，]/);
+      d.description ||= meta("og:description") || meta("description");
+    }
 
     d.title = clip(d.title.replace(/_哔哩哔哩_bilibili$/, "").replace(/ - YouTube$/, ""), 200);
     d.tags = [...new Set(d.tags.map((t) => clip(t, 30)))]
@@ -156,17 +190,19 @@
     };
   }
 
-  function send() {
+  /** leaving：已经换到下一个内容了，页面上是新内容，这条用上次取到的标题，别取成新的 */
+  function send(leaving = false) {
     if (!item || item.activeSeconds < MIN_ACTIVE_SECONDS || item.activeSeconds === lastSentActive) return;
     lastSentActive = item.activeSeconds;
     lastSendAt = Date.now();
     const video = item.video?.isConnected ? item.video : largestVideo();
     const round = (x) => Math.round(x * 10) / 10;
     const duration = video?.duration;
+    if (!leaving || !item.info) item.info = extract(video);
     const payload = {
       viewId: item.viewId,
       url: item.url,
-      ...extract(video),
+      ...item.info,
       kind: video ? "video" : "page",
       browser: IS_SAFARI ? "safari" : "chrome",
       startedAt: item.startedAt,
@@ -191,10 +227,16 @@
     const playing = playingVideo();
     const key = identity(playing);
     if (!item || item.key !== key) {
-      send();
+      send(true);
+      fetchYoutube(youtubeId()); // 尽早去要，第一次上报（5 秒）时多半已经回来了
       item = newItem(key, playing || largestVideo());
       lastSentActive = -1;
       lastSendAt = now;
+    }
+    // 每 2 秒记一下这条的标题等：换到下一条时页面已经是新内容了，最后一次上报用这里记的
+    if (!item.infoAt || now - item.infoAt > 2000) {
+      item.info = extract(playing || item.video);
+      item.infoAt = now;
     }
 
     // 视频按播放进度计时：后台被限流时也准确；拖动进度条不会多算

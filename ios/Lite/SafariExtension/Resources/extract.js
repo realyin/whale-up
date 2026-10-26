@@ -70,17 +70,26 @@ function extract(video) {
     }
     d.tags = (d.title.match(/#[^\s#]+/g) || []).map((t) => t.slice(1));
   } else if (host.endsWith("youtube.com")) {
-    d.title = text("ytd-reel-video-renderer[is-active] h2") || text("h1.ytd-watch-metadata") || text(".slim-video-metadata-header h2")
-      || text("ytm-shorts-lockup-view-model h3");
-    d.author = text("ytd-reel-video-renderer[is-active] #channel-name a") || text("#owner #channel-name a")
-      || text(".slim-owner-channel-name");
+    // 单页应用：划到下一个视频时，上一个的标题区还藏在页面里。优先用 oEmbed 接口要到的（youtubeInfo），
+    // 页面元素只在对应的页面上读（长视频页读长视频的标题区）
+    const info = ytInfo.get(youtubeId());
+    if (info) { d.title = info.title; d.author = info.author; }
+    else if (location.pathname === "/watch") {
+      d.title = text("h1.ytd-watch-metadata") || text(".slim-video-metadata-header h2");
+      d.author = text("#owner #channel-name a") || text(".slim-owner-channel-name");
+    }
+    d.title ||= document.title.replace(/^\(\d+\)\s*/, "");
+    d.tags = (d.title.match(/#[^\s#]+/g) || []).map((t) => t.slice(1));
   }
 
   // 推文没取到文字：别拿“X”这种网页标题凑数，留空交给 App
   if (!d.tweet || d.title) d.title ||= meta("og:title") || document.title;
-  d.author ||= meta("author");
-  if (!d.tags.length) d.tags = meta("keywords").split(/[,，]/);
-  d.description ||= meta("og:description") || meta("description");
+  // 单页应用里 meta 不跟着换，别拿上一个视频的简介凑
+  if (!host.endsWith("youtube.com")) {
+    d.author ||= meta("author");
+    if (!d.tags.length) d.tags = meta("keywords").split(/[,，]/);
+    d.description ||= meta("og:description") || meta("description");
+  }
 
   d.title = clip(d.title.replace(/_哔哩哔哩_bilibili$/, "").replace(/ - YouTube$/, ""), 200);
   d.tags = [...new Set(d.tags.map((t) => clip(t, 30)))]
@@ -89,6 +98,35 @@ function extract(video) {
   d.description = clip(d.description, 500);
   d.author = clip(d.author, 80);
   return d;
+}
+
+/** YouTube 视频编号（Shorts 或长视频页），别的页面返回 null */
+function youtubeId() {
+  if (!location.hostname.endsWith("youtube.com")) return null;
+  const p = location.pathname;
+  if (p.startsWith("/shorts/")) return p.split("/")[2] || null;
+  if (p === "/watch") return new URLSearchParams(location.search).get("v");
+  return null;
+}
+
+/** 按编号向 YouTube 的 oEmbed 接口要标题和作者（同一个网站，不用登录），最多等 3 秒；要到的记在 ytInfo 里 */
+const ytInfo = new Map();
+async function youtubeInfo(id) {
+  if (!id) return null;
+  if (ytInfo.has(id)) return ytInfo.get(id);
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 3000);
+    const r = await fetch(`/oembed?format=json&url=${encodeURIComponent("https://www.youtube.com/watch?v=" + id)}`, { signal: ctrl.signal });
+    clearTimeout(timer);
+    const j = r.ok ? await r.json() : null;
+    if (!j) return null;
+    const info = { title: j.title || "", author: j.author_name || "" };
+    ytInfo.set(id, info);
+    return info;
+  } catch (e) {
+    return null;
+  }
 }
 
 /** 屏幕上露在最上层（没被别的东西盖住）的第一个匹配元素的文字 */

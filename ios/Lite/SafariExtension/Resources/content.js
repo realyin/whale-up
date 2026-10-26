@@ -227,11 +227,12 @@
     const key = site + "|" + identity(video);
     if (key === contentKey) return;
     contentKey = key;
-    const info = extract(video);
     verdict = "pending";
     pendingSince = Date.now();
     render(state);
-    judgeContent(key, { site, title: info.title, author: info.author, tags: info.tags.join("、"), description: info.description, tweet: info.tweet || "" })
+    // YouTube 先按编号要准确的标题（页面上可能还是上一个视频的），再判断
+    youtubeInfo(youtubeId()).then(() => extract(video))
+      .then((info) => judgeContent(key, { site, title: info.title, author: info.author, tags: info.tags.join("、"), description: info.description, tweet: info.tweet || "" }))
       .then((v) => {
         if (key !== contentKey) return;
         verdict = v && v.noText ? null : v;  // null：判断不了（推文没字、没网等），按没营养算
@@ -257,6 +258,9 @@
     }
     const key = site + "|" + identity(video);
     if (key === videoKey) return;
+    // YouTube：先按编号要到准确的标题，下一秒再判断（每秒都会再看一次）
+    const ytId = youtubeId();
+    if (ytId && !ytInfo.has(ytId) && waited.key !== key + "|yt") { waited = { key: key + "|yt", n: 0 }; youtubeInfo(ytId); return; }
     const info = extract(video);
     // 推特的推文文字常比视频晚出来一会儿：没读到字先等两秒（每秒看一次），还没有再交给 App 去推特接口要
     if (!info.title) {
