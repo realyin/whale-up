@@ -7,16 +7,48 @@ const text = (selector) => document.querySelector(selector)?.innerText?.trim() |
 const clip = (s, n) => (s || "").replace(/\s+/g, " ").trim().slice(0, n);
 const MIN_VIDEO_AREA = 40000; // 太小的（预览图、广告）不算
 
-/** 页面上最大的视频，用来区分信息流里的每一条 */
+/**
+ * 正在看的视频：屏幕上露出来最多的那个，在播的优先。可以上下划的视频流（推特、抖音）会提前加载下一条，
+ * 那条在屏幕外，不能按“最大”去挑
+ */
 function largestVideo() {
   let best = null;
-  let bestArea = MIN_VIDEO_AREA;
+  let bestScore = 0;
   for (const v of document.querySelectorAll("video")) {
     const r = v.getBoundingClientRect();
-    const a = r.width * r.height;
-    if (a > bestArea) { best = v; bestArea = a; }
+    if (r.width * r.height < MIN_VIDEO_AREA) continue;
+    const w = Math.min(r.right, window.innerWidth) - Math.max(r.left, 0);
+    const h = Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0);
+    const shown = w > 0 && h > 0 ? w * h : 0;
+    // 都不在屏幕上时（少见）退回按大小挑
+    const score = shown > 0 ? shown + (v.paused ? 0 : 1e7) : r.width * r.height * 1e-6;
+    if (score > bestScore) { best = v; bestScore = score; }
   }
   return best;
+}
+
+/** 推特视频的“指纹”：封面图里带着这个视频自己的编号，划到下一条时会变（网址不一定变） */
+function videoMark(video) {
+  if (!video) return "";
+  const poster = video.poster || video.getAttribute("poster") || "";
+  const id = poster.match(/(?:video_thumb|_video_thumb|tweet_video_thumb)\/(\d+)/);
+  if (id) return id[1];
+  if (poster) return poster.split("?")[0];
+  return (video.currentSrc || video.src || "").split("?")[0];
+}
+
+/**
+ * 这个视频所在的那条推文：视频在某条推文（article）里就是它；全屏看视频时不在 article 里，
+ * 就往外层找离视频最近、而且文字真的露在屏幕上的那一层（别找到垫在下面的时间线）
+ */
+function tweetBox(video) {
+  const article = video?.closest("article");
+  if (article) return { box: article, onScreen: false };
+  let el = video;
+  for (let i = 0; el && i < 12; i++, el = el.parentElement) {
+    if ([...el.querySelectorAll('[data-testid="tweetText"]')].some(isOnTop)) return { box: el, onScreen: true };
+  }
+  return null;
 }
 
 /** 从视频往外层找，取离它最近的匹配元素文字（信息流里每个视频各有一份描述） */
@@ -49,22 +81,35 @@ function extract(video) {
     d.author = d.author.replace(/^@/, "");
     d.tags = (d.title.match(/#[^\s#]+/g) || []).map((t) => t.slice(1));
   } else if (host === "x.com" || host.endsWith(".x.com") || host.endsWith("twitter.com")) {
+    // 先认视频旁边的那条推文：全屏看视频时可以一直往下划，网址停在第一条，视频和文字早换了
+    const near = video && tweetBox(video);
+    if (near) {
+      const pick = (sel) => near.onScreen ? shownText(sel, near.box) : (near.box.querySelector(sel)?.innerText?.trim() || "");
+      d.title = pick('[data-testid="tweetText"]');
+      d.author = pick('[data-testid="User-Name"]').split("\n").slice(0, 2).join(" ");
+      const link = near.box.querySelector('a[href*="/status/"]')?.getAttribute("href")?.match(/^\/([^/]+)\/status\/(\d+)/);
+      if (link) d.tweet = `https://x.com/${link[1]}/status/${link[2]}`;
+    }
     // 点开的那条：页面上可能还垫着时间线（手机上全屏看视频时），按网址里的推文编号找，不能直接取第一条
     const id = (location.pathname.match(/\/status\/(\d+)/) || [])[1];
     const articles = [...document.querySelectorAll('article[data-testid="tweet"], article')];
     // 没有编号就是第一条；有编号却找不到，不能拿第一条凑数（多半是垫在下面的时间线），留空让 App 去推特接口要
     const tweet = id ? articles.find((a) => a.querySelector(`a[href*="/status/${id}"]`)) : articles[0];
-    d.title = tweet?.querySelector('[data-testid="tweetText"]')?.innerText?.trim() || "";
     // 推文网址：网页上取不到文字时，App 拿它去推特公开接口要文字
     const user = (location.pathname.match(/^\/([^/]+)\/status\//) || [])[1];
-    if (id && user) d.tweet = `https://x.com/${user}/status/${id}`;
-    d.author = (tweet?.querySelector('[data-testid="User-Name"]')?.innerText || "").split("\n").slice(0, 2).join(" ");
+    // 视频旁边找到了自己那条就不再按网址找（网址可能还是划进来时的第一条）
+    if (!d.tweet && !d.title) {
+      d.title = tweet?.querySelector('[data-testid="tweetText"]')?.innerText?.trim() || "";
+      if (id && user) d.tweet = `https://x.com/${user}/status/${id}`;
+      d.author = (tweet?.querySelector('[data-testid="User-Name"]')?.innerText || "").split("\n").slice(0, 2).join(" ");
+    }
     // 手机上全屏看视频（/mediaViewer）时推文文字不在 article 里：取屏幕上真正露在最上面的那段推文文字
     // （垫在下面的时间线被盖住了，不算）。敏感内容的推文，推特公开接口不给，只能从这里读
     if (!d.title) d.title = shownText('[data-testid="tweetText"], div[lang][dir="auto"]');
     if (!d.author) d.author = shownText('[data-testid="User-Name"]').split("\n").slice(0, 2).join(" ");
     // 取不到时用网页标题：推文页的标题就是“某某 在 X 上：“推文内容” / X”
-    if (!d.title) {
+    // 网页标题是网址里那条的：只有视频就是那条（或者认不出是哪条）时才用
+    if (!d.title && (!d.tweet || (id && d.tweet.endsWith("/status/" + id)))) {
       const m = document.title.match(/^(.*?)\s*(?:在 X 上|on X)\s*[:：]\s*[“"](.*)[”"]\s*\/\s*X$/s);
       if (m) { d.title = m[2].trim(); d.author ||= m[1].trim(); }
     }
@@ -130,25 +175,30 @@ async function youtubeInfo(id) {
 }
 
 /** 屏幕上露在最上层（没被别的东西盖住）的第一个匹配元素的文字 */
-function shownText(selector) {
-  for (const el of document.querySelectorAll(selector)) {
-    const r = el.getBoundingClientRect();
-    if (r.width < 1 || r.height < 1 || r.bottom <= 0 || r.top >= window.innerHeight) continue;
-    const x = Math.min(window.innerWidth - 1, Math.max(0, r.left + Math.min(20, r.width / 2)));
-    const y = Math.min(window.innerHeight - 1, Math.max(0, r.top + Math.min(10, r.height / 2)));
-    const hit = document.elementFromPoint(x, y);
+function shownText(selector, root = document) {
+  for (const el of root.querySelectorAll(selector)) {
     const text = (el.innerText || "").trim();
-    if (text && hit && (hit === el || el.contains(hit))) return text;
+    if (text && isOnTop(el)) return text;
   }
   return "";
+}
+
+/** 这个元素在屏幕上、没被别的东西盖住 */
+function isOnTop(el) {
+  const r = el.getBoundingClientRect();
+  if (r.width < 1 || r.height < 1 || r.bottom <= 0 || r.top >= window.innerHeight) return false;
+  const x = Math.min(window.innerWidth - 1, Math.max(0, r.left + Math.min(20, r.width / 2)));
+  const y = Math.min(window.innerHeight - 1, Math.max(0, r.top + Math.min(10, r.height / 2)));
+  const hit = document.elementFromPoint(x, y);
+  return !!hit && (hit === el || el.contains(hit));
 }
 
 /** 什么时候算“换了一个内容”：网址变了；抖音信息流网址不变，按视频描述 / 片源区分 */
 function identity(video) {
   const url = location.href.split("#")[0];
-  // 推特：/用户/status/编号/video/1 和 /用户/status/编号 是同一条
+  // 推特：/用户/status/编号/video/1 和 /用户/status/编号 是同一条；全屏视频往下划时网址不变，再加上视频自己的指纹
   const tweet = location.pathname.match(/^\/[^/]+\/status\/\d+/);
-  if (tweet) return location.origin + tweet[0];
+  if (tweet) return location.origin + tweet[0] + (video ? "|" + videoMark(video) : "");
   if (location.hostname.endsWith("douyin.com") && video) {
     const desc = nearText(video, ['[data-e2e="video-desc"]']);
     return url + "|" + (desc || (video.currentSrc || "").split("?")[0]);

@@ -127,10 +127,12 @@
       d.author = d.author.replace(/^@/, "");
       d.tags = (d.title.match(/#[^\s#]+/g) || []).map((t) => t.slice(1));
     } else if (host === "x.com" || host.endsWith(".x.com") || host.endsWith("twitter.com")) {
-      // 推文详情页：第一条就是点开的那条
-      const tweet = document.querySelector('article[data-testid="tweet"]') || document.querySelector("article");
-      d.title = tweet?.querySelector('[data-testid="tweetText"]')?.innerText?.trim() || "";
-      d.author = (tweet?.querySelector('[data-testid="User-Name"]')?.innerText || "").split("\n").slice(0, 2).join(" ");
+      // 先认视频旁边的那条推文：全屏看视频时可以一直往下划，网址停在第一条，视频和文字早换了
+      const near = video && tweetBox(video);
+      const tweet = near?.box || document.querySelector('article[data-testid="tweet"]') || document.querySelector("article");
+      const pick = (sel) => near?.onScreen ? shownText(sel, near.box) : (tweet?.querySelector(sel)?.innerText?.trim() || "");
+      d.title = pick('[data-testid="tweetText"]');
+      d.author = pick('[data-testid="User-Name"]').split("\n").slice(0, 2).join(" ");
       d.tags = (d.title.match(/#[^\s#]+/g) || []).map((t) => t.slice(1));
     } else if (host.endsWith("youtube.com")) {
       const id = youtubeId();
@@ -165,8 +167,54 @@
   }
 
   /** 什么时候算“换了一个内容”：网址变了；抖音信息流网址不变，按视频描述 / 片源区分 */
+  let lastMark = null;
+
+  /** 推特视频的“指纹”：封面图里带着这个视频自己的编号，划到下一条时会变（网址不一定变） */
+  function videoMark(video) {
+    if (!video) return "";
+    const poster = video.poster || video.getAttribute("poster") || "";
+    const id = poster.match(/video_thumb\/(\d+)/);
+    if (id) return id[1];
+    if (poster) return poster.split("?")[0];
+    return (video.currentSrc || video.src || "").split("?")[0];
+  }
+
+  /** 这个元素在屏幕上、没被别的东西盖住 */
+  function isOnTop(el) {
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1 || r.bottom <= 0 || r.top >= innerHeight) return false;
+    const x = Math.min(innerWidth - 1, Math.max(0, r.left + Math.min(20, r.width / 2)));
+    const y = Math.min(innerHeight - 1, Math.max(0, r.top + Math.min(10, r.height / 2)));
+    const hit = document.elementFromPoint(x, y);
+    return !!hit && (hit === el || el.contains(hit));
+  }
+
+  function shownText(selector, root = document) {
+    for (const el of root.querySelectorAll(selector)) {
+      const t = (el.innerText || "").trim();
+      if (t && isOnTop(el)) return t;
+    }
+    return "";
+  }
+
+  /** 视频所在的那条推文：在 article 里就是它；全屏看视频时往外层找离视频最近、文字真露在屏幕上的那一层 */
+  function tweetBox(video) {
+    const article = video?.closest("article");
+    if (article) return { box: article, onScreen: false };
+    let el = video;
+    for (let i = 0; el && i < 12; i++, el = el.parentElement) {
+      if ([...el.querySelectorAll('[data-testid="tweetText"]')].some(isOnTop)) return { box: el, onScreen: true };
+    }
+    return null;
+  }
+
   function identity(video) {
     const url = location.href.split("#")[0];
+    // 推特全屏视频往下划时网址不变：加上视频自己的指纹。暂停时找不到在播的视频，沿用这个网址上一次的指纹，别一暂停就算换了一条
+    if (/(^|\.)(x|twitter)\.com$/.test(location.hostname)) {
+      if (video) lastMark = { url, mark: videoMark(video) };
+      return lastMark?.url === url ? url + "|" + lastMark.mark : url;
+    }
     if (location.hostname.endsWith("douyin.com") && video) {
       const desc = nearText(video, ['[data-e2e="video-desc"]']);
       return url + "|" + (desc || (video.currentSrc || "").split("?")[0]);
