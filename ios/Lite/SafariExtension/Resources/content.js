@@ -237,6 +237,8 @@
         if (key !== contentKey) return;
         verdict = v && v.noText ? null : v;  // null：判断不了（推文没字、没网等），按没营养算
         render(state);
+        // 三次都没判断成（网络问题）：过 20 秒还在这条上就再判断一次
+        if (v === null) setTimeout(() => { if (contentKey === key && verdict === null) contentKey = null; }, 20000);
         if (isGood()) say(`这个是${verdict.category || "有营养的"}，不算时间，好好看～`, "head-shy", 4);
       });
   }
@@ -282,8 +284,13 @@
         // 判断不了（没开 AI、没网）就不拦：只拦视频的网站宁可放过，也别误伤要看的内容
         if (!v || v.off || v.isJunk !== true) {
           verdict = undefined; render(state);
-          note(v && v.off ? "AI 判断还没打开，我分不出好坏，先放过。去鲸醒 App 里打开“AI 判断”、填上 Key 就能拦～"
-            : "AI 没回我（可能没网），这条先放过～", "head-angry", 7);
+          if (v && v.off) {
+            note("AI 判断还没打开，我分不出好坏，先放过。去鲸醒 App 里打开“AI 判断”、填上 Key 就能拦～", "head-angry", 7);
+          } else {
+            // 试了 3 次都失败：说清楚原因，15 秒后还在这条上就再判断一次
+            note(`AI 试了 3 次都没回我（${(lastJudgeError || "不知道为什么").slice(0, 40)}），15 秒后再试～`, "head-angry", 7);
+            setTimeout(() => { if (videoKey === key && verdict === undefined) videoKey = null; }, 15000);
+          }
           return;
         }
         document.querySelectorAll("video").forEach((x) => x.pause());

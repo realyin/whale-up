@@ -127,12 +127,21 @@
       d.author = d.author.replace(/^@/, "");
       d.tags = (d.title.match(/#[^\s#]+/g) || []).map((t) => t.slice(1));
     } else if (host === "x.com" || host.endsWith(".x.com") || host.endsWith("twitter.com")) {
+      const ref = tweetRef();
+      // 全屏看视频（/mediaViewer）：正在看的是 currentTweet 参数里那条，屏幕上的作者对得上才用屏幕上的字
+      const who = ref?.viewer ? shownText('[data-testid="User-Name"]') : "";
+      const viewerOK = ref?.viewer && (!who || who.toLowerCase().includes("@" + ref.user.toLowerCase()));
       // 先认视频旁边的那条推文：全屏看视频时可以一直往下划，网址停在第一条，视频和文字早换了
-      const near = video && tweetBox(video);
+      const near = !ref?.viewer && video && tweetBox(video);
       const tweet = near?.box || document.querySelector('article[data-testid="tweet"]') || document.querySelector("article");
       const pick = (sel) => near?.onScreen ? shownText(sel, near.box) : (tweet?.querySelector(sel)?.innerText?.trim() || "");
-      d.title = pick('[data-testid="tweetText"]');
-      d.author = pick('[data-testid="User-Name"]').split("\n").slice(0, 2).join(" ");
+      if (ref?.viewer) {
+        d.title = viewerOK ? shownText('[data-testid="tweetText"]') : "";
+        d.author = viewerOK ? who.split("\n").slice(0, 2).join(" ") : "";
+      } else {
+        d.title = pick('[data-testid="tweetText"]');
+        d.author = pick('[data-testid="User-Name"]').split("\n").slice(0, 2).join(" ");
+      }
       d.tags = (d.title.match(/#[^\s#]+/g) || []).map((t) => t.slice(1));
     } else if (host.endsWith("youtube.com")) {
       const id = youtubeId();
@@ -150,8 +159,10 @@
       d.tags = (d.title.match(/#[^\s#]+/g) || []).map((t) => t.slice(1));
     }
 
-    d.title ||= meta("og:title") || document.title;
-    if (!spa) {
+    // 推特全屏看视频时网页标题、meta 还是点进来那条的：没读到字就留空（空标题不会拿去判断，下次上报再读）
+    const xViewer = /(^|\.)(x|twitter)\.com$/.test(host) && tweetRef()?.viewer;
+    if (!xViewer) d.title ||= meta("og:title") || document.title;
+    if (!spa && !xViewer) {
       d.author ||= meta("author");
       if (!d.tags.length) d.tags = meta("keywords").split(/[,，]/);
       d.description ||= meta("og:description") || meta("description");
@@ -168,6 +179,15 @@
 
   /** 什么时候算“换了一个内容”：网址变了；抖音信息流网址不变，按视频描述 / 片源区分 */
   let lastMark = null;
+
+  /** 正在看的推文：全屏看视频（mediaViewer）时网址里有 currentTweet / currentTweetUser，以它为准；否则是网址里的那条 */
+  function tweetRef() {
+    const q = new URLSearchParams(location.search);
+    const id = q.get("currentTweet"), user = q.get("currentTweetUser");
+    if (id && user) return { user, id, viewer: true };
+    const m = location.pathname.match(/^\/([^/]+)\/status\/(\d+)/);
+    return m ? { user: m[1], id: m[2], viewer: false } : null;
+  }
 
   /** 推特视频的“指纹”：封面图里带着这个视频自己的编号，划到下一条时会变（网址不一定变） */
   function videoMark(video) {
@@ -212,6 +232,9 @@
     const url = location.href.split("#")[0];
     // 推特全屏视频往下划时网址不变：加上视频自己的指纹。暂停时找不到在播的视频，沿用这个网址上一次的指纹，别一暂停就算换了一条
     if (/(^|\.)(x|twitter)\.com$/.test(location.hostname)) {
+      // 全屏看视频时正在看的是 currentTweet 参数里那条
+      const ref = tweetRef();
+      if (ref?.viewer) return `${location.origin}/${ref.user}/status/${ref.id}`;
       if (video) lastMark = { url, mark: videoMark(video) };
       return lastMark?.url === url ? url + "|" + lastMark.mark : url;
     }

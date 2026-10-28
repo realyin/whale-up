@@ -27,6 +27,15 @@ function largestVideo() {
   return best;
 }
 
+/** 正在看的推文：全屏看视频（mediaViewer）时网址里有 currentTweet / currentTweetUser，以它为准；否则是网址里的那条 */
+function tweetRef() {
+  const q = new URLSearchParams(location.search);
+  const id = q.get("currentTweet"), user = q.get("currentTweetUser");
+  if (id && user) return { user, id, viewer: true };
+  const m = location.pathname.match(/^\/([^/]+)\/status\/(\d+)/);
+  return m ? { user: m[1], id: m[2], viewer: false } : null;
+}
+
 /** 推特视频的“指纹”：封面图里带着这个视频自己的编号，划到下一条时会变（网址不一定变） */
 function videoMark(video) {
   if (!video) return "";
@@ -81,6 +90,19 @@ function extract(video) {
     d.author = d.author.replace(/^@/, "");
     d.tags = (d.title.match(/#[^\s#]+/g) || []).map((t) => t.slice(1));
   } else if (host === "x.com" || host.endsWith(".x.com") || host.endsWith("twitter.com")) {
+    const ref = tweetRef();
+    if (ref?.viewer) {
+      // 全屏看视频（/mediaViewer）：往下划时网址前半段一直是点进来的那条，正在看的是 currentTweet 参数里的那条。
+      // 屏幕上的作者对得上才用屏幕上的字（刚划过去时文字可能还没换）；对不上就留空，等一会儿再读或交给 App 去推特接口要
+      d.tweet = `https://x.com/${ref.user}/status/${ref.id}`;
+      const who = shownText('[data-testid="User-Name"]');
+      if (!who || who.toLowerCase().includes("@" + ref.user.toLowerCase())) {
+        d.title = shownText('[data-testid="tweetText"], div[lang][dir="auto"]');
+        d.author = who.split("\n").slice(0, 2).join(" ");
+      }
+      d.tags = (d.title.match(/#[^\s#]+/g) || []).map((t) => t.slice(1));
+      return finish(d);
+    }
     // 先认视频旁边的那条推文：全屏看视频时可以一直往下划，网址停在第一条，视频和文字早换了
     const near = video && tweetBox(video);
     if (near) {
@@ -136,6 +158,11 @@ function extract(video) {
     d.description ||= meta("og:description") || meta("description");
   }
 
+  return finish(d);
+}
+
+/** 统一收尾：去掉网站后缀、标签去重、截短 */
+function finish(d) {
   d.title = clip(d.title.replace(/_哔哩哔哩_bilibili$/, "").replace(/ - YouTube$/, ""), 200);
   d.tags = [...new Set(d.tags.map((t) => clip(t, 30)))]
     .filter((t) => t && t !== d.title && !GENERIC_TAGS.has(t))
@@ -196,7 +223,10 @@ function isOnTop(el) {
 /** 什么时候算“换了一个内容”：网址变了；抖音信息流网址不变，按视频描述 / 片源区分 */
 function identity(video) {
   const url = location.href.split("#")[0];
-  // 推特：/用户/status/编号/video/1 和 /用户/status/编号 是同一条；全屏视频往下划时网址不变，再加上视频自己的指纹
+  // 推特：/用户/status/编号/video/1 和 /用户/status/编号 是同一条。全屏看视频时正在看的是 currentTweet 参数里那条；
+  // 普通推文页再加上视频自己的指纹（同一页里划到别的视频时网址可能不变）
+  const ref = tweetRef();
+  if (ref?.viewer) return `${location.origin}/${ref.user}/status/${ref.id}`;
   const tweet = location.pathname.match(/^\/[^/]+\/status\/\d+/);
   if (tweet) return location.origin + tweet[0] + (video ? "|" + videoMark(video) : "");
   if (location.hostname.endsWith("douyin.com") && video) {

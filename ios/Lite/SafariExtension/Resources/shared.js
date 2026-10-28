@@ -85,14 +85,33 @@ async function addLocal(site, seconds, good = false) {
 }
 
 /** 让 AI 判断一个内容（经后台 → 原生部分 → DeepSeek）；判断过的直接用记下的。返回 {isJunk,...} / {off:true} / null */
+/** 最近一次判断失败的原因（给气泡里说明用） */
+let lastJudgeError = "";
+
+/** 问一次 App（App 再去问 DeepSeek）：网络抖一下、App 刚被叫醒都可能失败，失败最多试 3 次 */
+async function askNative(key, info) {
+  const waits = [0, 1500, 4000];
+  for (let i = 0; i < waits.length; i++) {
+    if (waits[i]) await new Promise((r) => setTimeout(r, waits[i]));
+    try {
+      const reply = api.runtime.sendMessage({ to: "native", type: "judge", key, ...info });
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("等了 22 秒没回音")), 22000));
+      const r = await Promise.race([reply, timeout]);
+      if (r && !r.error) { lastJudgeError = ""; return r; }
+      lastJudgeError = r ? String(r.error) : "App 没有回应";
+    } catch (e) {
+      lastJudgeError = String(e && e.message || e);
+    }
+  }
+  return null;
+}
+
 async function judgeContent(key, info) {
   const m = await loadMirror();
   if (m.verdicts[key]) return m.verdicts[key];
   try {
-    const reply = api.runtime.sendMessage({ to: "native", type: "judge", key, ...info });
-    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 25000));
-    const r = await Promise.race([reply, timeout]);
-    if (!r || r.error) return null;
+    const r = await askNative(key, info);
+    if (!r) return null;
     if (r.off) return { off: true };
     if (r.noText) return { noText: true };
     const now = await loadMirror();
